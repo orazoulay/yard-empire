@@ -11,6 +11,7 @@ import { addFenceLamps, addYardProps, makeSignpost } from './scenery.js';
 import { wayAround, wearPaths } from './sim/yard.js';
 import { SITE } from './data/builds.js';
 import { fenceRuns } from './sim/site.js';
+import { roleFor } from './sim/jobs.js';
 
 export const GATE_HALF = 2.2;
 const SIDES = ['n', 's', 'w', 'e'];
@@ -234,6 +235,9 @@ export class Area {
     const e = u.effect;
     if (e.type === 'worker') {
       const w = new Worker(this.game.scene, this.id, this.cfg.workerJob, this.workers.length + this.id.length);   // the number picks the look
+      // The first worker hired keeps the yard's machines stocked, the second hauls (js/sim/jobs.js). Upgrades are applied in
+      // their order, on hiring and on loading alike, so a reloaded game and an old save get the same roles.
+      w.role = roleFor(this.workers.length, this.cfg.workerJob);
       const [sx, sz] = this.cfg.workerSpawn;
       w.pos.set(sx + this.workers.length * 1.5, 0, sz);
       this.workers.push(w);

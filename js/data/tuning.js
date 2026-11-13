@@ -12,4 +12,9 @@ export const TUNING = {
   shopRadius: 1.9,
   plotRadius: 1.9,
   processor: { inputCap: 12, outputCap: 24 },
+  // Workers' roles (js/sim/jobs.js, roleFor): both values are suggestions for the owner to tune.
+  // stockBelow: the feeder fetches a material when a machine of its yard holds less than this, counting what is on its way.
+  //   One carry: below it, one more trip is needed before the machine runs dry (3 let the saw starve, 9 left it blocked).
+  // avoidFor: seconds a worker leaves alone a source it just found empty, so it does not walk straight back to it.
+  roles: { stockBelow: 6, avoidFor: 3 },
 };

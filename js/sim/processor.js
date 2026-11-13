@@ -26,6 +26,12 @@ export class Processor {
   get canStart() { return this.inputs >= this.recipe.inCount && (!this.two || this.inputs2 >= this.recipe.inCount2) && !this.outputFull; }
   /** True if this machine ever takes `item`, full or not. */
   uses(item) { return item != null && (item === this.recipe.input || item === this.recipe.input2); }
+  /** How many of `item` wait on the input pad; 0 when the machine does not use it. The feeder reads it (js/sim/jobs.js). */
+  holds(item) { return item === this.recipe.input ? this.inputs : this.two && item === this.recipe.input2 ? this.inputs2 : 0; }
+  /** How many of `item` one batch takes. */
+  batchOf(item) { return item === this.recipe.input ? this.recipe.inCount : this.two && item === this.recipe.input2 ? this.recipe.inCount2 : 1; }
+  /** The materials, first one first. */
+  get materials() { return this.two ? [this.recipe.input, this.recipe.input2] : [this.recipe.input]; }
   /** Free room for `item`; 0 when the machine does not use it. */
   roomFor(item) { return item === this.recipe.input ? this.inputFree : item === this.recipe.input2 ? this.inputFree2 : 0; }
   /** Put one `item` in. @param force even past the limit (the player may always empty their hands) */

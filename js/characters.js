@@ -224,6 +224,15 @@ export class Worker extends Character {
     this.capacity = TUNING.workerCapacity;
     this.reach = reachOf(areaId);   // delivers to machines here and next door, no further
     this.job = null; this.phase = null; this.wait = 0; this.retry = 0;
+    this.role = undefined;          // 'feeder' or 'hauler', set by the yard from the order of hiring (js/area.js)
+    this.age = 0;                   // seconds of work, for how long a dry source is left alone
+    this.avoidUntil = new Map();    // source id -> age until which it is left alone: this worker found it empty
+  }
+  /** What this worker is, for the job choice: its yard, where it stands, what it carries, its role. */
+  who() {
+    const avoid = [];
+    for (const [id, until] of this.avoidUntil) { if (until > this.age) avoid.push(id); else this.avoidUntil.delete(id); }
+    return { area: this.area, reach: this.reach, x: this.pos.x, z: this.pos.z, carry: this.carry, role: this.role, stockBelow: TUNING.roles.stockBelow, avoid };
   }
 
   /** Turn on the spot toward a point. */
@@ -240,11 +249,13 @@ export class Worker extends Character {
     this.show(game.seen(this.pos.x, this.pos.z, 3.5));
     this.resting = !this.job;
     this.greeting = this.resting && Math.hypot(game.player.pos.x - this.pos.x, game.player.pos.z - this.pos.z) < 4;
+    this.age += dt;
     if (!this.job) {
       this.retry -= dt;
       if (this.retry > 0) { this.move(0, 0, 0, dt); return; }
       const views = game.stationViews();
-      this.job = chooseJob({ area: this.area, reach: this.reach, x: this.pos.x, z: this.pos.z, carry: this.carry }, views, this.jobCfg, game.claims(this));
+      // A job is chosen only here, with nothing in hand: a worker never changes plan on the way or with a load.
+      this.job = chooseJob(this.who(), views, this.jobCfg, game.claims(this));
       if (!this.job) { this.retry = 1; this.move(0, 0, 0, dt); return; }
       this.phase = this.job.from ? 'from' : 'to';
     }
@@ -270,7 +281,7 @@ export class Worker extends Character {
       const full = this.carry.count >= this.capacity, dry = st.provides(j.item) === 0;
       if (full || (dry && this.wait > 0.5)) {
         if (this.carry.count > 0) { this.phase = 'to'; this.wait = 0; this.arrived = null; }
-        else { this.job = null; this.retry = 0.5; }
+        else { this.avoidUntil.set(j.from.id, this.age + TUNING.roles.avoidFor); this.job = null; this.retry = 0.5; }   // found empty (perhaps the player took it): not straight back
       }
     } else {
       if (this.carry.empty) { this.job = null; this.retry = 0.2; return; }

@@ -43,7 +43,63 @@ function ledger(claims) {
   return {
     avail: (s, item) => Math.max(0, s.provides(item) - (out.get(s.id + '|' + item) || 0)),
     room: (s, item) => Math.max(0, s.accepts(item) - (into.get(s.id + '|' + item) || 0)),
+    incoming: (s, item) => into.get(s.id + '|' + item) || 0,
   };
+}
+
+// ------------------------------------------------------------------------------------------ roles
+// The workers of a yard share its chain (openspec/changes/worker-roles). The first worker hired is the feeder: it keeps
+// the yard's machines stocked, and does what every worker does the rest of the time. The second is the hauler, and does
+// what every worker does: finished goods first. Without a role (the player's arrow) the rule is the one it always was.
+//
+// Why not a feeder that only feeds: one trip of 6 logs makes 12 planks, two trips to a shop twice as far away. The first
+// yard is short of hauling, not of feeding. A worker that only feeds keeps the saw full and the saw then stands with a full
+// output pad; measured, the yard earned 15 to 36% less. Keeping the saw from running dry, and hauling otherwise, removed the
+// avoidable starvation (nobody bringing logs to an empty saw) and earned what it earned before.
+//
+// A full output pad is the yard's real limit, not a fault: when the pad is full and everyone is hauling, the machine
+// waits, and nobody is sent to feed because of it. The feeder feeds only when the machine runs short of material.
+
+/**
+ * The role of the worker hired `index`-th in a yard (0 the first): 'feeder', 'hauler', or undefined where there is
+ * nothing to feed (a yard whose workers carry finished goods only). Follows from the order of hiring alone, so a reloaded
+ * game and an old save get the same roles.
+ * A third worker (no yard has a plot for one yet) joins the side that is short: feeding while a machine runs short of
+ * material, hauling otherwise. `pressure.short` says which; the caller decides it only when that worker has no job.
+ * @param jobCfg  the yard's workerJob: { items: [product, materials...] }
+ */
+export function roleFor(index, jobCfg, pressure = {}) {
+  if (!jobCfg || !Array.isArray(jobCfg.items) || jobCfg.items.length < 2) return undefined;
+  if (index === 0) return 'feeder';
+  if (index === 1) return 'hauler';
+  return pressure.short ? 'feeder' : 'hauler';
+}
+
+/**
+ * The materials the machines of the worker's own yard run short of: less than `worker.stockBelow` held, counting what
+ * colleagues are already bringing. Most urgent first: fewest batches' worth, then the machine's first material.
+ * A machine view needs `holds(item)`, `batch(item)` and `materials`; one that does not report them is never short.
+ * @param items  only these materials (the worker's job); all of a machine's materials when left out
+ * @returns [{ item, to: view, have, batches }]
+ */
+export function stockShort(worker, stations, claims = [], items = null) {
+  return short(worker, stations, ledger(claims), items);
+}
+
+function short(worker, stations, L, items) {
+  const low = worker.stockBelow || 0, out = [];
+  if (!(low > 0)) return out;
+  for (const s of stations) {
+    if (!s.machine || s.area !== worker.area || typeof s.holds !== 'function' || !Array.isArray(s.materials)) continue;
+    // A full output pad does not change this: the machine is fed below one carry either way, or it runs dry the moment
+    // the pad is cleared. (Measured: leaving a full machine unfed let the saw starve again, by 20 to 80 s in ten minutes.)
+    s.materials.forEach((item, order) => {
+      if (items && !items.includes(item)) return;
+      const have = s.holds(item) + L.incoming(s, item);
+      if (have < low && L.room(s, item) > 0) out.push({ item, to: s, have, batches: have / Math.max(1, s.batch?.(item) || 1), order });
+    });
+  }
+  return out.sort((a, b) => (a.batches - b.batches) || (a.order - b.order)).map(({ order, ...rest }) => rest);
 }
 
 /**
@@ -61,15 +117,27 @@ export function chooseJob(worker, stations, job, claims = []) {
     const to = rank(worker, stations, worker.carry.type, worker, L)[0];
     return to ? { item: worker.carry.type, from: null, to } : null;
   }
+  // `avoid`: sources this worker just found empty (the player may have emptied them), left alone for a moment so it
+  // does not walk straight back. `fetchReach` keeps the player's arrow from pointing across the map; workers fetch from anywhere.
+  const avoid = worker.avoid?.length ? new Set(worker.avoid) : null;
+  const sourcesOf = (item, not) => stations.filter(s => L.avail(s, item) > 0 && !not.includes(s) && !avoid?.has(s.id) && (!worker.fetchReach || worker.fetchReach.includes(s.area)))
+    // Prefer the fullest source (keeps machines from clogging), tie-break by distance.
+    .sort((a, b) => (L.avail(b, item) - L.avail(a, item)) || (d2(a, worker) - d2(b, worker)));
+  // The feeder first keeps its own yard's machines from running dry, then does what everyone does. Only from close by:
+  // its own yard and the ones next door (`reach`). A material made across the map (gold for the Electronics Factory) is
+  // the trucks' to bring; a feeder walking there for it left the machines' output unsold for minutes, measured.
+  if (worker.role === 'feeder') {
+    const near = worker.reach ? s => worker.reach.includes(s.area) : () => true;
+    for (const need of short(worker, stations, L, job.items)) {
+      const from = sourcesOf(need.item, [need.to]).find(near);
+      if (from) return { item: need.item, from, to: need.to };
+    }
+  }
   for (const item of job.items) {
     const anyDest = rank(worker, stations, item, worker, L);
     if (!anyDest.length) continue;
-    // `fetchReach` keeps the player's arrow from pointing across the map; workers fetch from anywhere.
-    const sources = stations.filter(s => L.avail(s, item) > 0 && !anyDest.includes(s) && (!worker.fetchReach || worker.fetchReach.includes(s.area)));
-    if (!sources.length) continue;
-    // Prefer the fullest source (keeps machines from clogging), tie-break by distance.
-    sources.sort((a, b) => (L.avail(b, item) - L.avail(a, item)) || (d2(a, worker) - d2(b, worker)));
-    const from = sources[0];
+    const from = sourcesOf(item, anyDest)[0];
+    if (!from) continue;
     const to = rank(worker, stations, item, from, L)[0];   // best destination as seen from the pick-up point
     return { item, from, to };
   }

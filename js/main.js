@@ -399,7 +399,9 @@ class Game {
     const out = [];
     for (const a of this.areas) if (a.open) for (const s of a.stations) {
       out.push({ id: s.id, area: a.id, x: s.x, z: s.z, station: s, machine: s.type === 'processor',
-        provides: i => s.provides(i), accepts: i => s.accepts(i), wants: i => s.wants(i) });
+        provides: i => s.provides(i), accepts: i => s.accepts(i), wants: i => s.wants(i),
+        // what a machine holds: the feeder keeps it from running dry (js/sim/jobs.js, stockShort)
+        ...(s.sim ? { holds: i => s.sim.holds(i), batch: i => s.sim.batchOf(i), materials: s.sim.materials } : {}) });
     }
     return (this._views = out);
   }
