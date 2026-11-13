@@ -26,7 +26,9 @@ export class Hud {
       if (!el || !v?.commit) return;
       el.textContent = `Version ${v.commit}${v.date ? ' · ' + String(v.date).slice(0, 10) : ''}`; el.hidden = false;
     };
-    showVersion(); setTimeout(showVersion, 4000);   // the page learns its version a moment after it starts
+    // The page learns its version a moment after it starts, and says so (js/pwa.js). On a slow phone that moment
+    // can be long: waiting a fixed time left the line empty there.
+    showVersion(); addEventListener('yard:version', showVersion);
     this.sheets = [];          // the open sheets, the one on top last
     this.onSheets = null;      // (open: boolean) the first sheet opened, or the last one closed
     this.onShowWay = null; this.onYardChip = null; this.onBare = null;

@@ -169,6 +169,8 @@ button { font-family: inherit; }
   pointer-events: none; animation: fade .2s;
 }
 #hint[hidden] { display: none; }
+/* The hint is about the yard. While a sheet is open (settings, account, the Headquarters) it would lie on top of the sheet's buttons. */
+body:has(> .sheet-backdrop:not([hidden])) #hint { display: none; }
 /* looking at the yard, or taking a picture of it: bar, cards and labels go until the next tap */
 html.bare #hud, html.bare #labels { visibility: hidden; }
 

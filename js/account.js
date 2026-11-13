@@ -174,7 +174,7 @@ export class Account {
     const id = this.user.id;
     const r = await this.call('POST', 'account/delete', { password });
     if (!r.ok) return { ok: false, error: problem(r) };
-    this.flash('Your account was deleted.');
+    this.flash('Your account was deleted.', true);   // what the player asked for: said as done, not as a problem
     // The copy on this device belonged to the account too: it goes after the game's last save, so that save cannot bring it back.
     this.leave(() => { remove(ID_KEY); remove(saveKey(id)); remove(revKey(id)); });
     return { ok: true };

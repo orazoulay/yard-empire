@@ -75,7 +75,11 @@ function watchVersion() {
     busy = true; asked = Date.now();
     const now = await serverVersion();
     busy = false;
-    if (!loaded) { loaded = now; window.yardEmpireVersion = now.version; return; }
+    if (!loaded) {
+      loaded = now; window.yardEmpireVersion = now.version;
+      dispatchEvent(new CustomEvent('yard:version'));   // the settings sheet shows it (js/hud.js), however long the answer took
+      return;
+    }
     // A part that could not be read at the start is learned once it can be; it cannot count as a change.
     loaded = { shell: loaded.shell ?? now.shell, commit: loaded.commit ?? now.commit };
     if (!isNewVersion(loaded, now)) return;
