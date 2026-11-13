@@ -15,12 +15,15 @@ const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
 export class Hud {
-  constructor() {
+  /** @param o {{ logKey?: string }}  logKey: where on the device the log is kept between visits; without one it lasts until the page is closed */
+  constructor({ logKey = '' } = {}) {
     this.cashEl = $('cash'); this.cashValue = $('cash-value');
     this.shown = 0; this.target = 0; this.lastText = '';
     this.objKey = '';
     this.unlockQueue = []; this.unlockBusy = false; this.unlockTimer = 0;
     this.journal = new Journal(30);
+    this.logKey = logKey;
+    if (logKey) try { this.journal.load(JSON.parse(localStorage.getItem(logKey))); } catch { /* nothing kept, or nothing readable: an empty log */ }
     const showVersion = () => {
       const v = window.yardEmpireVersion, el = $('game-version');
       if (!el || !v?.commit) return;
@@ -146,6 +149,7 @@ export class Hud {
   unlock(card) {
     const symbol = card.symbol || KICKER_ICON[card.kicker] || 'award';
     this.journal.add({ kicker: card.kicker || 'Unlocked', title: card.title, desc: card.desc || '', symbol }, Date.now());
+    this.storeLog();
     $('log-dot').hidden = false;
     this.unlockQueue.push({ ...card, symbol });
     if (!this.unlockBusy) this.nextUnlock(); else this.showWaiting();
@@ -256,28 +260,53 @@ export class Hud {
 
   // --- the yard list ----------------------------------------------------------
   /**
-   * @param yards {{ id, name, place, index, here }[]}  the open yards, in order; place: the town or city a yard is in
+   * @param yards  what ui-logic's yardRows returns: every yard in order. An open one is a button to go there;
+   *   one that is not open says what it makes and what opens it, and is not a button.
    * @param onPick  called with the id of the chosen yard, after the sheet has closed
    */
   showYards(yards, onPick) {
     const sheet = $('yards'), list = $('yards-list');
+    const num = y => { const n = el('span', 'r-num', String(y.index)); n.style.setProperty('--ground', '#' + (y.ground ?? 0x8a9099).toString(16).padStart(6, '0')); return n; };
     const rows = yards.map(y => {
+      const body = el('span', 'r-body');
+      if (!y.open) {   // not open yet: its name, where it is and what it makes, then what opens it
+        const row = el('div', 'row locked' + (y.next ? ' next' : ''));
+        const lock = el('span', 'r-lock'); lock.append(icon('lock'));
+        body.append(el('span', 'r-title', y.name), el('span', 'r-sub', [y.place, y.makes].filter(Boolean).join(' · ')));
+        if (y.needs) body.append(el('span', 'r-needs', y.needs));
+        if (y.progress != null) { const bar = el('span', 'r-bar'), fill = el('i'); fill.style.width = Math.round(Math.min(1, y.progress) * 100) + '%'; bar.append(fill); body.append(bar); }
+        row.append(num(y), body, lock);
+        return row;
+      }
       const row = el('button', 'row' + (y.here ? ' here' : ''));
       row.type = 'button';
       if (y.here) row.setAttribute('aria-current', 'location');
-      const body = el('span', 'r-body');
       body.append(el('span', 'r-title', y.name), el('span', 'r-sub', y.place));
-      row.append(el('span', 'r-num', String(y.index)), body);
+      row.append(num(y), body);
       if (y.here) row.append(el('span', 'r-tag', 'You are here'));
       row.addEventListener('click', () => { this.closeSheet(sheet); if (!y.here) onPick(y.id); });
       return row;
     });
-    if (yards.length < 2) rows.push(el('div', 'sheet-note', 'The yards you open are listed here, to go to any of them at once.'));
+    const open = yards.filter(y => y.open).length;
+    $('yards-note').textContent = open < yards.length ? `${open} of ${yards.length} yards ${open === 1 ? 'is' : 'are'} open. Tap an open yard to go there.` : 'Every yard is open. Tap one to go there.';
     list.replaceChildren(...rows);
-    this.openSheet(sheet, list.querySelector('.here'));
+    const here = list.querySelector('.here');
+    this.openSheet(sheet, here);
+    here?.scrollIntoView?.({ block: 'center' });   // twenty rows do not fit a phone: the list opens where the player is
   }
 
   // --- the log ----------------------------------------------------------------
+  /** Keep the log on the device, beside the save. A browser that keeps nothing still has it until the page is closed. */
+  storeLog() {
+    if (!this.logKey || this.logOff) return;
+    try { localStorage.setItem(this.logKey, JSON.stringify(this.journal)); } catch { /* private mode, or full */ }
+  }
+  /** "Reset progress": the log goes with the progress it tells of, and nothing more is written before the page loads again. */
+  clearLog() {
+    this.logOff = true;
+    this.journal.load([]);
+    if (this.logKey) try { localStorage.removeItem(this.logKey); } catch { /* nothing to remove */ }
+  }
   showLog() {
     const sheet = $('log'), list = $('log-list');
     const times = [];
@@ -291,7 +320,7 @@ export class Hud {
       times.push([when, e.at]);
       return row;
     });
-    if (!rows.length) rows.push(el('div', 'sheet-note', 'Nothing yet. What you unlock and reach is listed here until you close the game.'));
+    if (!rows.length) rows.push(el('div', 'sheet-note', this.logKey ? 'Nothing yet. What you unlock and reach is listed here, and kept on this device.' : 'Nothing yet. What you unlock and reach is listed here until you close the game.'));
     list.replaceChildren(...rows);
     const tell = () => { const now = Date.now(); for (const [when, at] of times) when.textContent = ago((now - at) / 1000); };
     tell();

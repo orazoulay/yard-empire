@@ -16,6 +16,7 @@ import { exactMoney, isShortened, cleanPrefs, startTab, railKey, Line, orderYard
 import { STREAK, CLIENTS, RUSH } from './data/company.js';
 import { cleanName, clockText, NAME_MAX } from './sim/company.js';
 import { advise, ADVICE } from './sim/advice.js';
+import { storyFor, personOf } from './sim/stories.js';   // first hour and stories: the person behind a client and the story of an order
 import { exportSave, importSave, backupName } from './sim/backup.js';
 
 const $ = id => document.getElementById(id);
@@ -744,8 +745,13 @@ export class Headquarters {
   contractCard(x, running) {
     const c = this.company, kind = kindOf(x), reward = c.reward(x), ready = running && c.ready(x);
     const full = !running && c.active.length >= c.slots;
+    // Who is asking and why: words only (js/sim/stories.js). An offer introduces the person; a running order keeps the story short.
+    const story = storyFor(x, ITEMS);
     return h('article', { class: 'hq-card contract' + (ready ? ' ready' : '') },
       h('header', {}, h('h4', { text: x.client }), h('span', { class: 'hq-chip', text: kind.name })),
+      story ? h('div', { class: 'hq-story' },
+        h('div', { class: 'hq-story-who' }, h('b', { text: story.who }), h('span', { text: ', ' + story.role + (running ? '' : ' · ' + story.about) })),
+        h('p', { class: 'hq-story-text', text: `“${story.text}”` })) : null,
       ...x.needs.map(n => {
         const have = Math.min(c.stock[n[0]] || 0, n[1]);
         return h('div', { class: 'hq-need' }, h('span', { text: needText(n) }),
@@ -1255,7 +1261,8 @@ export class Headquarters {
     const goods = b.goods.slice(0, 8).map(g => h('div', { class: 'fin-row share' },
       h('span', { class: 'fin-name', text: cap(label(g.item)) }), h('span', { class: 'fin-share' }, h('i', { width: g.share })),
       h('span', { class: 'fin-pct', text: Math.round(g.share * 100) + '%' }), figure(fmt(g.count))));
-    const clients = c.clientList().slice(0, 10).map(x => row(x.name,
+    const person = name => { const p = personOf(name); return p ? `${name} (${p.who})` : name; };   // the regular by name, with who runs it
+    const clients = c.clientList().slice(0, 10).map(x => row(person(x.name),
       `${x.level ? `Level ${x.level} · +${Math.round(c.clientBonus(x.name) * 100)}%` : 'New'} · ${x.orders} order${x.orders === 1 ? '' : 's'}${x.next ? ` · next level at ${x.next}` : ''}`));
     return [
       this.nameCard(),

@@ -5,7 +5,7 @@
 // Changing who is playing always ends in a page reload, so the game never swaps saves mid-run.
 // On a plain file host with no server (or with no connection) the game simply plays as before.
 import { saveFile } from './files.js';
-import { GUEST_KEY, saveKey, pickSave } from './sim/sync.js';
+import { GUEST_KEY, saveKey, logKey, pickSave } from './sim/sync.js';
 
 const ID_KEY = 'lumber-tycoon-account';        // last signed-in player, so they can start offline
 const revKey = id => `lumber-tycoon-rev:u${id}`;
@@ -188,7 +188,7 @@ export class Account {
     if (!r.ok) return { ok: false, error: problem(r) };
     this.flash('Your account was deleted.', true);   // what the player asked for: said as done, not as a problem
     // The copy on this device belonged to the account too: it goes after the game's last save, so that save cannot bring it back.
-    this.leave(() => { remove(ID_KEY); remove(saveKey(id)); remove(revKey(id)); });
+    this.leave(() => { remove(ID_KEY); remove(saveKey(id)); remove(logKey(saveKey(id))); remove(revKey(id)); });
     return { ok: true };
   }
 

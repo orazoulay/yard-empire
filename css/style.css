@@ -206,7 +206,11 @@ html.bare #hud, html.bare #labels { visibility: hidden; }
 /* A plot the player can pay for beats three times, then rests for about ten seconds: it asks, it does not nag. */
 .label.plot.affordable .cost { background: var(--green); border-color: #fff; animation: plot-pulse 12s ease-in-out infinite; }
 @keyframes plot-pulse { 0%, 5%, 10%, 15%, 100% { transform: scale(1); } 2.5%, 7.5%, 12.5% { transform: scale(1.12); } }
-.label.plot .note { font-size: clamp(.6875rem, 2.9vw, .8125rem); font-weight: 600; font-variant-numeric: tabular-nums; }
+.label.plot .note { font-size: clamp(.6875rem, 2.9vw, .8125rem); font-weight: 600; font-variant-numeric: tabular-nums; white-space: pre-line; text-align: center; line-height: 1.3; }
+/* A payment has just landed on this plot: its ring answers with one short pulse. */
+.label.plot .ring { transition: transform .22s cubic-bezier(.3, 1.6, .5, 1); }
+.label.plot.paying .ring { transform: scale(1.16); }
+html.calm .label.plot .ring { transition: none; transform: none; }
 .label.plot .note[hidden] { display: none; }
 .label.plot.gate .ring .fg { stroke: var(--yellow); }
 .label.plot.gate .name { color: var(--yellow); }
@@ -340,6 +344,17 @@ button.row:hover { background: #243040; }
 }
 .r-icon { color: var(--yellow); font-size: 1.0625rem; }
 .row.here .r-num { color: var(--yellow); border-color: rgba(227, 179, 65, .4); }
+/* the yard list: each number wears the colour of its yard's ground; a yard that is not open is quieter and says what opens it */
+#yards .r-num { box-shadow: inset 0 -4px 0 var(--ground, transparent); }
+.row.locked { background: transparent; border-style: dashed; align-items: flex-start; }
+.row.locked .r-title { color: var(--muted); }
+.row.locked.next { border-color: rgba(227, 179, 65, .4); }
+.row.locked.next .r-title { color: var(--text); }
+.r-needs { font-size: .75rem; font-weight: 500; line-height: 1.35; color: var(--text); margin-top: 2px; }
+.row.locked:not(.next) .r-needs { color: var(--muted); font-weight: 400; }
+.r-lock { flex: none; color: var(--muted); font-size: 1rem; margin-top: 7px; }
+.r-bar { display: block; height: 4px; margin-top: 5px; border-radius: 2px; background: rgba(255, 255, 255, .14); overflow: hidden; }
+.r-bar i { display: block; height: 100%; border-radius: 2px; background: var(--yellow); }
 .r-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .r-title { font-size: .90625rem; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
 .r-sub { font-size: .75rem; font-weight: 400; color: var(--muted); line-height: 1.3; }
@@ -716,6 +731,11 @@ button.hq-btn:focus-visible, .hq-tab:focus-visible, #hq-close:focus-visible, but
 .hq-reward { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: var(--t-sm); font-weight: 500; color: var(--p-ink2); font-variant-numeric: tabular-nums; }
 .hq-reward .cash { font-size: var(--t-xl); font-weight: 600; letter-spacing: -.01em; color: var(--p-ink); }
 .hq-card.contract.ready, .hq-card.goal.ready { border-color: rgba(76, 195, 138, .55); }
+/* who is asking and why, on a contract card: the person in a line, what they say as a quote with a rule beside it */
+.hq-story { display: flex; flex-direction: column; gap: 4px; }
+.hq-story-who { font-size: var(--t-sm); font-weight: 400; color: var(--p-ink2); line-height: 1.4; }
+.hq-story-who b { font-weight: 600; color: var(--p-ink); }
+.hq-story-text { margin: 0; padding-left: 10px; border-left: 2px solid rgba(227, 179, 65, .55); font-size: var(--t-md); font-weight: 400; font-style: italic; line-height: 1.45; color: var(--p-ink); overflow-wrap: anywhere; }
 .hq-card.ready .bar .fill { background: var(--p-up); }
 .hq-card.goal.done, .hq-card.staff.locked { opacity: .6; }
 .hq-card.staff.hired { border-color: var(--p-line-strong); }

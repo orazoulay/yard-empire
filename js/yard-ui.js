@@ -1,10 +1,10 @@
 // The yard's interface where it meets the running game: what the labels in the yard say, the carry
 // bubble, being shown the way, going to a yard, the keyboard shortcuts, the comfort settings, hiding
 // the interface, and whether the game is saved. The HUD draws; this file decides what, from game state.
-import { AREAS, ITEMS } from './data/areas.js';
+import { AREAS, ITEMS, RECIPES } from './data/areas.js';
 import { LOCATIONS } from './data/company.js';
 import { loading } from './loading.js';
-import { carryText, plotNote, machineCounts, shortcutFor, saveStatus } from './ui-logic.js';
+import { carryText, plotNote, yardRows, machineCounts, shortcutFor, saveStatus } from './ui-logic.js';
 
 const LABEL_EVERY = 0.25;   // seconds between label updates: four times a second reads as live and costs nothing
 const RATE_EVERY = 4;       // label updates between two readings of the company's income: once a second
@@ -114,20 +114,28 @@ export class YardUi {
   }
 
   // --- labels in the yard ---------------------------------------------------------------------------
-  /** Under each plot's price: what is still missing when the cash is close, and what to do when it is there. */
+  /**
+   * Under each plot's price: what was paid of it, what is still missing when the cash is close, what to do when
+   * it is there, and, to a player who stands on it without the money, what to sell for the rest.
+   * A payment that has just landed gives the plot's ring a short pulse.
+   */
   plots() {
-    const g = this.game, cash = g.econ.cash;
+    const g = this.game, cash = g.econ.cash, p = g.player.pos;
     for (const a of g.areas) {
       const plot = a.open && a.plot;
       if (!plot) continue;
       let part = this.parts.get(plot);
       if (!part) {
-        part = { note: el('div', 'note'), text: '' };
+        part = { note: el('div', 'note'), text: '', paid: g.econ.paid[plot.upgrade.id] || 0 };
         part.note.hidden = true;
         plot.label.el.append(part.note);
         this.parts.set(plot, part);
       }
-      const text = plotNote({ cash, remaining: g.econ.remaining(plot.upgrade.id) });
+      const u = plot.upgrade, paid = g.econ.paid[u.id] || 0;
+      plot.label.el.classList.toggle('paying', paid > part.paid);   // on for one look, a quarter of a second
+      part.paid = paid;
+      const standing = Math.hypot(plot.x - p.x, plot.z - p.z) <= (plot.radius || 0);
+      const text = plotNote({ cash, remaining: g.econ.remaining(u.id), cost: u.cost, standing, goods: ITEMS[a.cfg.workerJob?.items[0]]?.label || '' });
       if (text === part.text) continue;
       part.text = text; part.note.textContent = text; part.note.hidden = !text;
     }
@@ -190,9 +198,8 @@ export class YardUi {
     const g = this.game;
     if (g.reveal) return;
     const place = id => LOCATIONS.find(l => l.id === id)?.name || '';
-    const yards = g.areas.filter(a => a.open).map(a => ({
-      id: a.id, name: a.cfg.name, place: place(a.cfg.location), index: g.areas.indexOf(a) + 1, here: a === g.playerArea,
-    }));
+    // every yard of the game: the open ones to go to, the others with what they make and what opens them
+    const yards = yardRows({ areas: AREAS, econ: g.econ, here: g.playerArea.id, place, items: ITEMS, recipes: RECIPES });
     this.hud.showYards(yards, id => { if (g.travel(id)) g.sfx.click(); });
   }
 

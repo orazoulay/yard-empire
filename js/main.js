@@ -20,6 +20,7 @@ import { TUNING } from './data/tuning.js';
 import { chooseJob, busiestMachine, playerDest } from './sim/jobs.js';
 import { AREAS, ITEMS, RECIPES, BASE_CAPACITY, allUpgrades, gateGeom, reachOf } from './data/areas.js';
 import { fmt } from './format.js';
+import { plotProgress } from './ui-logic.js';
 import { EFFECT_ICON } from './icons.js';
 import { Settings } from './settings.js';
 import { Sfx } from './audio.js';
@@ -37,7 +38,7 @@ import { Account } from './account.js';
 import { CLOUD } from './config.js';
 import { supabaseTransport } from './cloud.js';
 import { bindAccountUi } from './account-ui.js';
-import { blankSave } from './sim/sync.js';
+import { blankSave, logKey } from './sim/sync.js';
 // yard interface: what the labels, the bubble, the shortcuts and the comfort settings do; and the loading screen's steps
 import { YardUi } from './yard-ui.js';
 import { loading } from './loading.js';
@@ -47,6 +48,7 @@ const inRect = (p, r) => p.x >= r.minX && p.x <= r.maxX && p.z >= r.minZ && p.z 
 /** The player's local day number (days since 1970): daily and weekly goals follow it. */
 const today = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
 const SOLD_KEY = 'lumber-tycoon-sold';   // stars of a sale, to celebrate after the reload
+const OFFER_AFTER = 7;                   // seconds from a purchase to the offer of an account: the cards about it come first
 /** True when the straight line from a to b passes through the rectangle r. */
 function crosses(a, b, r) {
   let t0 = 0, t1 = 1;
@@ -83,7 +85,7 @@ class Game {
     this.sky = new Sky({ scene, renderer: this.renderer, sun, hemi });
 
     this.labels = new Labels(document.getElementById('labels'), camera);
-    this.hud = new Hud();
+    this.hud = new Hud({ logKey: logKey(this.saveKey) });   // the log behind the bell is kept beside this player's save
     this.fx = new Fx(document.getElementById('fx'), camera, this.hud.cashEl);
     this.input = new Input(this.canvas, document.getElementById('joystick'));
 
@@ -150,6 +152,7 @@ class Game {
       settings: this.settings,
       onReset: () => {
         this.noSave = true;
+        this.hud.clearLog();   // the log tells of the progress that is being erased
         // A signed-in player gets a fresh save stamped "now", so it replaces the copy on the server too.
         if (account.user) localStorage.setItem(this.saveKey, JSON.stringify(blankSave(Date.now())));
         else localStorage.removeItem(this.saveKey);
@@ -433,6 +436,7 @@ class Game {
     this.company.refreshCosts(); this.company.sync();
     this.celebrate();
     this.save();
+    this.offerIn = OFFER_AFTER;   // a guest who has just bought something has something to keep: the account is offered soon (accountOffer)
     if (!area.plot && this.areas.every(a => a.open && !a.plot)) {
       setTimeout(() => this.hud.unlock({ icon: '🏆', title: 'Everything built!', desc: 'You own every yard on the map', kicker: 'Tycoon' }), 3200);
     }
@@ -524,7 +528,18 @@ class Game {
     return true;
   }
   /** Once a second: new goals when the date changes, and the Factory Manager's shopping. */
+  /**
+   * Once a second after a purchase: offer the account to a guest who has not been asked, when the cards have had
+   * their say and nothing else is on the screen. The sheet decides whether there is anyone to ask (js/account-ui.js).
+   */
+  accountOffer() {
+    if (!(this.offerIn > 0) || --this.offerIn > 0) return;
+    const quiet = !this.hqOpen && !this.reveal && !this.hud.sheetOpen && !this.hud.unlockBusy && !this.tutorial.active;
+    if (!quiet) { this.offerIn = 1; return; }   // look again in a second
+    this.offerAccount?.();
+  }
   companyChores() {
+    this.accountOffer();
     this.company.refreshGoals(today());
     this.buildSite.sync(this.company);   // cheap: it draws only when a stage was finished or a build started
     const c = this.company, event = c.eventNow();
@@ -645,10 +660,8 @@ class Game {
     const card = this.tutorial.active ? this.tutorial.card() : this.describe(o);
     const plot = this.playerArea.plot;
     if (plot && !this.tutorial.active) {
-      const u = plot.upgrade, rem = this.econ.remaining(u.id);
-      const have = (u.cost - rem) + Math.min(this.econ.cash, rem);
-      card.progress = have / u.cost;
-      card.sub = `${u.label} · $${fmt(have)} / $${fmt(u.cost)}`;
+      const u = plot.upgrade;   // how far the money for this yard's next purchase is, as a bar and in words
+      Object.assign(card, plotProgress({ label: u.label, cash: this.econ.cash, remaining: this.econ.remaining(u.id), cost: u.cost }));
     }
     this.hud.setObjective(card);
   }
@@ -777,7 +790,7 @@ const account = await new Account(CLOUD.url ? supabaseTransport(CLOUD) : undefin
 loading.step(2);
 const game = window.game = new Game(account);
 account.onLeave = () => { game.save(); game.noSave = true; };
-bindAccountUi(account, { onOpen: () => game.sfx.click() });
+game.offerAccount = bindAccountUi(account, { onOpen: () => game.sfx.click() }).offer;
 account.start();
 initPwa();
 initNative(game);

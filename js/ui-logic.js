@@ -12,9 +12,9 @@ export const TIPS = [
   { text: 'Workers keep earning while you are away, for a few hours a day.' },
   { text: 'Opening your second yard founds the company and its Headquarters.' },
   { text: 'A contract pays more than selling the same goods in the shop.' },
-  { text: 'Tap the yard name at the top to jump to any yard you have opened.' },
+  { text: 'Tap the yard name at the top to go to an open yard, and to see the yards ahead.' },
   { text: 'Tap the card at the bottom to be shown where to go.' },
-  { text: 'The bell at the top keeps a list of what you unlocked since you opened the game.' },
+  { text: 'The bell at the top keeps a list of the last things you unlocked.' },
   { text: 'Truck routes carry goods from one yard to the machines of the next.' },
   { text: 'The game saves by itself every few seconds.' },
   { text: 'Press ? in the yard to see the keyboard shortcuts.', keys: true },
@@ -26,11 +26,13 @@ export function pickTip(random = Math.random(), { keyboard = false } = {}) {
 }
 
 // --- time in words ---------------------------------------------------------------------------------
-/** How long ago something happened, for the log: just now, 5 min ago, 2 h 10 min ago. */
+/** How long ago something happened, for the log: just now, 5 min ago, 2 h 10 min ago, yesterday, 3 days ago. */
 export function ago(seconds) {
   if (!(seconds >= 45)) return 'just now';
   const m = Math.max(1, Math.round(seconds / 60)), h = Math.floor(m / 60), rest = m % 60;
   if (h === 0) return `${m} min ago`;
+  if (h >= 48) return `${Math.floor(h / 24)} days ago`;
+  if (h >= 24) return 'yesterday';
   return rest ? `${h} h ${rest} min ago` : `${h} h ago`;
 }
 /** How long the player was away, which can be days: 12 min, 3 h 5 min, 2 days 4 h. */
@@ -68,16 +70,69 @@ export function rateText(perSecond) {
 // --- labels in the yard ------------------------------------------------------------------------------
 /** With this share of what is still to pay in hand, a plot says how much is missing. */
 export const PLOT_CLOSE = 0.6;
+/** A plot's price tag: the price, and once a part of it is paid, what is left, in words, so it does not read as a lower price. */
+export function plotTag({ remaining, cost }) {
+  const left = '$' + fmt(Math.ceil(remaining));
+  return remaining < cost ? left + ' left' : left;
+}
 /**
- * The line under a plot's price. Nothing while the price is far away, the missing amount in words when
- * it is close, and what to do once the cash is there.
- * @param {{ cash: number, remaining: number }} o  remaining: what is still to pay for the plot
+ * The lines under a plot's price, one below the other. What was paid, once a part is paid. Then: what to do
+ * once the cash is there; what to sell for the rest, to a player who stands on the plot with nothing left to
+ * pay; the missing amount when it is close; and nothing while the price is far away.
+ * @param {{ cash: number, remaining: number, cost?: number, standing?: boolean, goods?: string }} o
+ *   remaining: what is still to pay; cost: the full price; standing: the player is on the plot;
+ *   goods: what this yard sells, by name ("planks")
  */
-export function plotNote({ cash, remaining }) {
+export function plotNote({ cash, remaining, cost = remaining, standing = false, goods = '' }) {
   if (!(remaining > 0)) return '';
-  if (cash >= remaining) return 'Stand here to buy';
-  if (cash < remaining * PLOT_CLOSE) return '';
-  return `$${fmt(Math.ceil(remaining - cash))} to go`;
+  const lines = [], paid = cost - remaining, missing = '$' + fmt(Math.ceil(remaining - cash));
+  if (paid >= 1) lines.push(`Paid $${fmt(paid)} of $${fmt(cost)}`);
+  if (cash >= remaining) lines.push('Stand here to buy');
+  else if (standing && cash < 1) lines.push(goods ? `Sell ${goods} to earn ${missing} more` : `${missing} more needed`);
+  else if (cash >= remaining * PLOT_CLOSE) lines.push(`${missing} to go`);
+  return lines.join('\n');
+}
+/**
+ * The line of the objective card about the plot of the yard the player is in: its name and, in words, how
+ * far the money is. The card's bar shows the same thing: what is paid and what is in hand, over the price.
+ * @returns {{ sub: string, progress: number }}
+ */
+export function plotProgress({ label, cash, remaining, cost }) {
+  const have = (cost - remaining) + Math.min(Math.max(0, cash), remaining);
+  const sub = cash >= remaining ? `${label} · ready to buy` : `${label} · $${fmt(Math.ceil(remaining - cash))} more needed`;
+  return { sub, progress: cost > 0 ? have / cost : 0 };
+}
+
+// --- the yard list -----------------------------------------------------------------------------------
+/** "chairs from planks", "steel from iron bars and power cells": what a recipe makes, for a yard that is not open yet. */
+export function makesText(recipe, items) {
+  if (!recipe) return '';
+  const from = [recipe.input, recipe.input2].filter(Boolean).map(i => items[i].label).join(' and ');
+  return `makes ${items[recipe.output].label} from ${from}`;
+}
+/**
+ * The rows of the yard list: every yard of the game in order. An open yard can be travelled to. A yard that
+ * is not open says what it makes and what opens it, with the price of its gate as the economy has it.
+ * @param {{ areas: object[], econ: object, here: string, place: (location: string) => string, items: object, recipes: object }} o
+ *   areas: the yards as data (js/data/areas.js); econ: the Economy; here: the id of the yard the player is in
+ */
+export function yardRows({ areas, econ, here, place, items, recipes }) {
+  return areas.map((a, i) => {
+    const row = { id: a.id, name: a.name, place: place(a.location), index: i + 1, ground: a.ground, open: econ.areaOpen(a.id), here: a.id === here };
+    if (row.open) return row;
+    const machine = a.stations.find(s => s.type === 'processor') || a.upgrades.find(u => u.effect.type === 'station')?.effect.station;
+    row.makes = makesText(recipes[machine?.recipe], items);
+    const prev = areas.find(p => p.gate && p.gate.next === a.id);
+    if (!prev) return { ...row, needs: '' };
+    const gate = 'gate:' + prev.id, cost = econ.get(gate)?.cost ?? prev.gate.cost, price = '$' + fmt(cost);
+    if (!econ.areaOpen(prev.id)) return { ...row, needs: `Opens after ${prev.name}, for ${price}` };
+    const left = prev.upgrades.filter(u => !econ.has(u.id)).length, paid = cost - econ.remaining(gate);
+    row.next = true;
+    if (left > 0) row.needs = `Finish ${prev.name} (${left} more to build), then pay ${price} at its gate`;
+    else if (paid >= 1) { row.needs = `$${fmt(paid)} of ${price} paid at the gate in ${prev.name}`; row.progress = paid / cost; }
+    else row.needs = `Pay ${price} at the gate in ${prev.name}`;
+    return row;
+  });
 }
 /** What waits in a machine and what lies ready, for its label: "In 3 · Out 2", or "In 3 + 1 · Out 2" with two materials. */
 export function machineCounts(sim) {
@@ -113,7 +168,11 @@ export class Tally {
 }
 
 // --- the log -----------------------------------------------------------------------------------------
-/** The last announcements since the game was opened, newest first, and how many of them the player has not looked at. */
+const LOG_TEXT = { kicker: 40, title: 120, desc: 240, symbol: 24 };   // the longest each part of a kept entry may be
+/**
+ * The last announcements, newest first, and how many of them the player has not looked at. The list can be
+ * written out and read back, so that it is still there on the next visit (the HUD keeps it on the device).
+ */
 export class Journal {
   constructor(limit = 30) { this.limit = limit; this.items = []; this.unseen = 0; }
   add(entry, at) {
@@ -122,6 +181,27 @@ export class Journal {
     this.unseen = Math.min(this.limit, this.unseen + 1);
   }
   seen() { this.unseen = 0; }
+  /** What is kept between visits: the entries as plain text and their time. */
+  toJSON() { return this.items.map(e => ({ kicker: e.kicker, title: e.title, desc: e.desc, symbol: e.symbol, at: e.at })); }
+  /**
+   * Take the entries of an earlier visit. Whatever is not a well-formed entry is left out: the storage of a
+   * browser can hold anything. Entries from the future (a clock set back) count as from now.
+   * Nothing of it counts as not looked at: the dot on the bell is for what happens in this visit.
+   */
+  load(raw, now = Date.now()) {
+    const text = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+    const items = [];
+    for (const e of Array.isArray(raw) ? raw : []) {
+      if (!e || typeof e !== 'object' || !Number.isFinite(e.at) || e.at <= 0) continue;
+      const title = text(e.title, LOG_TEXT.title);
+      if (!title) continue;
+      items.push({ kicker: text(e.kicker, LOG_TEXT.kicker) || 'Unlocked', title, desc: text(e.desc, LOG_TEXT.desc), symbol: /^[a-z-]+$/.test(e.symbol) ? text(e.symbol, LOG_TEXT.symbol) : 'award', at: Math.min(e.at, now) });
+    }
+    items.sort((a, b) => b.at - a.at);
+    this.items = items.slice(0, this.limit);
+    this.unseen = 0;
+    return this;
+  }
 }
 
 // --- the joystick ------------------------------------------------------------------------------------

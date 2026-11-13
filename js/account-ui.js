@@ -5,10 +5,13 @@ import { showNotice } from './notice.js';
 const $ = id => document.getElementById(id);
 const SEEN_KEY = 'lumber-tycoon-account-seen';
 
-/** @param account {import('./account.js').Account}  @param hooks {{ onOpen?: () => void }} */
+/**
+ * @param account {import('./account.js').Account}  @param hooks {{ onOpen?: () => void }}
+ * @returns {{ offer: () => boolean }}  offer: show the sheet to a guest who has not been asked yet
+ */
 export function bindAccountUi(account, { onOpen } = {}) {
   const entry = $('btn-account');
-  if (!account.supported) return;   // no account server: the game plays as a guest, with no account buttons
+  if (!account.supported) return { offer: () => false };   // no account server: the game plays as a guest, with no account buttons
   const sheet = $('account'), form = $('acc-form'), me = $('acc-me'), error = $('acc-error'), good = $('acc-ok');
   const name = $('acc-name'), pass = $('acc-pass'), submit = $('acc-submit');
   const pwForm = $('acc-pw-form'), pwError = $('acc-pw-error');
@@ -198,11 +201,24 @@ export function bindAccountUi(account, { onOpen } = {}) {
     resetSubmit.textContent = 'Set the new password'; $('acc-reset-back').textContent = 'Not now';
     open();
   }
-  // Show the sheet by itself when there is news (signed out, suspended), and once to a new guest.
+  // The sheet shows by itself when there is news (signed out, suspended). A new guest is not asked at the start,
+  // before having done anything: the game offers the account once, after the first purchase (offer, below).
   const flash = account.takeFlash();
-  let seen = true;
-  try { seen = !!localStorage.getItem(SEEN_KEY); localStorage.setItem(SEEN_KEY, '1'); } catch { /* private mode */ }
-  if (account.reset) return;
-  if (!user && flash) { setMode('in'); open(flash, false, account.flashGood); } else if (!user && !seen) open();
+  /**
+   * Offer the account to a guest who has not been asked yet. The game calls this at a quiet moment after a purchase.
+   * @returns true when the sheet was opened: it is opened once per browser
+   */
+  const offer = () => {
+    if (user || account.open || account.reset) return false;
+    try {
+      if (localStorage.getItem(SEEN_KEY)) return false;
+      localStorage.setItem(SEEN_KEY, '1');
+    } catch { return false; }   // a browser that keeps nothing would be asked after every purchase: it is not asked
+    setMode('new'); open();
+    return true;
+  };
+  if (account.reset) return { offer };
+  if (!user && flash) { setMode('in'); open(flash, false, account.flashGood); }
   else if (user && flash) showNotice('account', { text: flash, tone: 'gold', seconds: 8 });   // signed in by the link in the email
+  return { offer };
 }

@@ -5,6 +5,8 @@ export const GUEST_KEY = 'lumber-tycoon-save-v1';
 
 /** Each account keeps its own save on the device, so a guest and several players can share a phone. */
 export const saveKey = userId => (userId ? `${GUEST_KEY}:u${userId}` : GUEST_KEY);
+/** Where the log behind the bell is kept for the player whose save is under `key`: beside the save, not in it, so it is never uploaded. */
+export const logKey = key => key + '-log';
 
 /** A brand-new game, stamped so it counts as newer than what the server still has. */
 export const blankSave = now => ({ v: 3, cash: 0, unlocked: {}, paid: {}, areas: [], tutorialDone: false, workerRate: 0, lastSeen: now });

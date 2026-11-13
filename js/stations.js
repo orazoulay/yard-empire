@@ -6,6 +6,7 @@ import { addPallet, itemSize, makeItem, Stack, stackBase } from './items3d.js';
 import { Processor } from './sim/processor.js';
 import { RECIPES, ITEMS, AREAS } from './data/areas.js';
 import { fmt } from './format.js';
+import { plotTag } from './ui-logic.js';
 import { lookOf } from './data/looks.js';
 import { icon, EFFECT_ICON } from './icons.js';
 import { TUNING } from './data/tuning.js';
@@ -631,7 +632,7 @@ export class Plot extends Zone {
   refresh(econ) {
     const u = this.upgrade, rem = econ.remaining(u.id);
     this.ringFg.style.strokeDashoffset = RING_C * (rem / u.cost);
-    this.costEl.textContent = '$' + fmt(Math.ceil(rem));
+    this.costEl.textContent = plotTag({ remaining: rem, cost: u.cost });   // "$60 left" once a part is paid
     this.label.el.classList.toggle('affordable', econ.cash >= rem);
   }
   update() {}
