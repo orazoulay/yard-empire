@@ -5,12 +5,13 @@
 // The company sits beside the Economy: it reads cash, upgrades and open yards from it, changes cash only
 // through addCash / spend, and is saved inside the Economy's save as `company`.
 import { FINANCE, RANKS, MILESTONES, WAREHOUSE, CONTRACTS, ROUTES, RESEARCH, TABS, STAFF, STAFF_RULES, GOALS, ACHIEVEMENTS, PRESTIGE, EVENTS, EVENT_GOAL, LOCATIONS, RUSH, CLIENTS, STREAK, MARKET } from '../data/company.js';
+import { BUILDS, SITE } from '../data/builds.js';
 import { RateMeter, OFFLINE_CAP_SECONDS } from './offline.js';
 import { Market } from './market.js';
 import { fmt } from '../format.js';
 
 const num = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
-const BOOK_KEYS = ['sales', 'supplied', 'stocked', 'materials'];
+const BOOK_KEYS = ['sales', 'supplied', 'stocked', 'site', 'materials'];   // site: goods given to the building site, at the normal price
 const PERIODS = ['daily', 'weekly', 'event'];   // the lists of goals a player can collect from
 // The last five came with the records: market goods sold, how many of them from the warehouse at a good and at a top price, rush orders made and missed.
 const STAT_KEYS = ['income', 'costs', 'contracts', 'trucked', 'sold', 'byHand', 'projects', 'bestContract', 'dailySets', 'autoDelivered',
@@ -59,6 +60,29 @@ export const kindOf = contract => {
   return { ...kind, name: `${kind.name} · ${state}` };
 };
 
+/**
+ * The building site as a save has it, kept to what the builds allow: builds are finished in order, only the next one
+ * can be running, and a stage holds no more of a good than it needs. A stage that a save claims to be full is left
+ * one good short, so that loading a game never finishes anything or pays anything.
+ */
+function readSite(raw) {
+  const site = { done: [], at: null, stage: 0, given: {}, value: 0, on: true };
+  if (!raw || typeof raw !== 'object') return site;
+  const done = new Set(Array.isArray(raw.done) ? raw.done : []);
+  for (const b of BUILDS) { if (!done.has(b.id)) break; site.done.push(b.id); }
+  const next = BUILDS[site.done.length];
+  if (next && raw.at === next.id) {
+    site.at = next.id;
+    site.stage = Math.min(next.stages.length - 1, Math.max(0, Math.floor(num(raw.stage))));
+    const needs = next.stages[site.stage].needs;
+    for (const [item, need] of needs) { const n = Math.min(need, Math.floor(num(raw.given?.[item]))); if (n > 0) site.given[item] = n; }
+    if (needs.every(([item, need]) => site.given[item] === need)) site.given[needs[0][0]] = needs[0][1] - 1;
+    site.value = Math.max(0, num(raw.value));
+  }
+  site.on = raw.on !== false;
+  return site;
+}
+
 export class Company {
   /**
    * @param world { econ, areas, items, recipes }  the Economy and the game data
@@ -76,6 +100,10 @@ export class Company {
       const r = st && recipes[st.recipe];
       if (r && !(r.output in this.maker)) this.maker[r.output] = a.id;
     }
+    // Goods that reach a shop in a finished company, which is where the building site takes them: every product
+    // no machine uses, and the few of which a surplus is made (js/data/builds.js).
+    const used = new Set(Object.values(recipes).flatMap(r => [r.input, r.input2]).filter(Boolean));
+    this.siteGoods = new Set([...Object.values(recipes).map(r => r.output).filter(item => !used.has(item)), ...SITE.surplus]);
     // Goods made in a location with a market are traded there: what they sell for moves (js/sim/market.js).
     const trading = new Set(LOCATIONS.filter(l => l.market).map(l => l.id));
     this.marketYards = areas.filter(a => trading.has(a.location)).map(a => a.id);
@@ -140,7 +168,9 @@ export class Company {
     // Things that happen once: the three first-time hints, and the Metropolis fully built (the ninth rank asks for it).
     // A game saved before the hints existed is not told about a market it has traded on, or a sale it has made.
     this.seen = { market: s?.seen ? !!s.seen.market : this.market.t > 300, sale: s?.seen ? !!s.seen.sale : this.legacy.sales > 0,
-      rush: !!s?.seen?.rush, metropolis: !!s?.seen?.metropolis };
+      rush: !!s?.seen?.rush, metropolis: !!s?.seen?.metropolis, site: !!s?.seen?.site };
+    this.site = readSite(s?.site);                                                  // the building site (js/data/builds.js); absent in older saves
+    this.siteTurn = false;                                                          // a good a contract and the site both need: whose turn it was
     this.marketStep = null;                                                         // the price step the alerts were last checked at
     this.books = new Map();                        // yard id -> smoothed dollars per second, by BOOK_KEYS
     const meter = () => new RateMeter(0, FINANCE.rateMemory);
@@ -177,6 +207,8 @@ export class Company {
       records: { goods: this.records.goods, peakMinute: Math.round(this.records.peakMinute), played: Math.round(this.records.played), partial: this.records.partial },
       streak: this.streak, clients: this.clients, seen: this.seen, rushIn: Math.round(this.rushIn),
       ...(this.name ? { name: this.name } : {}),
+      // the building site, only once something was built or started: older saves, and those of players who never get there, stay as they were
+      ...(this.site.at || this.site.done.length ? { site: { done: this.site.done, at: this.site.at, stage: this.site.stage, given: this.site.given, value: Math.round(this.site.value), on: this.site.on } } : {}),
     };
   }
   /** Something to tell the player once, as a card: the game shows it like its other announcements. symbol: an icon of js/icons.js. */
@@ -280,6 +312,10 @@ export class Company {
       seen.sale = true;
       this.notice('Legacy', 'You can sell the company', 'A sale pays legacy stars that raise every price for good, and you build again. See Expansion in your Headquarters.', 'star');
     }
+    if (!seen.site && this.siteOpen) {
+      seen.site = true;
+      this.events.push({ type: 'site' });   // the game shows the plot, and words the card
+    }
     if (!seen.rush && this.offers.some(o => o.limit)) {
       seen.rush = true;
       this.notice('Contract', 'A rush order came in', `It pays more, but the goods must be in the warehouse in time. Running out costs ${RUSH.repLoss} reputation.`, 'clock');
@@ -292,6 +328,7 @@ export class Company {
     if (u.contracts && this.stats.contracts < u.contracts) return t.hint;
     if (u.rank && this.rank < u.rank) return t.hint;
     if (u.location && !this.areas.some(a => a.location === u.location && this.econ.areaOpen(a.id))) return t.hint;
+    if (u.yards && this.econ.areas.length < u.yards) return t.hint;
     return null;
   }
 
@@ -382,7 +419,7 @@ export class Company {
    * and pays nothing now; otherwise it is sold. A good the player holds back goes to the warehouse too.
    * `price` is what the item sells for now, market included. Pay for time away must not be measured with it
    * but with the normal price (econ.price), or leaving the game at a high price would pay that price for hours.
-   * @returns {{ price: number, cash: number, stocked: boolean }}
+   * @returns {{ price: number, cash: number, stocked: boolean, site?: boolean }}  site: it went to the building site
    */
   sale(item, areaId, byPlayer = false) {
     const normal = this.econ.price(item), price = normal * this.market.factor(item);
@@ -390,6 +427,14 @@ export class Company {
     this.records.goods[item] = (this.records.goods[item] || 0) + 1;
     if (!this.shopFlow.has(item)) this.shopFlow.set(item, new RateMeter(0, FINANCE.rateMemory));
     this.shopFlow.get(item).add(1);
+    // The building site takes what its stage needs, before goods the player holds back for the market (those are held
+    // back to be sold later). A rush order comes first: its clock runs. Any other contract that needs the same good
+    // shares it with the site, one good each, so that neither stands still for as long as the other takes.
+    if (this.siteWants(item) > 0 && (this.contractsShort(item) <= 0 || (!this.rushNeeds(item) && (this.siteTurn = !this.siteTurn)))) {
+      this.book(areaId).site.add(normal);   // not sold: booked at the normal price, like a good stocked for a contract
+      this.give(item, 1);
+      return { price, cash: 0, stocked: true, site: true };
+    }
     if (this.founded && this.wanted(item) > 0) {
       this.stock[item] = (this.stock[item] || 0) + 1;
       this.book(areaId).stocked.add(normal);   // not sold yet: booked at the normal price
@@ -774,11 +819,11 @@ export class Company {
   }
   yardReport(id) {
     const b = this.book(id), cost = this.yardCost(id), staff = this.staff().yards[id] || { workers: 0, machines: 0 };
-    const income = b.sales.rate + b.supplied.rate + b.stocked.rate;
+    const income = b.sales.rate + b.supplied.rate + b.stocked.rate + b.site.rate;
     const costs = { materials: b.materials.rate, wages: cost.wages, upkeep: cost.upkeep };
     const total = costs.materials + costs.wages + costs.upkeep;
     const biggest = Object.keys(costs).reduce((a, k) => (costs[k] > costs[a] ? k : a), 'wages');
-    return { id, income, sales: b.sales.rate, supplied: b.supplied.rate, stocked: b.stocked.rate, costs, total, profit: income - total, biggest, ...staff };
+    return { id, income, sales: b.sales.rate, supplied: b.supplied.rate, stocked: b.stocked.rate, site: b.site.rate, costs, total, profit: income - total, biggest, ...staff };
   }
   // --- managers ---------------------------------------------------------------------------------
   /**
@@ -1010,6 +1055,8 @@ export class Company {
       case 'peakMinute': return this.records.peakMinute;
       case 'topGood': return Math.max(0, ...Object.values(this.records.goods));
       case 'sales': return this.legacy.sales;
+      case 'houseBuilt': return this.site.done.includes('house') ? 1 : 0;
+      case 'builds': return this.site.done.length;
       case 'allProfit': {   // the number of open yards, once every one of them earns more than it costs
         const open = this.areas.filter(a => this.econ.areaOpen(a.id));
         return this.age > 60 && open.every(a => this.yardReport(a.id).profit > 0) ? open.length : 0;
@@ -1064,6 +1111,107 @@ export class Company {
     this.sync(true);       // what the sale itself earned (an achievement) is in the save the caller writes next
     return offer;
   }
+
+  // --- the building site (js/data/builds.js) ----------------------------------------------------------------
+  /** The site works while every yard is open: it opens with the last gate, and waits after a sale of the company. */
+  get siteOpen() { return this.founded && this.econ.areas.length >= SITE.yards; }
+  /** A build can ask for this good: it reaches the shops of a finished company. */
+  siteGood(item) { return this.siteGoods.has(item); }
+  /** The running build's data, or null. */
+  build() { return BUILDS.find(b => b.id === this.site.at) || null; }
+  siteStage() { const b = this.build(); return b ? b.stages[this.site.stage] : null; }
+  /** Every build with where it stands: done, running, ready (it can be started now) or later. */
+  buildList() {
+    const next = BUILDS[this.site.done.length];
+    return BUILDS.map(b => ({ build: b, state: this.site.done.includes(b.id) ? 'done' : b.id === this.site.at ? 'running' : b === next && !this.site.at && this.siteOpen ? 'ready' : 'later' }));
+  }
+  /** Something on the site waits for the player: a build can be started. The Headquarters button and the tab show a dot. */
+  siteFlag() { return this.buildList().some(b => b.state === 'ready'); }
+  /** Start the next build. One runs at a time, in the order of the list, and none twice. @returns whether it started */
+  startBuild(id) {
+    const next = BUILDS[this.site.done.length];
+    if (!this.siteOpen || this.site.at || !next || next.id !== id) return false;
+    Object.assign(this.site, { at: id, stage: 0, given: {}, value: 0, on: true });
+    return true;
+  }
+  /** What the running stage needs: [{ item, have, need }]. Empty with no build running. */
+  siteNeeds() { return (this.siteStage()?.needs || []).map(([item, need]) => ({ item, have: this.site.given[item] || 0, need })); }
+  /** How many more of `item` the site takes from the shops right now. */
+  siteWants(item) {
+    if (!this.site.at || !this.site.on || !this.siteOpen) return 0;
+    const need = this.siteStage().needs.find(n => n[0] === item);
+    return need ? need[1] - (this.site.given[item] || 0) : 0;
+  }
+  /** The player's switch: off, every good is sold as usual and what the site has stays. */
+  setSiteOn(on) { this.site.on = !!on; }
+  /** `n` of a good reach the site. Its value at the normal price is kept, for the least a finished build pays. */
+  give(item, n) {
+    this.site.given[item] = (this.site.given[item] || 0) + n;
+    this.site.value += n * this.econ.price(item);
+    this.siteCheck();
+  }
+  /** A stage with everything it needs is finished and the next begins; the last one finishes the build and pays for it. */
+  siteCheck() {
+    for (;;) {
+      const b = this.build(), stage = this.siteStage();
+      if (!b || !stage.needs.every(([item, need]) => (this.site.given[item] || 0) >= need)) return;
+      this.site.given = {};
+      if (this.site.stage + 1 < b.stages.length) {
+        this.events.push({ type: 'stage', build: b, stage, index: this.site.stage });
+        this.site.stage++;
+        continue;
+      }
+      // Minutes of the income this company is built for, as it is now; never less than a premium on the goods themselves,
+      // so that a stage of costly goods (cars, gift sets) is not a loss.
+      const cash = Math.max(b.minutes * 60 * this.goalRef(), SITE.floor * this.site.value);
+      this.site.done.push(b.id);
+      Object.assign(this.site, { at: null, stage: 0, value: 0 });
+      this.earn(cash);
+      this.gainXp(b.xp);
+      this.events.push({ type: 'built', build: b, stage, cash, xp: b.xp });
+    }
+  }
+  /** How much free warehouse stock the running stage could take now: stock no running contract needs. */
+  siteSendable() {
+    if (!this.siteOpen) return 0;
+    return this.siteNeeds().reduce((sum, g) => sum + Math.max(0, Math.min(g.need - g.have, this.freeStock(g.item))), 0);
+  }
+  /** Send that stock to the site. @returns how many goods moved */
+  sendToSite() {
+    if (!this.siteOpen) return 0;
+    let moved = 0;
+    for (const g of this.siteNeeds()) {
+      const n = Math.max(0, Math.min(g.need - g.have, this.freeStock(g.item)));
+      if (!n) continue;
+      this.stock[g.item] -= n;
+      if (this.stock[g.item] <= 0) delete this.stock[g.item];
+      this.site.given[g.item] = (this.site.given[g.item] || 0) + n;
+      this.site.value += n * this.econ.price(g.item);
+      moved += n;
+    }
+    if (moved) this.siteCheck();
+    return moved;
+  }
+  /**
+   * How fast the running stage fills: per good how many reach the shops a minute, and the seconds the stage needs at
+   * that pace (its slowest good decides). `none` marks a good that does not reach a shop now; then no time can be given.
+   */
+  sitePace() {
+    const goods = this.siteNeeds().map(g => {
+      const perMinute = this.shopRate(g.item) * 60, flowing = perMinute >= SITE.none, left = g.need - g.have;
+      // A contract that needs the same good: a rush order takes all of them first, any other shares them one for one.
+      const first = left > 0 ? Math.max(0, this.contractsShort(g.item)) : 0, share = !first ? null : this.rushNeeds(g.item) ? 'rush' : 'contract';
+      const arrivals = left + (share === 'rush' ? first : Math.min(first, left));   // goods that must reach the shops before the site has its own
+      return { ...g, perMinute: flowing ? perMinute : 0, none: left > 0 && !flowing, first, share, seconds: left > 0 && flowing ? arrivals / (perMinute / 60) : null };
+    });
+    const open = goods.filter(g => g.have < g.need);
+    const seconds = !open.length || open.some(g => g.none) ? null : Math.max(...open.map(g => g.seconds));
+    return { goods, seconds };
+  }
+  /** How many more of `item` the running contracts still take from the shops. */
+  contractsShort(item) { return this.active.length ? Math.min(this.reserved(item), this.capacity) - (this.stock[item] || 0) : 0; }
+  /** A running rush order needs this good: its clock runs, so it is served before the site. */
+  rushNeeds(item) { return this.active.some(c => c.limit && c.needs.some(n => n[0] === item)); }
 
   // --- the company's name, its records and the Advisor ------------------------------------------------------
   /** Name the company. @returns the name as it was kept, '' for none */

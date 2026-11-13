@@ -45,6 +45,7 @@ const SHAPES = {
   offline: [p('M7.5 18.5a4.5 4.5 0 0 1-.7-8.95 5.5 5.5 0 0 1 10.6-1.2 4.6 4.6 0 0 1-.4 10.15z'), p('M4 4l16 16')],
   // records, the Advisor and what they show
   records: [r(4, 13.5, 5, 7, 1), r(9.5, 7.5, 5, 13, 1), r(15, 11, 5, 9.5, 1)],   // a podium
+  construction: [p('M3 20.5h18'), p('M5 20.5V10.5l5-4 5 4v10'), p('M8.5 20.5v-4.5h3v4.5'), p('M15 13.5h4v7'), p('M17 16.5h.01')],   // a house with a block going up beside it
   advisor: [p('M9.5 17.5v-1.6a6 6 0 1 1 5 0v1.6z'), p('M10 20.5h4')],   // a light bulb
   clock: [c(12, 12, 8.5), p('M12 7.5V12l3 2')],
   streak: [r(4, 5.5, 16, 15, 2), p('M4 10h16M8.5 3.5v4M15.5 3.5v4'), p('M9 14.5l2 2 4-4')],   // a day ticked off on the calendar

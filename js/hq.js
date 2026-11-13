@@ -6,6 +6,7 @@ import { fmt } from './format.js';
 import { TABS, RANKS, RESEARCH, CATEGORIES, MILESTONES, MEASURES, LOCATIONS, CONTRACTS, STAFF, GOALS, ACHIEVEMENTS, PRESTIGE, MARKET, milestoneText } from './data/company.js';
 import { kindOf } from './sim/company.js';
 import { AREAS, ITEMS } from './data/areas.js';
+import { BUILDS } from './data/builds.js';
 import { Series, niceMax } from './sim/series.js';
 import { icon } from './icons.js';
 import { STAFF_RULES, FINANCE } from './data/company.js';
@@ -28,7 +29,8 @@ const TOP_AFTER = 400;                            // pixels scrolled before "bac
 const RANKING = { every: 30000, wait: 5000 };     // the list refreshes by itself this often while watched; the button rests this long after a load
 // The icon in front of a line of feedback, by the action (act) or the company event (main.js, celebrate) it is about.
 const TOAST_ICON = { deliver: 'contracts', delivered: 'contracts', ready: 'contracts', research: 'research', route: 'logistics', hire: 'team',
-  goal: 'goals', sell: 'coin', founded: 'businesses', milestone: 'award', achievement: 'award', rank: 'star' };
+  goal: 'goals', sell: 'coin', founded: 'businesses', milestone: 'award', achievement: 'award', rank: 'star',
+  build: 'construction', send: 'construction', site: 'construction', stage: 'construction', built: 'construction' };
 
 /** h('div', { class: 'x', text: 'hi', onclick }, child, ...). Text only: nothing here is parsed as HTML. */
 function h(tag, props = {}, ...kids) {
@@ -205,7 +207,7 @@ export class Headquarters {
   sync() {
     const c = this.company;
     this.button.hidden = !c.founded;
-    $('hq-dot').hidden = !(c.active.some(x => c.ready(x)) || c.goalsWaiting() > 0);   // an order to deliver or a reward to collect
+    $('hq-dot').hidden = !(c.active.some(x => c.ready(x)) || c.goalsWaiting() > 0 || c.siteFlag());   // an order to deliver, a reward to collect, or a build to start
   }
   open(tab) {
     if (!this.company.founded) return;
@@ -364,7 +366,7 @@ export class Headquarters {
     // A wide screen has room for every tab in a rail at the side. A phone gets a bar at the bottom with
     // the four most used and More, which lists the rest.
     const compact = matchMedia('(max-width: 759px)').matches;
-    const badge = t => (t.id === 'contracts' && c.active.some(x => c.ready(x))) || (t.id === 'goals' && c.goalsWaiting() > 0);
+    const badge = t => (t.id === 'contracts' && c.active.some(x => c.ready(x))) || (t.id === 'goals' && c.goalsWaiting() > 0) || (t.id === 'construction' && c.siteFlag());
     const tab = t => {
       const locked = !!c.tabLock(t.id), on = t.id === this.tab && !(compact && this.more);
       const digit = TABS.indexOf(t) < 10 ? String((TABS.indexOf(t) + 1) % 10) : null;   // the key that opens it: 1 to 9, then 0
@@ -700,6 +702,7 @@ export class Headquarters {
         h('div', { class: 'hq-split' },
           r.supplied > 0.01 ? h('span', {}, 'Supplies other yards: ', rate(r.supplied)) : null,
           r.stocked > 0.01 ? h('span', {}, 'To the warehouse: ', rate(r.stocked)) : null,
+          r.site > 0.01 ? h('span', {}, 'To the building site: ', rate(r.site)) : null,
           r.costs.materials > 0.01 ? h('span', {}, 'Materials: ', rate(r.costs.materials)) : null,
           h('span', {}, 'Wages: ', rate(r.costs.wages)),
           h('span', {}, 'Upkeep: ', rate(r.costs.upkeep))),
@@ -1100,6 +1103,55 @@ export class Headquarters {
       onkeydown: e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); step(e.key === 'ArrowLeft' ? -1 : 1); } } }, svg, tip);
     place();
     return h('div', { class: 'fin-chart' }, plot);
+  }
+
+  // --- Construction: the building site (js/data/builds.js, and "the building site" in js/sim/company.js) --------
+  construction() {
+    const c = this.company, list = c.buildList(), running = c.build();
+    // What a build pays is said as money, not as "minutes of income": it is priced like the goals, by what the yards are
+    // built to earn, and a company with research and managers earns several times that. The figure shown is the least it pays.
+    const pays = b => [`${b.stages.length} stages · pays `, amount(b.minutes * 60 * c.goalRef()), ` or more, and ${fmt(b.xp)} experience`];
+    const cards = list.map(({ build: b, state }, i) => h('article', { class: 'hq-card research ' + (state === 'done' ? 'done' : state === 'later' ? 'locked' : 'ready') },
+      h('div', { class: 'hq-research-text' }, h('h4', { text: b.name }), h('div', { class: 'hq-sub', text: b.pitch }), h('div', { class: 'hq-sub' }, ...pays(b))),
+      state === 'done' ? chip('Built', 'good', 'check')
+        : state === 'running' ? chip('Being built', 'good')
+          : state === 'ready' ? this.button_('Start building', 'build-' + b.id, () => this.act('build', () => c.startBuild(b.id) && b), { cls: 'primary' })
+            : chip(i > 0 ? `After the ${BUILDS[i - 1].name}` : 'Not yet', '', 'lock')));
+    const show = this.button_('Show me the site', 'site-show', () => this.game.showSite());
+    if (!running) {
+      const all = list.every(x => x.state === 'done');
+      return [
+        section('Building site', note(all ? 'Everything here is built. The new quarter stands, and it stays when you sell the company.'
+          : 'Build something bigger than a yard. A build goes up in stages, from goods your yards make: while it runs, the goods a stage needs go to the site instead of being sold.'), show),
+        section('What to build', ...cards),
+      ];
+    }
+    // The stage in hand: a bar for each good, how many reach the shops a minute, and how long the stage needs at that pace.
+    const pace = c.sitePace(), at = c.site.stage;
+    const goods = pace.goods.map(g => h('div', { class: 'hq-site-good' },
+      h('div', { class: 'hq-need' }, h('span', { text: cap(label(g.item)) }), bar(g.have / g.need, g.have >= g.need ? 'good' : ''), h('b', { text: `${fmt(g.have)} / ${fmt(g.need)}` })),
+      // "No bricks reach", "No glass reaches": a name that ends in one s names many
+      h('div', { class: 'hq-sub', text: g.have >= g.need ? 'All here' : g.none ? `No ${label(g.item)} ${/[^s]s$/.test(label(g.item)) ? 'reach' : 'reaches'} the shops now`
+        : `${Math.round(g.perMinute)} a minute reach the shops` + (g.share === 'rush' ? ` · a rush order takes the next ${fmt(g.first)} first`
+          : g.share === 'contract' ? ` · shared with a contract, one each, for the next ${fmt(2 * Math.min(g.first, g.need - g.have))}` : '') })));
+    const time = pace.seconds != null ? `About ${Math.max(1, Math.ceil(pace.seconds / 60))} min at this pace`
+      : pace.goods.some(g => g.none) ? 'No time can be given: a good this stage needs does not reach a shop. Carry it to the shop yourself, or see the Advisor for where it goes.' : '';
+    const stages = running.stages.map((st, i) => h('div', { class: 'hq-stage ' + (i < at ? 'done' : i === at ? 'now' : 'later') },
+      h('h4', {}, i < at ? icon('check') : null, h('span', { text: st.name })),
+      i === at ? null : h('div', { class: 'hq-sub', text: i < at ? 'Finished' : st.needs.map(needText).join(' and ') })));
+    const sendable = c.siteSendable();
+    return [
+      section(running.name, note(`Stage ${at + 1} of ${running.stages.length}: ${running.stages[at].name}`),
+        ...goods, time ? row('This stage', time) : null,
+        h('div', { class: 'hq-actions wrap' },
+          this.switch_('Deliveries to the site', 'site-on', c.site.on, () => { c.setSiteOn(!c.site.on); this.game.save(); this.render(); }),
+          this.button_(sendable ? `Send ${fmt(sendable)} from the warehouse` : 'Send from the warehouse', 'site-send', () => this.act('send', () => c.sendToSite()), { disabled: !sendable }),
+          show),
+        note(c.site.on ? 'Goods arrive while you play. A rush order is served first, and a contract that needs the same good shares it with the site; time away pays cash as before.'
+          : 'Deliveries are stopped: every good is sold as usual, and the site keeps what it has. Goods arrive while you play.')),
+      section('Stages', ...stages),
+      section('What to build', ...cards),
+    ];
   }
 
   // --- Expansion ----------------------------------------------------------------------------

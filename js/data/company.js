@@ -219,6 +219,7 @@ export const TABS = [
   { id: 'finance', name: 'Finance', icon: '📈', unlock: { rank: 2 }, hint: 'Reach the rank Factory Owner to open the books.' },
   { id: 'market', name: 'Market', icon: '💹', unlock: { location: 'metropolis' }, hint: 'Open Commercial Metropolis to trade on its market.' },
   { id: 'expansion', name: 'Expansion', icon: '🗺️' },
+  { id: 'construction', name: 'Construction', unlock: { yards: 20 }, hint: 'Open all 20 yards to start building.' },   // the building site (js/data/builds.js)
   { id: 'ranking', name: 'Ranking', icon: '🏆' },
   { id: 'records', name: 'Records' },
   { id: 'advisor', name: 'Advisor' },
@@ -326,6 +327,9 @@ export const ACHIEVEMENTS = [
   { id: 'minute', name: 'A good minute', desc: 'Earn $1B in one minute', measure: 'peakMinute', at: 1e9, xp: 250, money: true },
   { id: 'specialist', name: 'Specialist', desc: 'Bring 100,000 of one good to the shops', measure: 'topGood', at: 100000, xp: 300 },
   { id: 'secondact', name: 'Second act', desc: 'Sell the company and found a new one', measure: 'sales', at: 1, xp: 300 },
+  // Two for the building site (js/data/builds.js): 700 experience on top of what the builds themselves pay.
+  { id: 'firsthome', name: 'First home', desc: 'Finish the Family House', measure: 'houseBuilt', at: 1, xp: 300 },
+  { id: 'builder', name: 'Master builder', desc: 'Finish all three builds', measure: 'builds', at: 3, xp: 400 },
 ];
 
 // ---------------------------------------------------------------- selling the company (phase 4)

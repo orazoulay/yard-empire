@@ -5,7 +5,7 @@
 // Nothing comes from another host: three.js and the font are packed with the game (vendor/, fonts/).
 //
 // PRECACHE must list every file the game loads; tests/pwa.test.mjs fails if one is missing.
-const VERSION = 'v21';
+const VERSION = 'v23';
 const SHELL = 'lumber-shell-' + VERSION;
 
 const PRECACHE = [
@@ -56,6 +56,9 @@ const PRECACHE = [
   'js/data/areas.js',
   'js/data/balance.js',
   'js/data/company.js',
+  'js/data/builds.js',
+  'js/site.js',
+  'js/sim/site.js',
   'js/data/looks.js',
   'js/icons.js',
   'js/data/tuning.js',

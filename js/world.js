@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 
 import { bark, edge, grass, rings } from './textures.js';
+import { cityEdge, mulberry, offRects } from './sim/site.js';
+export { mulberry };   // the run of numbers the scenery is drawn from; it lives with the plain layouts now (js/sim/site.js)
 
 /**
  * The one material everything solid is made of. It answers to light the way real surfaces do: rough
@@ -252,7 +254,11 @@ export function randomTreesIn(rect, count, seed, pad = 2.5) {
   return out;
 }
 
-export function createWorld(areaRects) {
+/**
+ * @param areaRects  the yards: nothing of the forest grows on them
+ * @param clear      more ground to keep free of trees and of the city's buildings (the building site's plot)
+ */
+export function createWorld(areaRects, clear = []) {
   const scene = new THREE.Scene();
   // The scene itself never moves. Left to itself it would still work out every matrix under it on every
   // frame; like this, whatever is out of sight can be skipped whole (see `show` in js/stations.js).
@@ -300,7 +306,9 @@ export function createWorld(areaRects) {
     else if (far > 34 && pick > 1 - Math.min(0.55, 0.2 + (far - 34) / 90)) rounds.push(tree);
     else pines.push(tree);
   }
-  scene.add(makeTrees(pines), makeRoundTrees(rounds), makeStumps(stumps));
+  // Ground kept free for something else (the building site's plot): what fell on it is taken out afterwards, so that
+  // every other tree, bush and flower stays where it always was.
+  scene.add(makeTrees(offRects(pines, clear)), makeRoundTrees(offRects(rounds, clear)), makeStumps(offRects(stumps, clear)));
   const bushes = [], stones = [], flowers = [];
   for (let i = 0; i < 1500; i++) {
     const x = map.minX - M + rnd() * (map.maxX - map.minX + 2 * M), z = map.minZ - M + rnd() * (map.maxZ - map.minZ + 2 * M);
@@ -312,10 +320,10 @@ export function createWorld(areaRects) {
     if (areaRects.some(r => { const pad = r.city ? 13 : 0.9; return x > r.minX - pad && x < r.maxX + pad && z > r.minZ - 0.9 && z < r.maxZ + pad; })) continue;
     flowers.push([x, z, 0.7 + kind() * 0.7, kind()]);
   }
-  const undergrowth = makeUndergrowth(bushes, stones), blossom = makeFlowers(flowers);
+  const undergrowth = makeUndergrowth(offRects(bushes, clear), offRects(stones, clear)), blossom = makeFlowers(offRects(flowers, clear));
   scene.add(undergrowth, blossom);
   const city = areaRects.filter(r => r.city);
-  if (city.length) scene.add(makeCityEdge(city));
+  if (city.length) scene.add(makeCityEdge(city, clear));
   // What the low graphics level thins out. The instances were placed at random, so drawing only the
   // first part of each list thins evenly; nothing is rebuilt, and the full count comes back the same way.
   const thinned = [...undergrowth.children, blossom].map(mesh => ({ mesh, full: mesh.count }));
@@ -360,44 +368,29 @@ export function createWorld(areaRects) {
  * ends, and two striped chimneys. Nothing here is taller than the camera can see over, and nothing
  * lies under a yard (the yards draw their own ground).
  */
-function makeCityEdge(rects) {
-  const g = new THREE.Group(), rnd = mulberry(41);
-  const b = { minX: Math.min(...rects.map(r => r.minX)), maxX: Math.max(...rects.map(r => r.maxX)), minZ: Math.min(...rects.map(r => r.minZ)), maxZ: Math.max(...rects.map(r => r.maxZ)) };
-  const W = 12;   // width of the asphalt band
+function makeCityEdge(rects, clear = []) {
+  const g = new THREE.Group();
+  // Where everything stands is worked out as plain numbers (js/sim/site.js, cityEdge), from the run of numbers it was
+  // always drawn from; `clear` is ground to keep free, and the buildings that stood on it are left out.
+  const layout = cityEdge(rects, clear);
   const slab = (x0, x1, z0, z1) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), soaks(mat(0x5c626b)));
     m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0.006, (z0 + z1) / 2); m.receiveShadow = true; g.add(m);
   };
-  slab(b.minX - W, b.maxX + W, b.maxZ, b.maxZ + W);   // south
-  slab(b.minX - W, b.minX, b.minZ, b.maxZ);            // west
-  slab(b.maxX, b.maxX + W, b.minZ, b.maxZ);            // east
+  for (const s of layout.slabs) slab(...s);   // south, west, east
   const WALLS = [0x9aa3ad, 0xb8855f, 0x7f8a94, 0xc9b79c, 0x8a6f5a];
   const ROOFS = [0xb5533c, 0x4f8fa3, 0x9aa3ad, 0xc98a4b, 0x6fa36b];   // seen from above, the roofs are what the player sees
-  const building = (x, z, w, d, hgt) => {
-    const body = box(w, hgt, d, WALLS[Math.floor(rnd() * WALLS.length)]); body.position.set(x, hgt / 2, z); g.add(body);
-    const roof = box(w + 0.3, 0.25, d + 0.3, ROOFS[Math.floor(rnd() * ROOFS.length)]); roof.position.set(x, hgt + 0.12, z); g.add(roof);
-    const vent = box(0.9, 0.5, 0.9, 0xe3e7ea); vent.position.set(x + (rnd() - 0.5) * (w - 1.6), hgt + 0.5, z + (rnd() - 0.5) * (d - 1.6)); g.add(vent);
+  for (const { x, z, w, d, h: hgt, wall, roof: top, vx, vz } of layout.buildings) {
+    const body = box(w, hgt, d, WALLS[wall]); body.position.set(x, hgt / 2, z); g.add(body);
+    const roof = box(w + 0.3, 0.25, d + 0.3, ROOFS[top]); roof.position.set(x, hgt + 0.12, z); g.add(roof);
+    const vent = box(0.9, 0.5, 0.9, 0xe3e7ea); vent.position.set(vx, hgt + 0.5, vz); g.add(vent);
     for (let y = 1.2; y < hgt - 0.6; y += 1.5) {   // rows of lit windows on the side facing the yards
       const lights = box(w * 0.7, 0.45, 0.08, 0xffe9a8, { map: null, emissive: 0xffd27a, emissiveIntensity: 0.3 }); lights.material.userData.byDay = 0.3; GLOW.push(lights.material); lights.position.set(x, y, z - d / 2 - 0.03); g.add(lights);
     }
-  };
-  for (let x = b.minX - 7; x < b.maxX + 8; x += 6.5 + rnd() * 3) building(x, b.maxZ + 6 + rnd() * 3.5, 4 + rnd() * 2, 4 + rnd() * 1.5, 2.6 + rnd() * 3.2);
-  for (let z = b.minZ + 4; z < b.maxZ; z += 7 + rnd() * 3) {
-    building(b.minX - 6 - rnd() * 3, z, 4 + rnd() * 1.5, 4 + rnd() * 2, 3 + rnd() * 3.5);
-    building(b.maxX + 6 + rnd() * 3, z, 4 + rnd() * 1.5, 4 + rnd() * 2, 3 + rnd() * 3.5);
   }
-  for (const [x, z] of [[b.minX - 9.5, b.maxZ + 3], [b.maxX + 9.5, b.maxZ + 3]]) {   // chimneys at the two far corners
+  for (const [x, z] of layout.chimneys) {   // chimneys at the two far corners
     for (let i = 0; i < 6; i++) { const ring = cyl(0.85 - i * 0.05, 0.9 - i * 0.05, 1.6, i % 2 ? 0xf2f2f2 : 0xd4483b, 12); ring.position.set(x, 0.8 + i * 1.6, z); g.add(ring); }
     CITY_STACKS.push({ x, y: 9.8, z });
   }
   return g;
-}
-
-export function mulberry(a) {
-  return function () {
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
 }

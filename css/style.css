@@ -723,6 +723,14 @@ button.hq-btn:focus-visible, .hq-tab:focus-visible, #hq-close:focus-visible, but
 .hq-card.research .hq-btn.primary { flex: none; min-width: 92px; }
 .hq-card.research.done h4 { color: var(--p-ink2); }
 .hq-card.research.locked { opacity: .6; }
+/* Construction: the goods of the stage in hand, and the list of stages */
+.hq-site-good { display: flex; flex-direction: column; gap: 2px; }
+.hq-actions.wrap { flex-wrap: wrap; }   /* three buttons do not fit a phone in one row */
+.hq-stage { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid var(--p-line); border-radius: 10px; }
+.hq-stage h4 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--t-md); font-weight: 600; }
+.hq-stage.done h4 { color: var(--p-up); }
+.hq-stage.now { border-color: var(--p-gold); }
+.hq-stage.later { opacity: .7; }
 .hq-research-text { min-width: min(100%, 190px); flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .hq-levels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: var(--t-sm); color: var(--p-ink3); line-height: 1.4; }
 .hq-levels li { display: flex; align-items: flex-start; gap: 7px; }

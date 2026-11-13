@@ -15,6 +15,7 @@ import { Economy } from './sim/economy.js';
 import { Company } from './sim/company.js';
 import { Headquarters } from './hq.js';
 import { RANKS, MEASURES, PRESTIGE, milestoneText } from './data/company.js';
+import { SITE } from './data/builds.js';
 import { TUNING } from './data/tuning.js';
 import { chooseJob, busiestMachine, playerDest } from './sim/jobs.js';
 import { AREAS, ITEMS, RECIPES, BASE_CAPACITY, allUpgrades, gateGeom, reachOf } from './data/areas.js';
@@ -26,6 +27,7 @@ import { Particles } from './particles.js';
 import { Sky } from './sky.js';
 import { Trucks } from './trucks.js';
 import { YardLife } from './yardlife.js';
+import { Site } from './site.js';
 import { ZoomControl } from './zoom.js';
 import { View } from './view.js';
 import { RateMeter, offlineEarnings, OFFLINE_MIN_SECONDS, OFFLINE_EFFICIENCY, OFFLINE_CAP_SECONDS } from './sim/offline.js';
@@ -73,7 +75,8 @@ class Game {
     this.renderer.toneMappingExposure = 1.0;
     setAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
 
-    const { scene, camera, updateCamera, sun, hemi, setDetail } = createWorld(AREAS.map(a => ({ ...a.bounds, city: a.location !== 'town' })));   // the Metropolis is built-up land too
+    // the Metropolis is built-up land too; the building site's plot is kept free of trees and of the city's buildings
+    const { scene, camera, updateCamera, sun, hemi, setDetail } = createWorld(AREAS.map(a => ({ ...a.bounds, city: a.location !== 'town' })), [SITE.plot]);
     this.scene = scene; this.camera = camera; this.updateCamera = updateCamera;
     scene.environment = skyLight(this.renderer);
     this.sun = sun;
@@ -108,6 +111,9 @@ class Game {
       });
     }
     for (const a of this.areas) this.econ.areaOpen(a.id) ? a.buildOpen() : a.buildLocked();
+    // The building site (js/data/builds.js): the plot and what has been built on it, drawn as the company has it.
+    this.buildSite = new Site(scene);
+    this.buildSite.sync(this.company);
 
     this.player = new Character(scene, { pack: true });
     this.playerArea = this.areas[0];
@@ -464,6 +470,15 @@ class Game {
       } else if (e.type === 'goal') {
         card = { icon: '🎯', title: e.period === 'daily' ? 'Daily goal done' : 'Weekly goal done', desc: 'Collect your reward in the Headquarters', kicker: 'Goal' };
         this.sfx.collect();
+      } else if (e.type === 'site') {   // the building site (js/data/builds.js): it opened, a stage was finished, a build was finished
+        card = { symbol: 'construction', title: 'The building site is open', desc: 'Build a house from what your yards make. See Construction in your Headquarters.', kicker: 'Building site' };
+        this.sfx.gate(); this.fx.confetti(60); this.showSite(false);
+      } else if (e.type === 'stage') {
+        card = { symbol: 'construction', title: e.stage.done, desc: `${e.build.name}: stage ${e.index + 1} of ${e.build.stages.length} is finished`, kicker: 'Building site' };
+        this.sfx.collect(); this.showSite(false);
+      } else if (e.type === 'built') {
+        card = { symbol: 'construction', title: `${e.build.name} is finished`, desc: `+$${fmt(e.cash)} and +${fmt(e.xp)} experience`, kicker: 'Built' };
+        this.sfx.fanfare(); this.fx.confetti(120); this.settings.buzz([30, 50, 30]); this.hud.setCash(this.econ.cash); this.hud.bumpCash(); this.showSite(false);
       } else if (e.type === 'notice') card = e.card;   // more to do: hints, price alerts, rush orders, regular clients: the company words them itself
       if (!card) continue;
       this.hud.unlock(card);
@@ -511,6 +526,7 @@ class Game {
   /** Once a second: new goals when the date changes, and the Factory Manager's shopping. */
   companyChores() {
     this.company.refreshGoals(today());
+    this.buildSite.sync(this.company);   // cheap: it draws only when a stage was finished or a build started
     const c = this.company, event = c.eventNow();
     if ((event?.id || '') !== this.shownEvent) {   // say so when an event starts, and once when the game opens during one
       this.shownEvent = event?.id || '';
@@ -550,8 +566,29 @@ class Game {
       this.hq.toast(`+$${fmt(result.cash)}, +${result.xp} experience${result.bonus ? ' with the daily bonus' : ''}`);
     } else if (kind === 'sell') {
       this.sfx.cash(); this.hq.toast(`Sold from the warehouse: +$${fmt(result)}`);
+    } else if (kind === 'build') {
+      this.sfx.fanfare(); this.hq.toast(`Building started: ${result.name}`);
+    } else if (kind === 'send') {
+      this.sfx.collect(); this.hq.toast(`Sent to the site: ${fmt(result)} goods`);
     } else this.sfx.click();
     this.save();
+  }
+
+  /**
+   * Show the building site: the camera goes to the plot and comes back, the move that introduces a new yard.
+   * @param fromHq  the player asked for it in the Headquarters, which closes. When the game shows the site by
+   *                itself, an open Headquarters stays open and the camera stays where it is.
+   */
+  showSite(fromHq = true) {
+    this.buildSite.sync(this.company);   // what the camera is about to show is what the company has now
+    // Shown by the game itself, the site does not take the camera from an open Headquarters, nor from a new yard that is
+    // being shown: the site opens with the last gate, and the yard behind that gate is what the player has just paid for.
+    if (fromHq) this.hq.close(); else if (this.hqOpen || this.reveal) return;
+    const p = SITE.plot;
+    // The camera always shows the same width of ground, so a wide screen shows less depth: there it pulls back further,
+    // or the tower at the back of the plot would be cut off.
+    const wide = innerWidth > innerHeight;
+    this.reveal = { t: 0, dur: 4.2, target: { x: (p.minX + p.maxX) / 2, z: (p.minZ + p.maxZ) / 2 + (wide ? 2 : 0) }, zoom: wide ? 1.75 : 0.55 };
   }
 
   /** Called when a gate is bought: build the new yard and pan the camera over it. */
@@ -708,7 +745,7 @@ class Game {
       const r = this.reveal; r.t += dt;
       const x = r.t / r.dur, k = smooth(0, 0.25, x) * (1 - smooth(0.78, 1, x));
       focus.lerp(new THREE.Vector3(r.target.x, 0, r.target.z), k);
-      zoom = this.camZoom * own + 0.55 * k;
+      zoom = this.camZoom * own + (r.zoom ?? 0.55) * k;   // how far the camera pulls back: a yard fits with 0.55, the building site asks for more on a wide screen
       if (r.t >= r.dur) this.reveal = null;
       this.camFocus.copy(focus);
     } else {
