@@ -14,13 +14,13 @@ import { Tutorial } from './tutorial.js';
 import { Economy } from './sim/economy.js';
 import { Company } from './sim/company.js';
 import { Headquarters } from './hq.js';
-import { RANKS, MEASURES, PRESTIGE, milestoneText } from './data/company.js';
+import { RANKS, PRESTIGE, milestoneText } from './data/company.js';
 import { SITE, BUILDS } from './data/builds.js';
 import { TUNING } from './data/tuning.js';
 import { chooseJob, busiestMachine, playerDest } from './sim/jobs.js';
 import { AREAS, ITEMS, RECIPES, BASE_CAPACITY, allUpgrades, gateGeom, reachOf } from './data/areas.js';
 import { fmt } from './format.js';
-import { plotProgress } from './ui-logic.js';
+import { plotProgress, cardPlot, purchaseName, MOMENTS, feelOf } from './ui-logic.js';
 import { EFFECT_ICON } from './icons.js';
 import { Settings } from './settings.js';
 import { Sfx } from './audio.js';
@@ -95,6 +95,8 @@ class Game {
     this.labels = new Labels(document.getElementById('labels'), camera);
     this.hud = new Hud({ logKey: logKey(this.saveKey) });   // the log behind the bell is kept beside this player's save
     this.fx = new Fx(document.getElementById('fx'), camera, this.hud.cashEl);
+    // While the Headquarters covers the top bar, money flies to the cash in its header, which is the one in sight.
+    this.fx.target = () => (this.hqOpen ? document.querySelector('#hq .hq-cash') : null);
     this.input = new Input(this.canvas, document.getElementById('joystick'));
 
     let saved = null;
@@ -180,6 +182,7 @@ class Game {
       onToggle: name => { this.sfx.unlock(); this.sfx.click(); this.settings.buzz(15); if (name === 'graphics') this.applyGraphics(); },
     });
     this.hud.onSkipTutorial = () => this.tutorial.finish(true);
+    this.hud.onLogPick = tab => { if (this.company.founded) this.hq.open(tab); };   // a line of the log about the company opens its tab
     this.hqOpen = false;
     this.hq = new Headquarters(this);
     this.ui = new YardUi(this, new Pulse(scene));   // yard interface: needs the HUD, the settings, the sound and the Headquarters above
@@ -199,7 +202,7 @@ class Game {
     try { sold = Number(sessionStorage.getItem(SOLD_KEY)) || 0; sessionStorage.removeItem(SOLD_KEY); } catch { /* private mode */ }
     if (sold) {
       this.hud.unlock({ icon: '⭐', title: `Company sold: +${sold} legacy stars`, desc: `Everything now sells for ${Math.round(this.company.legacy.stars * PRESTIGE.starBonus * 100)}% more. Time to build again.`, kicker: 'A new start' });
-      setTimeout(() => { this.sfx.fanfare(); this.fx.confetti(90); }, 900);
+      setTimeout(() => this.feel('sold'), 900);
     }
     const ready = () => this.hud.hideLoading();
     Promise.race([document.fonts?.ready ?? Promise.resolve(), new Promise(r => setTimeout(r, 1500))]).then(ready, ready);
@@ -450,20 +453,18 @@ class Game {
     this.sfx.pay(1 - this.econ.remaining(u.id) / u.cost);
     if (!r.completed) return;
     const area = this.area(plot.area);
-    if (u.gate) { this.sfx.gate(); this.settings.buzz([30, 50, 30, 50, 60]); }
-    else { this.sfx.fanfare(); this.settings.buzz([20, 40, 30]); }
+    this.feel(u.gate ? 'gate' : 'upgrade');
     this.particles.emit({ x: plot.x, y: 0.3, z: plot.z }, { count: 22, color: 0xffd23f, speed: 4, up: 6, life: 0.8, size: 0.16, spread: 1.5 });
     area.applyUpgrade(u, false);
     area.spawnNextPlot();
     this.hud.unlock({ symbol: EFFECT_ICON[u.effect.type], title: u.label, desc: u.desc, kicker: u.gate ? 'New area' : 'Unlocked' });
-    this.fx.confetti(u.gate ? 80 : 44);
     this._views = null;
     this.company.refreshCosts(); this.company.sync();
     this.celebrate();
     this.save();
     this.offerIn = OFFER_AFTER;   // a guest who has just bought something has something to keep: the account is offered soon (accountOffer)
     if (!area.plot && this.areas.every(a => a.open && !a.plot)) {
-      setTimeout(() => this.hud.unlock({ icon: '🏆', title: 'Everything built!', desc: 'You own every yard on the map', kicker: 'Tycoon' }), 3200);
+      setTimeout(() => { this.hud.unlock({ icon: '🏆', title: 'Everything built!', desc: 'You own every yard on the map', kicker: 'Tycoon' }); this.feel('everything'); }, 3200);
     }
   }
   refreshPlots() { for (const a of this.areas) if (a.open && a.plot) a.plot.refresh(this.econ); }
@@ -475,41 +476,38 @@ class Game {
     for (const e of events) {
       let card = null;
       if (founding && e.type !== 'founded') continue;   // one card for the founding, not three
+      // What each event says; how it sounds, buzzes and shows is one table for the whole game (MOMENTS in js/ui-logic.js).
       if (e.type === 'founded') {
-        card = { icon: '🏢', title: 'Company founded', desc: `You are a ${RANKS[this.company.rank].name} now. Open your Headquarters at the top.`, kicker: 'New' };
-        this.sfx.gate(); this.fx.confetti(80);
+        card = { symbol: 'hq', title: 'Company founded', desc: `You are a ${RANKS[this.company.rank].name} now. Open your Headquarters at the top.`, kicker: 'New' };
       } else if (e.type === 'milestone') {
-        const m = e.milestone, meas = MEASURES[m.measure];
-        card = { icon: meas.icon, title: milestoneText(m, fmt), desc: `+${m.xp} experience`, kicker: 'Milestone' };
+        const m = e.milestone;
+        card = { title: milestoneText(m, fmt), desc: `+${m.xp} experience`, kicker: 'Milestone' };
       } else if (e.type === 'rank') {
         const r = RANKS[e.rank];
-        card = { icon: r.icon, title: r.name, desc: 'You reached a new rank', kicker: 'Promoted' };
-        this.sfx.fanfare(); this.fx.confetti(60); this.settings.buzz([30, 50, 30]); this.punch = 1;
+        card = { title: r.name, desc: 'You reached a new rank', kicker: 'Promoted' };
       } else if (e.type === 'ready') {
         if (this.company.mods.autoDeliver) continue;   // the Warehouse Manager is about to deliver it
-        card = { icon: '📦', title: 'Order ready', desc: `Deliver it to ${e.contract.client} in your Headquarters`, kicker: 'Contract' };
-        this.sfx.collect();
+        card = { title: 'Order ready', desc: `Deliver it to ${e.contract.client} in your Headquarters`, kicker: 'Contract' };
       } else if (e.type === 'delivered') {
-        card = { icon: '📋', title: `Delivered to ${e.contract.client}`, desc: `Your Warehouse Manager collected $${fmt(e.reward.cash)}`, kicker: 'Contract' };
-        this.sfx.collect(); this.hud.setCash(this.econ.cash); this.hud.bumpCash();
+        card = { title: `Delivered to ${e.contract.client}`, desc: `Your Warehouse Manager collected $${fmt(e.reward.cash)}`, kicker: 'Contract' };
+        this.hud.setCash(this.econ.cash); this.hud.bumpCash();
       } else if (e.type === 'achievement') {
         const a = e.achievement;
-        card = { icon: a.icon, title: a.name, desc: `${a.desc} · +${a.xp} experience`, kicker: 'Achievement' };
-        this.sfx.fanfare(); this.fx.confetti(40);
+        card = { title: a.name, desc: `${a.desc} · +${a.xp} experience`, kicker: 'Achievement' };
       } else if (e.type === 'goal') {
-        card = { icon: '🎯', title: e.period === 'daily' ? 'Daily goal done' : 'Weekly goal done', desc: 'Collect your reward in the Headquarters', kicker: 'Goal' };
-        this.sfx.collect();
+        card = { title: e.period === 'daily' ? 'Daily goal done' : 'Weekly goal done', desc: 'Collect your reward in the Headquarters', kicker: 'Goal' };
       } else if (e.type === 'site') {   // the building site (js/data/builds.js): it opened, a stage was finished, a build was finished
         card = { symbol: 'construction', title: 'The building site is open', desc: 'Build a house from what your yards make. See Construction in your Headquarters, or walk in through the opening in the store\'s east fence.', kicker: 'Building site' };
-        this.sfx.gate(); this.fx.confetti(60); this.showSite(false);
+        this.showSite(false);
       } else if (e.type === 'stage') {
         card = { symbol: 'construction', title: e.stage.done, desc: `${e.build.name}: stage ${e.index + 1} of ${e.build.stages.length} is finished`, kicker: 'Building site' };
-        this.sfx.collect(); this.showSite(false);
+        this.showSite(false);
       } else if (e.type === 'built') {
         card = { symbol: 'construction', title: `${e.build.name} is finished`, desc: `+$${fmt(e.cash)} and +${fmt(e.xp)} experience`, kicker: 'Built' };
-        this.sfx.fanfare(); this.fx.confetti(120); this.settings.buzz([30, 50, 30]); this.hud.setCash(this.econ.cash); this.hud.bumpCash(); this.showSite(false);
+        this.hud.setCash(this.econ.cash); this.hud.bumpCash(); this.showSite(false);
       } else if (e.type === 'notice') card = e.card;   // more to do: hints, price alerts, rush orders, regular clients: the company words them itself
       if (!card) continue;
+      if (MOMENTS[e.type]) this.feel(e.type);
       this.hud.unlock(card);
       if (this.hqOpen) this.hq.toast(`${card.kicker}: ${card.title}`, e.type);   // Headquarters: the kind of event picks the icon of the line
     }
@@ -606,27 +604,31 @@ class Game {
     this.refreshPlots();
     if (!result) { this.sfx.click(); return; }
     this.celebrate();   // first, so the line about the action itself is the one that stays on screen
+    // How the action feels comes from the one table (MOMENTS); the line of feedback says what happened.
+    const moment = kind === 'goal' && result.bonus ? 'bonus' : kind;
+    this.feel(MOMENTS[moment] ? moment : 'tap');
     if (kind === 'deliver') {
-      this.sfx.collect(); this.fx.confetti(60); this.settings.buzz([20, 40, 20]); this.hud.bumpCash();
-      this.hq.toast(`Delivered: +$${fmt(result.cash)}, +${result.xp} experience`);
-    } else if (kind === 'research') {
-      this.sfx.fanfare(); this.fx.confetti(30); this.hq.toast(`Researched: ${result.name}`);
-    } else if (kind === 'route') {
-      this.sfx.fanfare(); this.fx.confetti(30); this.hq.toast('The trucks are rolling');
-    } else if (kind === 'hire') {
-      this.sfx.fanfare(); this.fx.confetti(30);
-      this.hq.toast(`${this.company.team[result.id] > 1 ? 'Trained' : 'Hired'}: ${result.name}`);
-    } else if (kind === 'goal') {
-      this.sfx.collect(); this.fx.confetti(result.bonus ? 60 : 24); this.hud.bumpCash();
-      this.hq.toast(`+$${fmt(result.cash)}, +${result.xp} experience${result.bonus ? ' with the daily bonus' : ''}`);
-    } else if (kind === 'sell') {
-      this.sfx.cash(); this.hq.toast(`Sold from the warehouse: +$${fmt(result)}`);
-    } else if (kind === 'build') {
-      this.sfx.fanfare(); this.hq.toast(`Building started: ${result.name}`);
-    } else if (kind === 'send') {
-      this.sfx.collect(); this.hq.toast(`Sent to the site: ${fmt(result)} goods`);
-    } else this.sfx.click();
+      this.hud.bumpCash(); this.hq.toast(`Delivered: +$${fmt(result.cash)}, +${result.xp} experience`);
+    } else if (kind === 'research') this.hq.toast(`Researched: ${result.name}`);
+    else if (kind === 'route') this.hq.toast('The trucks are rolling');
+    else if (kind === 'hire') this.hq.toast(`${this.company.team[result.id] > 1 ? 'Trained' : 'Hired'}: ${result.name}`);
+    else if (kind === 'goal') {
+      this.hud.bumpCash(); this.hq.toast(`+$${fmt(result.cash)}, +${result.xp} experience${result.bonus ? ' with the daily bonus' : ''}`);
+    } else if (kind === 'sell') this.hq.toast(`Sold from the warehouse: +$${fmt(result)}`);
+    else if (kind === 'build') this.hq.toast(`Building started: ${result.name}`);
+    else if (kind === 'send') this.hq.toast(`Sent to the site: ${fmt(result)} goods`);
     this.save();
+  }
+  /**
+   * One moment, felt the way its size says (js/ui-logic.js, FEEL and MOMENTS): a sound, a buzz, confetti and,
+   * for the big ones, the camera pushing in. Less motion turns the confetti and the push off by itself.
+   */
+  feel(moment) {
+    const f = feelOf(moment);
+    this.sfx[f.sound]?.();
+    if (f.buzz) this.settings.buzz(f.buzz);
+    if (f.confetti) this.fx.confetti(f.confetti);
+    if (f.punch) this.punch = Math.max(this.punch, f.punch);
   }
 
   /**
@@ -725,7 +727,7 @@ class Game {
   }
   describe(o) {
     if (!o) return { symbol: 'check', text: 'All done here' };
-    if (o.mode === 'pay') return { symbol: EFFECT_ICON[o.plot.upgrade.effect.type] || 'upgrade', text: 'Buy: ' + o.plot.upgrade.label };
+    if (o.mode === 'pay') return { symbol: EFFECT_ICON[o.plot.upgrade.effect.type] || 'upgrade', text: purchaseName(o.plot.upgrade.label).action };
     const it = ITEMS[o.item];
     if (o.mode === 'take') return { symbol: 'collect', text: 'Collect ' + it.label };
     if (o.station.type === 'shop') return { symbol: 'coin', text: 'Sell the ' + it.label };
@@ -733,10 +735,14 @@ class Game {
   }
   updateObjectiveCard(o) {
     const card = this.tutorial.active ? this.tutorial.card() : this.describe(o);
-    const plot = this.playerArea.plot;
-    if (plot && !this.tutorial.active) {
+    // The purchase the card counts toward: the one the arrows lead to, this yard's next, or the nearest in price in another open yard.
+    const plot = this.tutorial.active ? null : cardPlot({
+      pay: o?.mode === 'pay' ? o.plot : null, here: this.playerArea.plot,
+      plots: this.areas.filter(a => a.open && a.plot).map(a => ({ plot: a.plot, remaining: this.econ.remaining(a.plot.upgrade.id) })),
+    });
+    if (plot) {
       const u = plot.upgrade;   // how far the money for this yard's next purchase is, as a bar and in words
-      Object.assign(card, plotProgress({ label: u.label, cash: this.econ.cash, remaining: this.econ.remaining(u.id), cost: u.cost }));
+      Object.assign(card, plotProgress({ label: purchaseName(u.label).short, cash: this.econ.cash, remaining: this.econ.remaining(u.id), cost: u.cost }));
     }
     this.hud.setObjective(card);
   }

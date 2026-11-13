@@ -3,6 +3,7 @@ import * as THREE from 'three';
 
 import { bark, edge, grass, rings } from './textures.js';
 import { cityEdge, mulberry, offRects } from './sim/site.js';
+import { cameraFrame } from './sim/yard.js';
 export { mulberry };   // the run of numbers the scenery is drawn from; it lives with the plain layouts now (js/sim/site.js)
 
 /**
@@ -338,13 +339,9 @@ export function createWorld(areaRects, clear = []) {
    */
   let shadowHalf = 32;
   function updateCamera(target, aspect, zoom = 1) {
-    const hFov = THREE.MathUtils.degToRad(52);
-    let vFov = 2 * Math.atan(Math.tan(hFov / 2) / aspect);
-    const maxV = THREE.MathUtils.degToRad(70);
-    let dist = zoom;
-    if (vFov > maxV) { dist *= Math.tan(vFov / 2) / Math.tan(maxV / 2); vFov = maxV; }
-    vFov = Math.max(vFov, THREE.MathUtils.degToRad(35));
-    camera.fov = THREE.MathUtils.radToDeg(vFov);
+    // A tall phone pulls back for its height, a wide screen for its depth (js/sim/yard.js, cameraFrame).
+    const { vFov, dist } = cameraFrame(aspect, zoom);
+    camera.fov = vFov;
     camera.aspect = aspect; camera.updateProjectionMatrix();
     camera.position.set(target.x, 17 * dist, target.z + 11.5 * dist);
     camera.lookAt(target.x, 0, target.z - 1.5);

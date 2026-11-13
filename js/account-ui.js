@@ -70,6 +70,8 @@ export function bindAccountUi(account, { onOpen } = {}) {
   // What the sheet and the Settings button show depends on who is playing.
   const user = account.user;
   entry.hidden = false;
+  // A guest can lose everything with the browser's data: in Settings, "Save your progress" comes first for them (css: #settings.guest).
+  $('settings')?.classList.toggle('guest', !user);
   form.hidden = !!user; me.hidden = !user;
   if (user) {
     entry.textContent = user.username;

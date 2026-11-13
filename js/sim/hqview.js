@@ -24,6 +24,7 @@ export function cleanPrefs(raw) {
     losing: p.losing === true,
     offers: OFFER_ORDERS.includes(p.offers) ? p.offers : 'reward',
     range: RANGES.includes(p.range) ? p.range : 600,
+    toured: p.toured === true,   // the tour of a new company was shown (or the company needed none)
   };
 }
 /** The tab to open with: the remembered one, unless it is gone or locked now. `locked(id)` is true for a locked tab. */

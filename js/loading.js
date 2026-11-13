@@ -39,9 +39,9 @@ class Loading {
   /**
    * The game is ready. A returning player goes straight in; a first visit sees the name, one sentence
    * and one button, whose press is also the touch a browser wants before it plays sound.
-   * @param {{ first?: boolean, yards?: number, onStart?: () => void }} o
+   * @param {{ first?: boolean, yards?: number, onStart?: () => void, onSignIn?: () => void }} o  onSignIn: offered under Start when accounts exist
    */
-  finish({ first = false, yards = 0, onStart } = {}) {
+  finish({ first = false, yards = 0, onStart, onSignIn } = {}) {
     if (this.done) return;
     this.done = true;
     this.step(STEPS.length - 1);
@@ -53,6 +53,12 @@ class Loading {
     const begin = $('l-begin');
     begin.addEventListener('click', () => { begin.blur(); leave(); onStart?.(); }, { once: true });   // focus must not stay on a button that is fading away
     begin.focus({ preventScroll: true });
+    // Someone who already plays on another device signs in here, before a new game starts under their feet.
+    const signIn = $('l-signin');
+    if (signIn && onSignIn) {
+      signIn.hidden = false;
+      signIn.addEventListener('click', () => { signIn.blur(); leave(); onStart?.(); onSignIn(); }, { once: true });
+    }
   }
 }
 

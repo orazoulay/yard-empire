@@ -16,6 +16,9 @@ const SHAPES = {
   contracts: [r(5, 4.5, 14, 16.5, 2), p('M9 4.5V3h6v1.5'), p('M9 10.5h6M9 14.5h6')],
   research: [p('M9 3h6'), p('M10 3v6l-5.2 9a2 2 0 0 0 1.8 3h10.8a2 2 0 0 0 1.8-3L14 9V3'), p('M7.6 15h8.8')],
   logistics: [r(2.5, 7, 11, 9.5, 1), p('M13.5 10h3.8l4.2 4v2.5h-8z'), c(6.5, 18.2, 2), c(17, 18.2, 2)],
+  warehouse: [p('M3.5 10.5L12 4.5l8.5 6V20h-17z'), p('M8 20v-6h8v6'), p('M8 17h8')],   // where a contract's goods wait
+  hq: [r(3, 7.5, 18, 12.5, 2), p('M9 7.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5v2'), p('M3 13h18')],   // the Headquarters: the case of the button at the top
+  bag: [p('M5.5 8.5h13l-1.2 11.5H6.7z'), p('M9 8.5V7a3 3 0 0 1 6 0v1.5')],   // what the hands carry: a bigger load
   finance: [p('M3.5 3.5v17h17'), p('M7 15l4-4 3 2.5 6-6.5')],
   market: [r(4.5, 11, 3.5, 6, 1), p('M6.25 8.5V11M6.25 17v2.5'), r(10.25, 5.5, 3.5, 7.5, 1), p('M12 3v2.5M12 13v3'), r(16, 9.5, 3.5, 6.5, 1), p('M17.75 7v2.5M17.75 16v3')],   // three price candles
   expansion: [p('M12 21s-6.5-5.7-6.5-11a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11-6.5 11z'), c(12, 10, 2.3)],
@@ -56,7 +59,7 @@ const SHAPES = {
 };
 
 /** The icon for what an upgrade does, by the type of its effect. */
-export const EFFECT_ICON = { worker: 'team', station: 'businesses', area: 'expansion', speed: 'upgrade', capacity: 'store', price: 'coin' };
+export const EFFECT_ICON = { worker: 'team', station: 'businesses', area: 'expansion', speed: 'upgrade', capacity: 'bag', price: 'coin' };   // capacity is not the shop: a bag
 
 /** An SVG element for one of the icons above; an unknown name gives an empty icon of the same size. */
 export function icon(name, cls = '') {

@@ -29,7 +29,7 @@ export class Fx {
     if (this.live > 40) { onArrive?.(); return; }   // cap DOM nodes when many workers sell at once
     this.live++;
     const s = this.project(worldPos);
-    const r = this.cashEl.getBoundingClientRect();
+    const r = (this.target?.() || this.cashEl).getBoundingClientRect();   // the cash in the top bar, or where it is shown now (the Headquarters' own)
     const tx = r.left + 24, ty = r.top + r.height / 2;
     const el = document.createElement('div');
     el.className = 'money';
@@ -84,7 +84,7 @@ export class Fx {
   }
   /** Runs only while a number is on screen: counts each one up, and lets it go when its selling is over. */
   count(now) {
-    const dt = Math.min(0.05, (now - this.before) / 1000), t = now / 1000;
+    const dt = Math.min(0.05, Math.max(0, (now - this.before) / 1000)), t = now / 1000;   // never below zero: see Tally.step
     this.before = now;
     let busy = false;
     for (const kind in this.sums) {

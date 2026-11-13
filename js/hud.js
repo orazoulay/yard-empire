@@ -3,11 +3,11 @@
 import { fmt } from './format.js';
 import { icon } from './icons.js';
 import { loading } from './loading.js';
-import { Journal, ago, rateText, awayFacts, SHORTCUTS } from './ui-logic.js';
+import { Journal, ago, rateText, awayFacts, SHORTCUTS, logTarget } from './ui-logic.js';
 
 // The icon of a card, by the small heading above its title, when the card does not name one itself.
-const KICKER_ICON = { Unlocked: 'upgrade', 'New area': 'expansion', New: 'businesses', Milestone: 'award', Promoted: 'star', Contract: 'contracts',
-  Achievement: 'award', Goal: 'goals', Tycoon: 'ranking', 'A new start': 'star', Event: 'star', 'Tutorial done': 'check', Credits: 'gem' };
+const KICKER_ICON = { Unlocked: 'upgrade', 'New area': 'expansion', New: 'hq', Milestone: 'award', Promoted: 'star', Contract: 'contracts',
+  Achievement: 'award', Goal: 'goals', Tycoon: 'ranking', 'A new start': 'star', Event: 'clock', 'Tutorial done': 'check', Credits: 'gem' };   // star: rank and legacy stars only; an event lasts until midnight: a clock
 const CARD_MS = 3100, CARD_MS_BUSY = 2000;   // how long an unlock card stays; shorter while several more are waiting
 
 const $ = id => document.getElementById(id);
@@ -199,9 +199,11 @@ export class Hud {
     const sheet = $('settings'), reset = $('btn-reset'), fs = $('btn-fullscreen');
     this.onSheets = open => (open ? onOpen?.() : onClose?.());
     const renders = [];
+    // An on/off setting is a switch: drawn as one (css: .sheet-btn.toggle), and said as one to a screen reader.
     const bindToggle = (id, name, label) => {
       const b = $(id);
-      renders.push(() => { b.textContent = `${label}: ${settings[name] ? 'On' : 'Off'}`; b.classList.toggle('off', !settings[name]); });
+      b.setAttribute('role', 'switch');
+      renders.push(() => { b.textContent = `${label}: ${settings[name] ? 'On' : 'Off'}`; b.classList.toggle('off', !settings[name]); b.setAttribute('aria-checked', String(!!settings[name])); });
       b.addEventListener('click', () => { settings.toggle(name); onToggle?.(name); });
     };
     // A switch and a slider for each: the name mutes and unmutes, the slider sets how loud, and zero is off.
@@ -227,7 +229,9 @@ export class Hud {
       const forced = settings.systemCalm && !settings.reduceMotion;
       motion.textContent = forced ? 'Reduce motion: On, as your device asks' : `Reduce motion: ${settings.reduceMotion ? 'On' : 'Off'}`;
       motion.classList.toggle('off', !settings.calm); motion.disabled = forced;
+      motion.setAttribute('aria-checked', String(!!settings.calm));
     });
+    motion.setAttribute('role', 'switch');
     motion.addEventListener('click', () => { settings.toggle('reduceMotion'); onToggle?.('reduceMotion'); });
     const gfx = $('btn-graphics');
     renders.push(() => { gfx.textContent = 'Graphics: ' + { auto: 'Auto', high: 'High', low: 'Low' }[settings.graphics]; });
@@ -236,6 +240,8 @@ export class Hud {
     settings.onChange(render);   // the mute key and the system's motion setting change these from outside the sheet
     render();
     if (!navigator.vibrate) $('btn-haptics').hidden = true;
+    // Keyboard shortcuts are for a keyboard: a phone or tablet does not list them.
+    if (typeof matchMedia === 'function' && !matchMedia('(hover: hover) and (pointer: fine)').matches) $('btn-keys').hidden = true;
 
     const close = () => this.closeSheet(sheet);
     sheet.onclosed = () => { reset.classList.remove('confirm'); reset.textContent = 'Reset progress'; };
@@ -270,12 +276,18 @@ export class Hud {
     const rows = yards.map(y => {
       const body = el('span', 'r-body');
       if (!y.open) {   // not open yet: its name, where it is and what it makes, then what opens it
-        const row = el('div', 'row locked' + (y.next ? ' next' : ''));
+        // A gate the cash already covers is a button: it takes the player to the yard that has the gate (the arrows do the rest there).
+        const row = el(y.ready ? 'button' : 'div', 'row locked' + (y.next ? ' next' : '') + (y.ready ? ' ready' : ''));
+        if (y.ready) {
+          row.type = 'button';
+          const there = yards.find(r => r.id === y.goTo);
+          row.addEventListener('click', () => { this.closeSheet(sheet); if (there && !there.here) onPick(y.goTo); });
+        }
         const lock = el('span', 'r-lock'); lock.append(icon('lock'));
         body.append(el('span', 'r-title', y.name), el('span', 'r-sub', [y.place, y.makes].filter(Boolean).join(' · ')));
         if (y.needs) body.append(el('span', 'r-needs', y.needs));
         if (y.progress != null) { const bar = el('span', 'r-bar'), fill = el('i'); fill.style.width = Math.round(Math.min(1, y.progress) * 100) + '%'; bar.append(fill); body.append(bar); }
-        row.append(num(y), body, lock);
+        row.append(num(y), body, y.ready ? el('span', 'r-tag', 'Go there') : lock);
         return row;
       }
       const row = el('button', 'row' + (y.here ? ' here' : ''));
@@ -311,12 +323,20 @@ export class Hud {
     const sheet = $('log'), list = $('log-list');
     const times = [];
     const rows = this.journal.items.map(e => {
-      const row = el('div', 'row'), body = el('span', 'r-body'), when = el('span', 'r-when');
+      // A line about the company leads to its tab in the Headquarters ("collect your reward" opens Goals); the rest is news.
+      const tab = this.onLogPick ? logTarget(e) : null;
+      const row = el(tab ? 'button' : 'div', 'row' + (tab ? ' go' : '')), body = el('span', 'r-body'), when = el('span', 'r-when');
       const tile = el('span', 'r-icon'); tile.append(icon(e.symbol));
       const kicker = el('span', 'r-kicker', e.kicker + ' · '); kicker.append(when);
       body.append(kicker, el('span', 'r-title', e.title));
       if (e.desc) body.append(el('span', 'r-sub', e.desc));
       row.append(tile, body);
+      if (tab) {
+        row.type = 'button';
+        const go = el('span', 'r-go'); go.setAttribute('aria-hidden', 'true'); go.append(icon('deliver'));
+        row.append(go);
+        row.addEventListener('click', () => { this.closeSheet(sheet); this.onLogPick(tab); });
+      }
       times.push([when, e.at]);
       return row;
     });

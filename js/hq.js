@@ -18,6 +18,7 @@ import { cleanName, clockText, NAME_MAX } from './sim/company.js';
 import { advise, ADVICE } from './sim/advice.js';
 import { storyFor, personOf } from './sim/stories.js';   // first hour and stories: the person behind a client and the story of an order
 import { exportSave, importSave, backupName } from './sim/backup.js';
+import { HELP, TERMS, TOUR, kindWhat } from './data/help.js';   // "How it works" behind each tab's "?", and the tour of a new company
 
 const $ = id => document.getElementById(id);
 const REDRAW = 0.5;   // seconds between redraws while open
@@ -30,7 +31,7 @@ const TOP_AFTER = 400;                            // pixels scrolled before "bac
 const RANKING = { every: 30000, wait: 5000 };     // the list refreshes by itself this often while watched; the button rests this long after a load
 // The icon in front of a line of feedback, by the action (act) or the company event (main.js, celebrate) it is about.
 const TOAST_ICON = { deliver: 'contracts', delivered: 'contracts', ready: 'contracts', research: 'research', route: 'logistics', hire: 'team',
-  goal: 'goals', sell: 'coin', founded: 'businesses', milestone: 'award', achievement: 'award', rank: 'star',
+  goal: 'goals', sell: 'coin', founded: 'hq', milestone: 'award', achievement: 'award', rank: 'star',
   build: 'construction', send: 'construction', site: 'construction', stage: 'construction', built: 'construction' };
 
 /** h('div', { class: 'x', text: 'hi', onclick }, child, ...). Text only: nothing here is parsed as HTML. */
@@ -169,6 +170,15 @@ const MEASURE_ICON = { yards: 'businesses', workers: 'team', income: 'coin', con
   market: 'market', goodPrice: 'market', sold: 'store', peak: 'coin', rush: 'clock' };
 const KIND_ICON = { income: 'coin', sold: 'store', contracts: 'contracts', upgrades: 'upgrade', trucked: 'logistics', research: 'research' };
 const section = (title, ...kids) => h('section', { class: 'hq-section' }, h('h3', { text: title }), ...kids);
+/**
+ * What something pays, as one row of chips in one order everywhere: cash, then how much over selling, then XP
+ * (rank progress), then reputation. A part that is not given is left out.
+ */
+const rewardChips = ({ cash = null, over = null, xp = null, rep = null }) => h('div', { class: 'hq-rchips' },
+  cash == null ? null : h('span', { class: 'hq-rchip cash' }, amount(cash)),
+  over == null ? null : h('span', { class: 'hq-rchip', text: `+${over}% over selling` }),
+  xp == null ? null : h('span', { class: 'hq-rchip xp', text: `+${xp} XP` }),
+  rep == null ? null : h('span', { class: 'hq-rchip rep', text: `+${rep} reputation` }));
 const note = (...parts) => h('p', { class: 'hq-note' }, ...parts);   // text, or text and figures in order
 const row = (name, value, cls = '') => h('div', { class: 'hq-row ' + cls }, h('span', { text: name }), h('b', {}, value));   // value: text or a figure
 
@@ -187,6 +197,9 @@ export class Headquarters {
     this.yardHistory = new Series(HISTORY);                 // profit per yard, sampled together with the Finance history
     this.tables = {};                                       // which charts have their table of numbers open
     this.boardBusy = false; this.boardCall = 0;             // the ranking is being fetched; which call is the newest
+    this.helpOpen = null;                                   // the tab whose "How it works" card is open
+    this.tourAt = null;                                     // the card of the tour on screen (0 to 2), or null
+    this.unfold = {};                                       // lists shown in full: { badges, routes }
     this.button.addEventListener('click', () => this.open());
     $('hq-close').addEventListener('click', () => this.close());
     this.el.addEventListener('click', e => { if (e.target === this.el) this.close(); });
@@ -214,6 +227,7 @@ export class Headquarters {
     if (!this.company.founded) return;
     // Reopening shows the tab that was open last, also after a reload. One that is locked now, or gone, gives way to Overview.
     this.tab = tab || startTab(this.tab, TABS.map(t => t.id), id => !!this.company.tabLock(id));
+    this.startTour();
     this.isOpen = true; this.el.hidden = false; this.timer = 0; this.holding = false;
     this.game.onHqToggle(true);
     this.render();
@@ -396,7 +410,8 @@ export class Headquarters {
           icon(why ? 'lock' : t.id), h('span', { class: 'hq-menu-text' }, h('b', { text: t.name }), why && h('span', { class: 'hq-sub', text: why })),
           badge(t) && h('span', { class: 'dot' }));
       })))]
-      : lock ? [h('div', { class: 'hq-locked' }, h('div', { class: 'hq-locked-icon' }, icon('lock')), h('h3', { text: def.name + ' is locked' }), note(lock))] : this[this.tab]();
+      : lock ? [h('div', { class: 'hq-locked' }, h('div', { class: 'hq-locked-icon' }, icon('lock')), h('h3', { text: def.name + ' is locked' }), note(lock))]
+        : this.content(this.tab);
     // Only what differs from the page is touched (see patch): the rest keeps its hover, its focus and its place.
     const top = this.body.scrollTop;
     if (patch(this.body, content.filter(Boolean)) && this.body.scrollTop !== top) this.body.scrollTop = top;
@@ -418,6 +433,62 @@ export class Headquarters {
       on && icon('check'), h('span', { text }));
   }
 
+  /** Everything a tab shows: the tour on Overview while it runs, the tab's "How it works", then the tab itself. */
+  content(tab) {
+    return [tab === 'overview' ? this.tourCard() : null, this.helpBlock(tab), ...this[tab]()];
+  }
+
+  // --- How it works, and the tour ---------------------------------------------------
+  /** The "?" of a tab: a line that opens a short card on how the tab works, with the words it uses. Null for a tab without one. */
+  helpBlock(tab) {
+    const help = HELP[tab];
+    if (!help) return null;
+    const open = this.helpOpen === tab, toggle = () => { this.helpOpen = open ? null : tab; this.render(); };
+    if (!open) {
+      return h('button', { class: 'hq-help-btn', 'data-key': 'help-' + tab, 'aria-expanded': 'false', onclick: toggle },
+        h('span', { class: 'hq-help-q', 'aria-hidden': 'true', text: '?' }), h('span', { text: help.title }));
+    }
+    const [head, ...rows] = help.table || [];
+    return h('section', { class: 'hq-card hq-help', 'aria-label': help.title },
+      h('header', {}, h('h4', { text: help.title }),
+        h('button', { class: 'hq-help-close', 'data-key': 'help-' + tab, 'aria-expanded': 'true', 'aria-label': 'Close ' + help.title, onclick: toggle }, icon('close'))),
+      h('ol', { class: 'hq-help-steps' }, ...help.steps.map(([lead, rest]) => h('li', {}, h('b', { text: lead }), h('span', { text: ' ' + rest })))),
+      head ? h('table', { class: 'hq-help-table' },
+        h('thead', {}, h('tr', {}, ...head.map(t => h('th', { text: t })))),
+        h('tbody', {}, ...rows.map(r => h('tr', {}, ...r.map(t => h('td', { text: t })))))) : null,
+      help.terms.length ? h('dl', { class: 'hq-help-terms' }, ...help.terms.map(id => h('div', {}, h('dt', { text: TERMS[id][0] }), h('dd', { text: TERMS[id][1] })))) : null,
+      h('div', { class: 'hq-actions' },
+        this.button_('Got it', 'help-done', toggle, { cls: 'primary' }),
+        help.tour ? this.button_('Show the tour again', 'tour-again', () => { this.helpOpen = null; this.tourAt = 0; this.render(); }, { cls: 'quiet' }) : null));
+  }
+  /**
+   * A company that is new to the Headquarters gets three cards on what it is for, the first time it opens.
+   * A company that has already delivered a contract or researched something knows its way: it is not shown.
+   */
+  startTour() {
+    if (this.prefs.toured || this.tourAt != null) return;
+    const c = this.company;
+    if (c.stats.contracts > 0 || Object.values(c.research).some(v => v > 0)) { this.setPref('toured', true, false); return; }
+    this.tourAt = 0; this.tab = 'overview';
+  }
+  endTour(go) {
+    this.tourAt = null; this.setPref('toured', true, false);
+    if (go) this.go(go); else this.render();
+  }
+  tourCard() {
+    if (this.tourAt == null) return null;
+    const i = this.tourAt, card = TOUR[i], last = i === TOUR.length - 1;
+    return h('section', { class: 'hq-card hq-tour', 'aria-label': `Tour, card ${i + 1} of ${TOUR.length}` },
+      h('div', { class: 'hq-tour-kicker', text: `Your company · ${i + 1} of ${TOUR.length}` }),
+      h('h4', { text: card.title }),
+      h('p', { class: 'hq-note', text: card.text }),
+      h('div', { class: 'hq-tour-foot' },
+        h('div', { class: 'hq-tour-dots', 'aria-hidden': 'true' }, ...TOUR.map((_, j) => h('span', { class: j === i ? 'on' : '' }))),
+        last ? null : this.button_('Skip', 'tour-skip', () => this.endTour(), { cls: 'quiet' }),
+        last && card.go ? this.button_(card.button, 'tour-go', () => this.endTour(card.go), { cls: 'quiet' }) : null,
+        this.button_(last ? 'Done' : 'Next', 'tour-next', () => { if (last) this.endTour(); else { this.tourAt = i + 1; this.render(); } }, { cls: 'primary' })));
+  }
+
   // --- Overview ---------------------------------------------------------------
   overview() {
     const c = this.company, s = c.summary(), staff = c.staff();
@@ -433,22 +504,24 @@ export class Headquarters {
     if (!c.tabLock('research') && RESEARCH.some(r => { const st = c.researchState(r); return !st.done && !st.lock && st.affordable; })) {
       todo.push(h('div', { class: 'hq-todo' }, marked('research', 'You can afford new research'), this.button_('Open lab', 'go-research', () => this.go('research'))));
     }
+    // What to do comes first, then the next first step, then the company in four figures (the rest are on Finance and Records).
     return [
-      h('div', { class: 'fin-kpis' },
-        kpi('Company value', s.valuation, '', null, 'gold'),
-        kpi('Profit', aMinute(s.profit), '/min', null, s.profit < 0 ? 'down' : 'up'),
-        kpi('Income', aMinute(s.income), '/min'),
-        kpi('Costs', aMinute(s.costs), '/min'),
-        kpi('Yards', String(this.game.econ.areas.length), `of ${AREAS.length}`),
-        kpi('Employees', String(staff.workers)),
-        kpi('Contracts delivered', String(c.stats.contracts)),
-        kpi('Research done', String(Object.values(c.research).reduce((a, b) => a + b, 0)))),
-      this.firstSteps(),
       section('Needs your attention', ...(todo.length ? todo : [empty('Nothing needs you right now. Orders to deliver, rewards to collect and routes to buy are listed here.')])),
+      this.firstSteps(),
+      section('Your company',
+        h('div', { class: 'fin-kpis' },
+          kpi('Company value', s.valuation, '', null, 'gold'),
+          kpi('Profit', aMinute(s.profit), '/min', null, s.profit < 0 ? 'down' : 'up'),
+          kpi('Yards', String(this.game.econ.areas.length), `of ${AREAS.length}`),
+          kpi('Employees', String(staff.workers))),
+        this.button_('Income and costs on Finance', 'go-finance', () => this.go('finance'), { cls: 'quiet small' })),
       section('Next milestones', ...this.milestones(3)),
     ];
   }
-  /** The first five things to do with a new company, with the next one pointed out. Gone once all are done. */
+  /**
+   * The first five things to do with a new company: how far along they are as five segments, and the next one
+   * as a card with what it is for and a button that leads there. Gone once all are done.
+   */
   firstSteps() {
     const c = this.company;
     const steps = [
@@ -460,13 +533,14 @@ export class Headquarters {
     ];
     const done = steps.filter(s => s[2]).length, next = steps.findIndex(s => !s[2]);
     if (next < 0) return null;
-    return section(`First steps · ${done} of ${steps.length}`, h('div', { class: 'hq-steps' }, ...steps.map(([name, why, ok, tab], i) => {
-      const lock = c.tabLock(tab);
-      return h('div', { class: 'hq-goal' + (ok ? ' done' : i === next ? ' next' : '') },
-        h('span', { class: 'hq-goal-icon' }, icon(ok ? 'check' : 'dot')),
-        h('div', { class: 'hq-goal-body' }, h('div', { class: 'hq-goal-text', text: name }), ok ? null : h('div', { class: 'hq-sub', text: lock || why })),
-        !ok && i === next && !lock ? this.button_('Show me', 'step-' + i, () => this.go(tab), { cls: 'primary small' }) : null);
-    })));
+    const [name, why, , tab] = steps[next], lock = c.tabLock(tab);
+    return section(`First steps · ${done} of ${steps.length}`, h('article', { class: 'hq-card hq-step' },
+      h('div', { class: 'hq-step-track', role: 'img', 'aria-label': `${done} of ${steps.length} steps done` },
+        ...steps.map((st, i) => h('span', { class: st[2] ? 'done' : i === next ? 'next' : '' }))),
+      h('h4', { text: name }),
+      h('div', { class: 'hq-sub', text: lock || why }),
+      lock ? null : this.button_('Show me', 'step-' + next, () => this.go(tab), { cls: 'primary' }),
+      done ? h('div', { class: 'hq-sub hq-step-done', text: 'Done: ' + steps.filter(st => st[2]).map(st => st[0]).join(', ') }) : null));
   }
   /** The milestones closest to being reached. */
   milestones(count) {
@@ -493,13 +567,15 @@ export class Headquarters {
   goalCard(g) {
     const kind = GOALS.kinds.find(k => k.id === g.kind), show = v => (kind.money ? money(v) : fmt(v));
     const text = g.target === 1 && kind.one ? kind.one : kind.text.replace('{n}', show(g.target));
+    // What it is, how far it is, what it pays (the same chips as a contract), and a button only once there is something to do.
     return h('article', { class: 'hq-card goal' + (g.claimed ? ' done' : g.done ? ' ready' : '') },
-      h('header', {}, h('h4', {}, icon(KIND_ICON[g.kind] || 'goals'), h('span', {}, ...(kind.money ? withAmount(text, g.target) : [text]))), h('span', { class: 'hq-xp-chip', text: `+${g.xp} XP` })),
+      h('header', {}, h('h4', {}, icon(KIND_ICON[g.kind] || 'goals'), h('span', {}, ...(kind.money ? withAmount(text, g.target) : [text])))),
       g.claimed ? null : h('div', { class: 'hq-need' }, bar(g.value / Math.max(g.target, 1)),
-        h('b', {}, ...(kind.money ? [amount(g.value), ' / ', amount(g.target)] : [`${fmt(g.value)} / ${fmt(g.target)}`]))),
+        h('b', {}, ...(kind.money ? [amount(g.value), ' / ', amount(g.target)] : [`${fmt(g.value)} / ${fmt(g.target)}`]), g.done ? '' : ' · in progress')),
       g.claimed ? chip('Collected', 'good', 'check')
-        : h('div', { class: 'hq-actions' }, this.button_(`${g.done ? 'Collect' : 'Reward'} ${money(g.cash)}`, `goal-${g.period}-${g.index}`,
-          () => this.act('goal', () => this.company.claimGoal(g.period, g.index)), { cls: 'primary', disabled: !g.done, exact: g.cash })));
+        : g.done ? h('div', { class: 'hq-actions' }, this.button_(`Collect ${money(g.cash)}`, `goal-${g.period}-${g.index}`,
+          () => this.act('goal', () => this.company.claimGoal(g.period, g.index)), { cls: 'primary', exact: g.cash }), rewardChips({ xp: g.xp }))
+          : rewardChips({ cash: g.cash, xp: g.xp }));
   }
   /** Every finished goal whose reward has not been collected, and what collecting them all pays, the daily bonus included when it falls due. */
   goalsReady() {
@@ -529,23 +605,34 @@ export class Headquarters {
     const bonusText = `Collect all three for a bonus of ${money(c.goals.bonusCash)} and ${GOALS.daily.bonusXp} experience.`;
     const bonus = c.goals.bonus ? note('Daily bonus collected. New goals arrive at midnight.') : note(...withAmount(bonusText, c.goals.bonusCash));
     const event = c.eventNow(), ready = this.goalsReady();
-    const cards = (period, waiting) => { const list = c.goalList(period); return list.length ? list.map(g => this.goalCard(g)) : [empty(waiting)]; };
+    // Within each list: a reward that waits first, then what is in progress, then what is collected.
+    const rank = g => (g.claimed ? 2 : g.done ? 0 : 1);
+    const sorted = period => [...c.goalList(period)].sort((a, b) => rank(a) - rank(b));
+    const cards = (period, waiting) => { const list = sorted(period); return list.length ? list.map(g => this.goalCard(g)) : [empty(waiting)]; };
+    // Achievements: the three nearest to being earned, and the whole list on request.
+    const badge = a => {
+      const got = !!c.badges[a.id], value = got ? a.at : Math.min(c.achieved(a.measure), a.at);
+      return { a, got, value, near: got ? -1 : value / a.at };
+    };
+    const badges = ACHIEVEMENTS.map(badge), all = !!this.unfold?.badges;
+    const shown = all ? badges : badges.filter(b => !b.got).sort((x, y) => y.near - x.near).slice(0, 3);
     return [
       ready.list.length > 1 ? h('div', { class: 'hq-todo good' }, marked('goals', `${ready.list.length} rewards are ready`),
         this.button_(`Collect all ${money(ready.cash)}`, 'goal-all', () => this.collectAll(), { cls: 'primary', exact: ready.cash })) : null,
-      event ? section(`${event.name} · until ${event.until}`, note(event.desc + '.'), ...c.goalList('event').map(g => this.goalCard(g))) : null,
+      event ? section(`${event.name} · until ${event.until}`, note(event.desc + '.'), ...sorted('event').map(g => this.goalCard(g))) : null,
       section(`Today · new goals in ${countdown(midnight)}`, ...cards('daily', 'Three goals for the day appear here, with new ones every midnight.'), bonus),
       this.streakSection(),
       section(`This week · new goals in ${countdown(monday)}`, ...cards('weekly', 'Three goals for the week appear here, with new ones every Monday.'),
         note('Goals you do not finish are simply replaced. Nothing is lost.')),
-      section(`Achievements · ${done} of ${ACHIEVEMENTS.length}`, ...ACHIEVEMENTS.map(a => {
-        const got = !!c.badges[a.id], value = got ? a.at : Math.min(c.achieved(a.measure), a.at);
+      section(`Achievements · ${done} of ${ACHIEVEMENTS.length}`, ...shown.map(({ a, got, value }) => {
         return h('div', { class: 'hq-goal' + (got ? ' done' : '') },
           h('span', { class: 'hq-goal-icon' }, icon(got ? 'check' : 'award')),
           h('div', { class: 'hq-goal-body' }, h('div', { class: 'hq-goal-text', text: a.name }), h('div', { class: 'hq-sub' }, ...(a.money ? withAmount(a.desc, a.at) : [a.desc])),
             got || a.at <= 4 ? null : bar(value / a.at), got || a.at <= 4 ? null : ofLine(value, a.at, a.money)),
           h('span', { class: 'hq-xp-chip', text: `+${a.xp} XP` }));
-      })),
+      }),
+      this.button_(all ? 'Show the nearest three' : `Show all ${ACHIEVEMENTS.length} achievements`, 'badges-all',
+        () => { (this.unfold ||= {}).badges = !all; this.render(); }, { cls: 'quiet small' })),
     ];
   }
 
@@ -749,6 +836,7 @@ export class Headquarters {
     const story = storyFor(x, ITEMS);
     return h('article', { class: 'hq-card contract' + (ready ? ' ready' : '') },
       h('header', {}, h('h4', { text: x.client }), h('span', { class: 'hq-chip', text: kind.name })),
+      h('div', { class: 'hq-sub hq-kind', text: cap(kindWhat(kind)) }),   // what the kind means, said every time: "One good, small"
       story ? h('div', { class: 'hq-story' },
         h('div', { class: 'hq-story-who' }, h('b', { text: story.who }), h('span', { text: ', ' + story.role + (running ? '' : ' · ' + story.about) })),
         h('p', { class: 'hq-story-text', text: `“${story.text}”` })) : null,
@@ -758,10 +846,8 @@ export class Headquarters {
           running ? bar(have / n[1]) : null, running ? h('b', { text: `${have} / ${n[1]}` }) : null);
       }),
       ready ? null : this.fillRow(x, running),
-      h('div', { class: 'hq-reward' },
-        amount(reward.cash, 'cash'),
-        h('span', { text: `+${Math.round((reward.cash / reward.value - 1) * 100)}% over selling` }),
-        h('span', { text: `+${reward.xp} XP` }), h('span', { text: `+${reward.rep} reputation` })),
+      h('div', { class: 'hq-reward' }, amount(reward.cash, 'cash'),
+        rewardChips({ over: Math.round((reward.cash / reward.value - 1) * 100), xp: reward.xp, rep: reward.rep })),
       running
         ? h('div', { class: 'hq-actions' },
           this.button_(ready ? 'Deliver' : 'Filling…', 'deliver-' + x.id, () => this.deliver(x), { cls: 'primary', disabled: !ready }),
@@ -778,16 +864,23 @@ export class Headquarters {
     // The offers in the order the player chose: by what they pay, by what they pay for each minute of waiting, or by how soon they are full.
     // Times are compared in whole minutes, as they are shown, so two offers do not swap places with every small change of pace.
     const offers = orderOffers(c.offers.map(x => ({ x, cash: c.reward(x).cash, seconds: Math.ceil(this.fill(x, false).seconds / 60) * 60 })), this.prefs.offers);
+    // The rule of a contract as a picture: the goods go from the yards to the warehouse instead of the shops, then to the client.
+    const step = (name, text, tone) => h('div', { class: 'hq-flow-step ' + tone }, h('span', { class: 'hq-flow-icon' }, icon(name)), h('span', { text }));
+    // Shown until the first delivery; after that the "?" still has it.
+    const picture = c.stats.contracts > 0 ? null : h('section', { class: 'hq-flow', 'aria-label': 'How a contract works' },
+      h('div', { class: 'hq-flow-row' }, step('businesses', 'Your yards', 'up'), h('span', { class: 'hq-flow-arrow', 'aria-hidden': 'true', text: '→' }),
+        step('warehouse', 'Warehouse', 'blue'), h('span', { class: 'hq-flow-arrow', 'aria-hidden': 'true', text: '→' }), step('contracts', 'Client', 'gold')),
+      note('While an order runs, the goods it needs go to the warehouse instead of the shops. Delivered, they pay more than the shops would.'));
+    // What runs comes first; with nothing running the offers move up, within reach, and the empty place is not drawn.
     return [
-      note('A client orders goods. While a contract runs, the goods it needs go to your warehouse instead of being sold, and the delivery pays more than selling them.'),
-      h('div', { class: 'hq-rows' }, row('Reputation', `${c.rep} · contracts pay +${bonus.toFixed(1)}%`), row('Contracts at once', String(c.slots))),
-      section('Running', ...(c.active.length ? c.active.map(x => this.contractCard(x, true))
-        : [empty('No order is running. An offer you accept fills here from what your yards bring to the shops.')])),
+      c.active.length ? section('Running', ...c.active.map(x => this.contractCard(x, true))) : null,
+      picture,
       section('Offers',
         offers.length > 1 ? this.choice('offers-by', 'Order the offers by', [['reward', 'Reward'], ['rate', 'Reward per minute'], ['time', 'Time to fill']], this.prefs.offers, v => this.setPref('offers', v)) : null,
         ...(offers.length ? offers.map(o => this.contractCard(o.x, false))
           : [empty('No client is asking yet. Offers appear here once your yards bring goods to the shops.', this.button_('See your yards', 'go-businesses', () => this.go('businesses')))]),
         this.button_(wait > 0 ? `New offers in ${wait} s` : 'Show me new offers', 'new-offers', () => this.act('offers', () => c.newOffers()), { disabled: wait > 0 })),
+      section('Your standing', h('div', { class: 'hq-rows' }, row('Reputation', `${c.rep} · contracts pay +${bonus.toFixed(1)}%`), row('Contracts at once', String(c.slots)))),
     ];
   }
 
@@ -848,8 +941,14 @@ export class Headquarters {
       const text = perSec > 0.001 ? `about ${Math.max(1, Math.ceil(missing / perSec / 60))} min at the current pace` : `nothing is reaching the ${yardName(yard)} shop right now`;
       return h('div', { class: 'hq-row' }, h('span', { text: `${missing} more ${label(item)}` }), h('b', { text }));
     })).filter(Boolean);
-    const routes = c.routeDefs.map(d => {
-      const st = c.routeState(d);
+    // The routes that can be bought, and the locked ones between yards that are open; the rest fold into one line until asked for.
+    const defs = c.routeDefs.map(d => ({ d, st: c.routeState(d) })), every = !!this.unfold?.routes;
+    const near = ({ d, st }) => !st.lock || (econ.areaOpen(d.from) && econ.areaOpen(d.to));
+    const shown = every ? defs : defs.filter(near), hidden = defs.length - shown.length;
+    const fold = hidden > 0 || every
+      ? this.button_(every ? 'Show fewer routes' : `Show all ${defs.length} routes (${hidden} more, locked for now)`, 'routes-fold',
+        () => { (this.unfold ||= {}).routes = !every; this.render(); }, { cls: 'quiet small' }) : null;
+    const routes = shown.map(({ d, st }) => {
       return h('article', { class: 'hq-card research ' + (st.owned ? 'done' : st.lock ? 'locked' : st.affordable ? 'ready' : '') },
         h('div', { class: 'hq-research-text' },
           h('h4', { text: `${yardName(d.from)} → ${yardName(d.to)}` }),
@@ -863,14 +962,17 @@ export class Headquarters {
     const buyAll = all.list.length > 1
       ? this.button_(arm ? `Tap again to buy ${count}` : `Buy ${count}`, 'routes-all', () => this.buyRoutes(), { cls: arm ? 'armed' : '', exact: all.total }) : null;
     const lab = c.tabLock('research');
-    const needsTrucking = c.mods.routes ? null : h('div', { class: 'hq-todo' }, marked('research', lab ? 'Trucks come with research. ' + lab : 'Trucks need the Trucking technology'),
-      lab ? null : this.button_('Open lab', 'go-research', () => this.go('research')));
+    // Before Trucking: how many routes it opens, and the way there (the lab, or the first contract that opens the lab).
+    const needsTrucking = c.mods.routes ? null : h('div', { class: 'hq-todo' },
+      marked('research', lab ? `${defs.length} truck routes come with the Trucking research. ${lab}` : `${defs.length} truck routes need the Trucking technology`),
+      lab ? (c.active.length ? null : this.button_('See offers', 'go-contracts', () => this.go('contracts')))
+        : this.button_('Open lab', 'go-research', () => this.go('research')));
     return [
       section('Warehouse', note(`Holds up to ${c.capacity} of each item. Research makes it bigger.`),
         ...(stock.length ? stock : [empty('The warehouse is empty. Goods for a running contract collect here until the order is full.',
           c.active.length ? null : this.button_('See offers', 'go-contracts', () => this.go('contracts')))])),
       waits.length ? section('Still missing for your orders', ...waits) : null,
-      section('Truck routes', note(`A truck takes finished goods from one yard to the machines of the next, for ${Math.round(FINANCE.transportShare * c.mods.truckFee * 1000) / 10}% of their price.`), needsTrucking, buyAll, ...routes,
+      section('Truck routes', note(`A truck takes finished goods from one yard to the machines of the next, for ${Math.round(FINANCE.transportShare * c.mods.truckFee * 1000) / 10}% of their price.`), needsTrucking, buyAll, ...routes, fold,
         c.stats.trucked ? row('Items trucked so far', fmt(c.stats.trucked)) : null),
     ];
   }

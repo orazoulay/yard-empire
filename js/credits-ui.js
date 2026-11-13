@@ -6,7 +6,7 @@ import { fmt } from './format.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-const KIND_ICON = { helper: 'team', look: 'star' };
+const KIND_ICON = { helper: 'team', look: 'eye' };   // a look changes how things look; the star is for ranks
 const KIND_HEAD = { helper: 'Helpers', look: 'Looks', decor: 'For your site', service: 'Services' };
 const hex = n => '#' + n.toString(16).padStart(6, '0');
 const ABOUT = [
@@ -52,7 +52,7 @@ export function bindStore(game) {
     const r = await work();
     busy = ''; confirm = '';
     if (r.signIn) { signIn(); return; }
-    if (r.ok) { say(''); done?.(r); game.sfx.fanfare(); pill.classList.remove('bump'); void pill.offsetWidth; pill.classList.add('bump'); }
+    if (r.ok) { say(''); done?.(r); game.feel ? game.feel('credits') : game.sfx.fanfare(); pill.classList.remove('bump'); void pill.offsetWidth; pill.classList.add('bump'); }
     else { say(r.error || 'Something went wrong. Try again.'); game.sfx.click(); }
     render();
   };
@@ -82,7 +82,9 @@ export function bindStore(game) {
       body.append(picks);
     }
     if (!it.owned) {
-      const b = el('button', 'store-btn' + (confirm === it.id ? ' confirm' : ''), busy === it.id ? '…' : confirm === it.id ? 'Confirm' : 'Get'); b.type = 'button';
+      // A guest's button says what it does: it opens the sign-in, it does not buy.
+      const label = c.status === 'guest' ? 'Sign in' : busy === it.id ? '…' : confirm === it.id ? 'Confirm' : 'Get';
+      const b = el('button', 'store-btn' + (confirm === it.id ? ' confirm' : ''), label); b.type = 'button';
       b.disabled = !!busy || (c.status !== 'guest' && (!c.ready || it.short > 0));
       b.addEventListener('click', () => {
         if (c.status === 'guest') { signIn(); return; }
@@ -138,12 +140,15 @@ export function bindStore(game) {
     $('store-note').textContent = storeNote(c);
     const rows = [];
     if (message) { const m = el('div', 'store-msg ' + (message.good ? 'good' : 'bad'), message.text); m.setAttribute('role', 'status'); rows.push(m); }
+    // A guest is told the one thing to do, as a button, before any price.
+    if (c.status === 'guest') { const b = el('button', 'sheet-btn primary store-signin', 'Sign in or create account'); b.type = 'button'; b.addEventListener('click', signIn); rows.push(b); }
     const items = c.items();
     for (const kind of [...new Set(items.map(i => i.kind))]) {
       rows.push(el('div', 'store-head', KIND_HEAD[kind] || kind));
       for (const it of items.filter(i => i.kind === kind)) rows.push(itemRow(it));
     }
-    const tasks = c.tasks();
+    // Without an account there is no email to confirm: that task is for players who have one.
+    const tasks = c.tasks().filter(t => c.status !== 'guest' || t.rule !== 'email_confirmed');
     if (tasks.length) { rows.push(el('div', 'store-head', 'Earn credits')); for (const t of tasks) rows.push(taskRow(t)); }
     if (c.isOwner) { rows.push(el('div', 'store-head', 'Give credits (owner)')); rows.push(giveForm()); }
     rows.push(el('div', 'store-head', 'About credits'));

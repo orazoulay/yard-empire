@@ -166,6 +166,30 @@ export function wearPaths({ piles = [], feeds = [], goods = [], shops = [], gate
 }
 
 // ------------------------------------------------------------------ the camera's zoom
+// ------------------------------------------------------------------ what the camera takes in
+/**
+ * The lens and distance for a screen shape. The camera keeps a fixed sideways view (52°). A tall phone
+ * would then see too much sky, so the view is capped at 70° high and the camera pulled back instead.
+ * A wide screen (desktop, a phone on its side) used to see only a thin strip of the yard. Below 50° high
+ * the camera now pulls back too, as far as a phone stands at most (1.55 times). Whatever is still missing
+ * on a very wide screen is made up with a slightly wider lens.
+ * @param aspect  width / height of the screen
+ * @param zoom    the distance asked for (the player's zoom, the camera's own moves, a reveal)
+ * @returns {{ vFov: number, dist: number }}  vFov in degrees; dist multiplies the camera's normal offset
+ */
+export const FRAME = { h: 52, maxV: 70, minV: 50, maxPull: 1.55 };
+export function cameraFrame(aspect, zoom = 1) {
+  const rad = d => (d * Math.PI) / 180, deg = r => (r * 180) / Math.PI, half = d => Math.tan(rad(d) / 2);
+  let v = deg(2 * Math.atan(half(FRAME.h) / Math.max(aspect, 0.01))), dist = zoom;
+  if (v > FRAME.maxV) { dist *= Math.tan(rad(v) / 2) / half(FRAME.maxV); v = FRAME.maxV; }
+  else if (v < FRAME.minV) {
+    const pull = Math.min(FRAME.maxPull, half(FRAME.minV) / Math.tan(rad(v) / 2));
+    dist *= pull;
+    v = Math.max(v, deg(2 * Math.atan(half(FRAME.minV) / pull)));   // the rest of the shortfall: a wider lens
+  }
+  return { vFov: v, dist };
+}
+
 export const ZOOM = { min: 0.62, max: 1.5, normal: 1 };   // 1 = the usual distance, below it closer, above it further
 
 /** The player's own zoom: a wish that is set at once and a value that eases toward it. */

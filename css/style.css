@@ -54,6 +54,10 @@ button { font-family: inherit; }
   display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0, 0, 0, .2); transition: transform .12s;
 }
 .icon-btn svg { width: 22px; height: 22px; }
+/* Every control in the top bar takes a 44px finger, whatever size it is drawn at: the ::before is the part
+   that is touched, and it only grows past the edges when the control itself is smaller than that. */
+.icon-btn, .pill.credits, #area-chip { position: relative; }
+.icon-btn::before, .pill.credits::before, #area-chip::before { content: ""; position: absolute; inset: min(0px, calc((100% - 44px) / 2)); }
 .icon-btn:active { transform: scale(.92); }
 /* A small button for the second row of the top bar. It looks 28px and takes a finger: the ::before is the part that is touched. */
 .icon-btn.mini { position: relative; width: 28px; height: 28px; border-radius: 8px; box-shadow: none; }
@@ -91,10 +95,13 @@ button { font-family: inherit; }
 #area-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #area-count { flex: none; }
 #area-chip::after { content: ""; flex: none; margin: 4px 0 0 1px; border: 4px solid transparent; border-top-color: var(--muted); }   /* it opens a list */
+/* The money is the number an idle game is watched for: the biggest text in the bar. */
+#cash { font-size: clamp(1.25rem, 5.4vw, 1.5rem); }
 #cash .bill { width: 30px; height: 19px; flex: none; }
 .cash-col { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 #cash-value { min-width: 2ch; text-align: right; font-variant-numeric: tabular-nums; }
-#cash-rate { font-size: .65625rem; font-weight: 600; letter-spacing: 0; color: var(--muted); white-space: nowrap; }
+#cash-rate { font-size: .75rem; font-weight: 600; letter-spacing: 0; color: var(--muted); white-space: nowrap; }
+#cash-rate.up { color: var(--green); }   /* gains in green, losses in red, as everywhere */
 #cash-rate.down { color: var(--red); }
 #cash-rate[hidden] { display: none; }
 /* Credits: a second currency, kept by the server. A violet gem and a violet edge tell it from the money at a glance. */
@@ -118,7 +125,7 @@ button { font-family: inherit; }
 .status {
   display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px 0 7px; border-radius: 8px;
   background: rgba(14, 19, 25, .62); border: 1px solid rgba(255, 255, 255, .1); color: var(--muted);
-  font-size: .71875rem; font-weight: 600; white-space: nowrap; pointer-events: auto;   /* for its tooltip, which says it in full */
+  font-size: .75rem; font-weight: 600; white-space: nowrap; pointer-events: auto;   /* for its tooltip, which says it in full */
 }
 .status[hidden] { display: none; }
 .status .s-icon svg { width: 14px; height: 14px; }
@@ -140,10 +147,12 @@ button { font-family: inherit; }
   color: var(--yellow); background: var(--raised); border: 1px solid rgba(227, 179, 65, .4); transition: transform .12s;
 }
 .o-body { display: block; flex: 1; min-width: 0; }
-.o-step { display: block; font-size: .6875rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--yellow); line-height: 1.2; }
+.o-step { display: block; font-size: .75rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--yellow); line-height: 1.2; }
 .o-step:empty { display: none; }
 .o-text { display: block; font-weight: 600; font-size: clamp(.875rem, 3.8vw, 1rem); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.o-progress { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+/* The bar keeps a readable length: a long line ("Expand: Glassworks · $50.3K more needed") goes under it instead of squeezing it. */
+.o-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 5px; }
+.o-progress .bar { min-width: 72px; }
 .o-progress.hidden { display: none; }
 .bar { display: block; flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .14); overflow: hidden; }
 .bar .fill { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--green); transition: width .25s; }
@@ -168,12 +177,12 @@ button { font-family: inherit; }
   color: var(--yellow); background: var(--raised); border: 1px solid rgba(227, 179, 65, .4);
 }
 .u-text { min-width: 0; }
-.u-kicker { font-size: .6875rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--yellow); line-height: 1.3; }
+.u-kicker { font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--yellow); line-height: 1.3; }
 .u-title { font-size: clamp(1rem, 4.4vw, 1.125rem); font-weight: 600; line-height: 1.2; letter-spacing: -.01em; }
 .u-desc { font-size: .78125rem; font-weight: 400; color: var(--muted); line-height: 1.3; }
 .u-more {
   flex: none; align-self: flex-start; padding: 3px 8px; border-radius: 99px; background: var(--raised); border: 1px solid var(--glass-border);
-  font-size: .6875rem; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;
+  font-size: .75rem; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .u-more[hidden] { display: none; }
 
@@ -184,6 +193,23 @@ button { font-family: inherit; }
   pointer-events: none; animation: fade .2s;
 }
 #hint[hidden] { display: none; }
+/* How to walk on a touch screen: a touch point that presses and drags to and fro, above the line of help.
+   Shown on a first visit until the first move (js/yard-ui.js). With less motion it stays still. */
+.drag-show {
+  position: fixed; left: 50%; bottom: calc(var(--pad) + var(--safe-b) + 150px); width: 44px; height: 44px; margin-left: -22px;
+  border-radius: 50%; background: rgba(255, 255, 255, .85); box-shadow: 0 0 0 8px rgba(255, 255, 255, .28), 0 6px 16px rgba(0, 0, 0, .3);
+  pointer-events: none; z-index: 26; animation: drag-show 2.4s ease-in-out infinite;
+}
+.drag-show[hidden] { display: none; }
+@keyframes drag-show {
+  0%, 100% { transform: translateX(0) scale(1); opacity: .9; }
+  12% { transform: translateX(0) scale(.82); opacity: 1; }
+  45% { transform: translateX(-56px) scale(.82); }
+  78% { transform: translateX(56px) scale(.82); }
+  90% { transform: translateX(0) scale(.82); }
+}
+html.calm .drag-show { animation: none; }
+body:has(> .sheet-backdrop:not([hidden])) .drag-show, html.bare .drag-show { display: none; }
 /* The hint is about the yard. While a sheet is open (settings, account, the Headquarters) it would lie on top of the sheet's buttons. */
 body:has(> .sheet-backdrop:not([hidden])) #hint { display: none; }
 /* looking at the yard, or taking a picture of it: bar, cards and labels go until the next tap */
@@ -205,18 +231,18 @@ html.bare #hud, html.bare #labels { visibility: hidden; }
   background: var(--glass); border: 1px solid var(--glass-border); text-shadow: none; text-align: center;
 }
 .ss-title { font-size: .8125rem; font-weight: 700; color: var(--yellow); letter-spacing: .02em; }
-.ss-sub { font-size: .6875rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.ss-sub { font-size: .75rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 .ss-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .16); overflow: hidden; }
 .ss-bar[hidden], .ss-goods[hidden] { display: none; }
 .ss-bar i { display: block; height: 100%; border-radius: 2px; background: var(--yellow); transition: width .4s; }
-.ss-goods { font-size: .6875rem; font-weight: 500; color: var(--muted); white-space: pre-line; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.ss-goods { font-size: .75rem; font-weight: 500; color: var(--muted); white-space: pre-line; line-height: 1.35; font-variant-numeric: tabular-nums; }
 /* near the player a machine's label also shows the batch in work and what waits in and out */
 .label.station-name .s-state { display: none; }
 .label.station-name.near { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 10px 5px; border-radius: 10px; }
 .label.station-name.near .s-state { display: flex; align-items: center; gap: 6px; }
 .s-bar { display: block; width: 34px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .16); overflow: hidden; }
 .s-bar i { display: block; height: 100%; border-radius: 2px; background: var(--yellow); transform: scaleX(0); transform-origin: left; transition: transform .25s linear; }
-.s-counts { font-size: .65625rem; font-weight: 600; letter-spacing: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.s-counts { font-size: .75rem; font-weight: 600; letter-spacing: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 .label.machine { font-size: .78125rem; letter-spacing: .04em; color: var(--yellow); }
 .label.plot { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .label.plot .ring { position: relative; width: clamp(44px, 11vw, 54px); height: clamp(44px, 11vw, 54px); }
@@ -232,7 +258,7 @@ html.bare #hud, html.bare #labels { visibility: hidden; }
 /* A plot the player can pay for beats three times, then rests for about ten seconds: it asks, it does not nag. */
 .label.plot.affordable .cost { background: var(--green); border-color: #fff; animation: plot-pulse 12s ease-in-out infinite; }
 @keyframes plot-pulse { 0%, 5%, 10%, 15%, 100% { transform: scale(1); } 2.5%, 7.5%, 12.5% { transform: scale(1.12); } }
-.label.plot .note { font-size: clamp(.6875rem, 2.9vw, .8125rem); font-weight: 600; font-variant-numeric: tabular-nums; white-space: pre-line; text-align: center; line-height: 1.3; }
+.label.plot .note { font-size: clamp(.75rem, 2.9vw, .8125rem); font-weight: 600; font-variant-numeric: tabular-nums; white-space: pre-line; text-align: center; line-height: 1.3; }
 /* A payment has just landed on this plot: its ring answers with one short pulse. */
 .label.plot .ring { transition: transform .22s cubic-bezier(.3, 1.6, .5, 1); }
 .label.plot.paying .ring { transform: scale(1.16); }
@@ -240,6 +266,10 @@ html.calm .label.plot .ring { transition: none; transform: none; }
 .label.plot .note[hidden] { display: none; }
 .label.plot.gate .ring .fg { stroke: var(--yellow); }
 .label.plot.gate .name { color: var(--yellow); }
+/* A plot's name and note stand on any ground (light cobbles, sand, snow): a dark outline under the letters. */
+.label.plot .name, .label.plot .note {
+  text-shadow: 0 0 2px rgba(0, 0, 0, .9), 0 1px 2px rgba(0, 0, 0, .9), 0 0 6px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .35);
+}
 .label.bubble {
   display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 8px; row-gap: 4px; padding: 5px 9px 6px; border-radius: 8px;
   background: var(--text); color: #10151c; font-size: .8125rem; font-weight: 700; text-shadow: none; box-shadow: 0 3px 8px rgba(0, 0, 0, .25);
@@ -252,11 +282,12 @@ html.calm .label.plot .ring { transition: none; transform: none; }
 .label.bubble .b-count { justify-self: end; font-size: .75rem; font-weight: 600; color: #5d6876; }
 .label.bubble .b-bar { grid-column: 1 / -1; display: block; height: 3px; border-radius: 2px; background: rgba(16, 21, 28, .16); overflow: hidden; }
 .label.bubble .b-bar i { display: block; height: 100%; width: 0; border-radius: 2px; background: #10151c; transition: width .15s; }
-.label.bubble.max { background: var(--red); color: #fff; }
-.label.bubble.max::after { border-top-color: var(--red); }
-.label.bubble.max .b-count { color: rgba(255, 255, 255, .85); }
-.label.bubble.max .b-bar { background: rgba(255, 255, 255, .3); }
-.label.bubble.max .b-bar i { background: #fff; }
+/* Full hands are good news ("go and drop them"), not an error: gold, the accent, with dark text, never the red of a loss. */
+.label.bubble.max { background: var(--yellow); color: #2a1f05; }
+.label.bubble.max::after { border-top-color: var(--yellow); }
+.label.bubble.max .b-count { color: #2a1f05; }
+.label.bubble.max .b-bar { background: rgba(42, 31, 5, .2); }
+.label.bubble.max .b-bar i { background: #2a1f05; }
 
 /* ---------- joystick: appears where the finger goes down ---------- */
 #joystick {
@@ -322,7 +353,7 @@ html.calm .label.plot .ring { transition: none; transform: none; }
 .sheet-title { font-size: 1.125rem; font-weight: 600; text-align: center; margin-bottom: 6px; letter-spacing: -.01em; }
 .sheet-group { display: flex; flex-direction: column; gap: 8px; }
 .sheet-group + .sheet-group { margin-top: 10px; }
-.group-title { margin: 0; padding: 0 2px; font-size: .6875rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.group-title { margin: 0; padding: 0 2px; font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .sheet-btn {
   min-height: 44px; padding: 4px 12px; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--raised);
   color: var(--text); font-size: .9375rem; font-weight: 600; line-height: 1.2; cursor: pointer; transition: transform .1s, background .15s;
@@ -347,6 +378,20 @@ html.calm .label.plot .ring { transition: none; transform: none; }
 .vol-toggle::before, .sheet-btn.toggle::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(57, 197, 83, .25); }
 .vol-toggle.off, .sheet-btn.toggle.off { color: var(--muted); }
 .vol-toggle.off::before, .sheet-btn.toggle.off::before { background: rgba(255, 255, 255, .35); box-shadow: none; }
+/* An on/off setting is a switch at the end of its row: green with the knob to the right when on, grey with
+   the knob to the left when off. The words stay white either way: "Off" is a choice, not a disabled button. */
+.sheet-btn.toggle { position: relative; justify-content: flex-start; padding-left: 16px; padding-right: 72px; text-align: left; }
+.sheet-btn.toggle.off { color: var(--text); }
+.sheet-btn.toggle::after { content: ""; position: absolute; right: 14px; top: 50%; width: 42px; height: 24px; margin-top: -12px; border-radius: 99px; background: var(--green); transition: background .15s; }
+.sheet-btn.toggle::before { position: absolute; right: 16px; top: 50%; width: 20px; height: 20px; margin-top: -10px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); z-index: 1; transition: right .15s; }
+.sheet-btn.toggle.off::after { background: rgba(255, 255, 255, .22); }
+.sheet-btn.toggle.off::before { right: 36px; background: #e6e9ee; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+.sheet-btn.toggle:disabled { opacity: .6; }
+html.calm .sheet-btn.toggle::before, html.calm .sheet-btn.toggle::after { transition: none; }
+/* a guest: "Save your progress" first (js/account-ui.js) */
+#settings.guest .sheet-group[aria-labelledby="grp-account"] { order: -1; margin-top: 0; }
+#settings.guest .sheet-group[aria-labelledby="grp-sound"] { margin-top: 10px; }
+.store-signin { margin: 2px 0 8px; }
 .vol output { font-weight: 600; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 .vol input { -webkit-appearance: none; appearance: none; width: 100%; height: 30px; margin: 0; padding: 0; background: none; cursor: pointer; border-radius: 6px; }
 .vol input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--yellow) var(--fill, 100%), rgba(255, 255, 255, .16) var(--fill, 100%)); }
@@ -363,6 +408,8 @@ html.calm .label.plot .ring { transition: none; transform: none; }
 button.row { cursor: pointer; transition: background .15s; }
 button.row:hover { background: #243040; }
 .row.here { border-color: rgba(227, 179, 65, .55); }
+/* a line of the log that leads somewhere: an arrow at its end */
+.r-go { flex: none; margin-left: auto; color: var(--muted); font-size: 18px; display: grid; place-items: center; }
 .r-num, .r-icon {
   flex: none; width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center;
   background: rgba(0, 0, 0, .28); border: 1px solid var(--glass-border); color: var(--muted);
@@ -378,6 +425,10 @@ button.row:hover { background: #243040; }
 .row.locked.next .r-title { color: var(--text); }
 .r-needs { font-size: .75rem; font-weight: 500; line-height: 1.35; color: var(--text); margin-top: 2px; }
 .row.locked:not(.next) .r-needs { color: var(--muted); font-weight: 400; }
+/* the next gate, and the cash covers it: solid and green, and the row is a button to that yard */
+.row.locked.ready { border-style: solid; border-color: rgba(76, 195, 138, .6); cursor: pointer; }
+.row.locked.ready .r-needs { color: var(--green); font-weight: 600; }
+.row.locked.ready .r-tag { color: var(--green); align-self: center; }
 .r-lock { flex: none; color: var(--muted); font-size: 1rem; margin-top: 7px; }
 .r-bar { display: block; height: 4px; margin-top: 5px; border-radius: 2px; background: rgba(255, 255, 255, .14); overflow: hidden; }
 .r-bar i { display: block; height: 100%; border-radius: 2px; background: var(--yellow); }
@@ -414,8 +465,8 @@ button.row:hover { background: #243040; }
 .r-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .r-title { font-size: .90625rem; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
 .r-sub { font-size: .75rem; font-weight: 400; color: var(--muted); line-height: 1.3; }
-.r-kicker { font-size: .6875rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
-.r-tag { flex: none; font-size: .6875rem; font-weight: 600; color: var(--yellow); white-space: nowrap; }
+.r-kicker { font-size: .75rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.r-tag { flex: none; font-size: .75rem; font-weight: 600; color: var(--yellow); white-space: nowrap; }
 /* keyboard shortcuts */
 .keys-list { margin: 0 0 6px; display: flex; flex-direction: column; gap: 8px; }
 .k-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
@@ -447,6 +498,8 @@ kbd {
 .l-start { gap: 18px; animation: fade .3s; }
 .l-pitch { margin: 0; font-size: .9375rem; font-weight: 400; line-height: 1.45; color: var(--muted); text-align: center; }
 #l-begin { width: min(220px, 60vw); min-height: 48px; font-size: 1rem; }
+#l-signin { min-height: 44px; margin-top: -8px; font-size: .875rem; color: var(--muted); }
+#l-signin[hidden] { display: none; }
 
 /* landscape phones: keep the objective card out of the way */
 @media (max-height: 460px) {
@@ -564,7 +617,7 @@ svg.icon { display: block; flex: none; width: 1em; height: 1em; fill: none; stro
   --p-ink: #f1f3f6; --p-ink2: #a7b0bd; --p-ink3: #7d8896;
   --p-gold: #e3b341; --p-up: #4cc38a; --p-down: #f0706a;
   --p-income: #3987e5; --p-costs: #c98500;
-  --t-xs: 11.5px; --t-sm: 12.5px; --t-md: 13.5px; --t-lg: 15px; --t-xl: 18px; --t-2xl: 22px;
+  --t-xs: 12px; --t-sm: 12.5px; --t-md: 13.5px; --t-lg: 15px; --t-xl: 18px; --t-2xl: 22px;
   width: min(980px, calc(100vw - 16px)); height: min(860px, calc(100dvh - 16px - var(--safe-t) - var(--safe-b)));
   display: flex; flex-direction: column; overflow: hidden; position: relative;
   font-family: var(--p-font); font-size: var(--t-md); color: var(--p-ink); background: var(--p-bg);
@@ -618,7 +671,7 @@ svg.icon { display: block; flex: none; width: 1em; height: 1em; fill: none; stro
 .hq-tabs.rail .hq-tab-icon { font-size: 17px; }
 .hq-tabs.rail .hq-tab .dot { margin-left: auto; }
 .hq-tabs.dock { order: 2; justify-content: space-around; padding: 0 4px var(--safe-b); border-top: 1px solid var(--p-line); background: var(--p-surface); }
-.hq-tabs.dock .hq-tab { flex: 1; flex-direction: column; justify-content: center; gap: 3px; height: 54px; font-size: 11px; border-top: 2px solid transparent; }
+.hq-tabs.dock .hq-tab { flex: 1; flex-direction: column; justify-content: center; gap: 3px; height: 54px; font-size: 12px; border-top: 2px solid transparent; }
 .hq-tabs.dock .hq-tab.on { border-top-color: var(--p-gold); }
 .hq-tabs.dock .hq-tab-icon { font-size: 21px; }
 .hq-tabs.dock .hq-tab .dot { position: absolute; top: 7px; left: calc(50% + 8px); }
@@ -787,6 +840,69 @@ button.hq-btn:focus-visible, .hq-tab:focus-visible, #hq-close:focus-visible, but
 .hq-reward { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: var(--t-sm); font-weight: 500; color: var(--p-ink2); font-variant-numeric: tabular-nums; }
 .hq-reward .cash { font-size: var(--t-xl); font-weight: 600; letter-spacing: -.01em; color: var(--p-ink); }
 .hq-card.contract.ready, .hq-card.goal.ready { border-color: rgba(76, 195, 138, .55); }
+/* What something pays, the same row everywhere: cash, then over selling, then XP (gold), then reputation (blue). */
+.hq-rchips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.hq-rchip { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 99px; background: var(--p-raised); border: 1px solid var(--p-line-strong);
+  font-size: var(--t-sm); font-weight: 600; color: var(--p-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hq-rchip.xp { color: var(--p-gold); }
+.hq-rchip.rep { color: var(--blue); }
+.hq-reward { align-items: center; }
+.hq-card.goal .hq-actions { flex-wrap: wrap; align-items: center; }
+.hq-kind { margin-top: -6px; }
+/* Phone fingers: every Headquarters button takes 44px; a small one looks small and is touched by its ::before. */
+@media (pointer: coarse) {
+  button.hq-btn { height: 44px; }
+  button.hq-btn.small { position: relative; }
+  button.hq-btn.small::before { content: ""; position: absolute; inset: min(0px, calc((100% - 44px) / 2)) 0; }
+}
+
+/* "?" How it works: a line at the top of a tab that opens into a card. */
+button.hq-help-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 6px; margin: -6px 0 -4px -6px;
+  border: 0; border-radius: 8px; background: none; color: var(--p-ink2); font: inherit; font-size: var(--t-sm); font-weight: 600; cursor: pointer; }
+button.hq-help-btn:hover { color: var(--p-ink); background: var(--p-raised); }
+.hq-help-q { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--p-line-strong); color: var(--p-gold); font-size: 13px; font-weight: 700; }
+.hq-card.hq-help { border-color: rgba(227, 179, 65, .45); }
+button.hq-help-close { display: grid; place-items: center; width: 44px; height: 44px; margin: -10px -10px -10px 0; border: 0; border-radius: 8px; background: none; color: var(--p-ink2); font-size: 18px; cursor: pointer; }
+.hq-help-steps { margin: 0; padding: 0 0 0 20px; display: flex; flex-direction: column; gap: 8px; font-size: var(--t-md); line-height: 1.5; color: var(--p-ink2); }
+.hq-help-steps b { color: var(--p-ink); font-weight: 600; }
+.hq-help-steps li::marker { color: var(--p-gold); font-weight: 600; }
+.hq-help-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
+.hq-help-table th { text-align: left; font-weight: 600; color: var(--p-ink2); padding: 6px 8px; border-bottom: 1px solid var(--p-line-strong); }
+.hq-help-table td { padding: 7px 8px; border-bottom: 1px solid var(--p-line); color: var(--p-ink2); }
+.hq-help-table td:first-child { color: var(--p-ink); font-weight: 600; }
+.hq-help-table th:last-child, .hq-help-table td:last-child { text-align: right; color: var(--p-ink); }
+.hq-help-terms { margin: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--t-sm); line-height: 1.5; }
+.hq-help-terms dt { display: inline; font-weight: 600; color: var(--p-ink); }
+.hq-help-terms dt::after { content: " "; }
+.hq-help-terms dd { display: inline; margin: 0; color: var(--p-ink2); }
+
+/* The tour of a new company: three cards at the top of Overview. */
+.hq-card.hq-tour { border-color: rgba(227, 179, 65, .6); }
+.hq-tour-kicker { font-size: var(--t-xs); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--p-gold); }
+.hq-tour h4 { font-size: var(--t-xl); }
+.hq-tour-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hq-tour-dots { display: flex; gap: 6px; margin-right: auto; }
+.hq-tour-dots span { width: 6px; height: 6px; border-radius: 99px; background: var(--p-line-strong); }
+.hq-tour-dots span.on { width: 18px; background: var(--p-gold); }
+
+/* The next first step: five segments for how far along, then the step itself. */
+.hq-step-track { display: flex; gap: 6px; }
+.hq-step-track span { flex: 1; height: 4px; border-radius: 99px; background: var(--p-line-strong); }
+.hq-step-track span.done { background: var(--p-up); }
+.hq-step-track span.next { background: var(--p-gold); }
+.hq-card.hq-step { border-color: rgba(227, 179, 65, .5); }
+.hq-card.hq-step > button.hq-btn { align-self: stretch; flex: none; }
+.hq-step-done { font-size: var(--t-xs); }
+
+/* The rule of a contract as a picture: yards, warehouse, client. */
+.hq-flow { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; background: var(--p-surface); border: 1px solid var(--p-line); }
+.hq-flow-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.hq-flow-step { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; font-size: var(--t-xs); color: var(--p-ink2); text-align: center; }
+.hq-flow-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--p-raised); font-size: 21px; }
+.hq-flow-step.up .hq-flow-icon { color: var(--p-up); }
+.hq-flow-step.blue .hq-flow-icon { color: var(--blue); }
+.hq-flow-step.gold .hq-flow-icon { color: var(--p-gold); }
+.hq-flow-arrow { color: var(--p-ink3); padding-bottom: 18px; }
 /* who is asking and why, on a contract card: the person in a line, what they say as a quote with a rule beside it */
 .hq-story { display: flex; flex-direction: column; gap: 4px; }
 .hq-story-who { font-size: var(--t-sm); font-weight: 400; color: var(--p-ink2); line-height: 1.4; }
@@ -915,6 +1031,14 @@ button.hq-btn.armed { border-color: var(--p-gold); color: var(--p-gold); }
 @media (min-width: 640px) {
   .fin-kpis { grid-template-columns: repeat(4, 1fr); }
   .hq-actions button.hq-btn.primary { flex: none; min-width: 168px; }   /* on a wide screen a button is as wide as a button, not as the card */
+}
+/* A wide screen: the Headquarters grows, and a list of cards (goals, offers, managers, research, routes)
+   flows in two columns instead of one long one. Headings, notes and buttons still take the whole row. */
+@media (min-width: 1200px) {
+  .hq { width: min(1180px, calc(100vw - 48px)); }
+  .hq-section:has(> .hq-card + .hq-card) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .hq-section:has(> .hq-card + .hq-card) > :not(.hq-card) { grid-column: 1 / -1; }
+  .hq-section:has(> .hq-card + .hq-card) > button.hq-btn { justify-self: start; }
 }
 @media (max-width: 480px) {
   .hq { width: 100vw; height: 100dvh; border-radius: 0; border: 0; }

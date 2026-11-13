@@ -102,6 +102,29 @@ export function plotProgress({ label, cash, remaining, cost }) {
   const sub = cash >= remaining ? `${label} · ready to buy` : `${label} · $${fmt(Math.ceil(remaining - cash))} more needed`;
   return { sub, progress: cost > 0 ? have / cost : 0 };
 }
+/**
+ * What the objective card calls a purchase. A gate's plot is labelled "Expand: Glassworks" in the yard; on the
+ * card that reads "Open Glassworks", and in the line under the bar "Glassworks gate", never "Buy: Expand: …".
+ * @returns {{ action: string, short: string }}
+ */
+export function purchaseName(label) {
+  const gate = /^Expand: (.+)$/.exec(label);
+  return gate ? { action: `Open ${gate[1]}`, short: `${gate[1]} gate` } : { action: `Buy: ${label}`, short: label };
+}
+/**
+ * Which purchase the objective card counts toward, so that it never loses its goal: the one the arrows lead
+ * to when one can be paid, else the next one of the yard the player is in, else the open yard's purchase with
+ * the least still to pay.
+ * @param {{ pay?: object|null, here?: object|null, plots?: { plot: object, remaining: number }[] }} o
+ * @returns {object|null}  one of the plots given, or null when nothing is left to buy
+ */
+export function cardPlot({ pay = null, here = null, plots = [] }) {
+  if (pay) return pay;
+  if (here) return here;
+  let best = null;
+  for (const p of plots) if (p.remaining > 0 && (!best || p.remaining < best.remaining)) best = p;
+  return best ? best.plot : null;
+}
 
 // --- the yard list -----------------------------------------------------------------------------------
 /** "chairs from planks", "steel from iron bars and power cells": what a recipe makes, for a yard that is not open yet. */
@@ -131,6 +154,9 @@ export function yardRows({ areas, econ, here, place, items, recipes }) {
     if (left > 0) row.needs = `Finish ${prev.name} (${left} more to build), then pay ${price} at its gate`;
     else if (paid >= 1) { row.needs = `$${fmt(paid)} of ${price} paid at the gate in ${prev.name}`; row.progress = paid / cost; }
     else row.needs = `Pay ${price} at the gate in ${prev.name}`;
+    // Everything built and the cash covers the rest: say so, and let the row take the player to that yard.
+    const rest = econ.remaining(gate);
+    if (left === 0 && rest > 0 && econ.cash >= rest) { row.ready = true; row.goTo = prev.id; row.needs = `Ready to buy: pay $${fmt(rest)} at the gate in ${prev.name}`; }
     return row;
   });
 }
@@ -159,7 +185,8 @@ export class Tally {
   /** Move the shown figure toward the sum. @returns the figure to show */
   step(dt) {
     const d = this.total - this.shown;
-    this.shown = Math.abs(d) < 0.5 ? this.total : this.shown + d * Math.min(1, dt * 12);
+    // A frame clock can run behind the moment of a sale (dt below zero): the figure then waits, it never runs backwards.
+    this.shown = Math.abs(d) < 0.5 ? this.total : this.shown + d * Math.min(1, Math.max(0, dt) * 12);
     return this.shown;
   }
   get settled() { return this.shown === this.total; }
@@ -167,7 +194,62 @@ export class Tally {
   over(now) { return now - this.last > this.window; }
 }
 
+// --- how a moment feels --------------------------------------------------------------------------------
+/**
+ * Four sizes of moment, and what each one is heard, felt and seen as: the sound when the moment names none,
+ * the vibration (ms, or a pattern), how much confetti, and how far the camera pushes in (0 to 1).
+ * "Reduce motion" still turns off the confetti and the push (js/fx.js, js/yard-ui.js); "Vibration" the buzz.
+ */
+export const FEEL = {
+  tap:    { sound: 'click',   buzz: 0,                    confetti: 0,  punch: 0 },
+  small:  { sound: 'collect', buzz: 12,                   confetti: 0,  punch: 0 },
+  medium: { sound: 'fanfare', buzz: [20, 40, 20],         confetti: 40, punch: 0 },
+  big:    { sound: 'fanfare', buzz: [30, 50, 30, 50, 60], confetti: 80, punch: 1 },
+};
+/**
+ * Every moment the game celebrates, by size. `sound` picks another sound than the size's own: `gate` is the
+ * sound of a new place (a yard, the company, the building site). Big moments all look alike: card, confetti,
+ * a long buzz and the camera pushing in.
+ */
+export const MOMENTS = {
+  upgrade: { size: 'medium' },                         // a purchase in a yard
+  gate: { size: 'big', sound: 'gate' },                // a new yard
+  everything: { size: 'big' },                         // every yard on the map built
+  founded: { size: 'big', sound: 'gate' },             // the company
+  rank: { size: 'big' },                               // promoted
+  site: { size: 'big', sound: 'gate' },                // the building site opens
+  built: { size: 'big' },                              // a building is finished
+  sold: { size: 'big' },                               // the company was sold: a new start with legacy stars
+  achievement: { size: 'medium' },
+  delivered: { size: 'medium', sound: 'collect' },     // the Warehouse Manager delivered an order
+  deliver: { size: 'medium', sound: 'collect' },       // the player delivered an order
+  research: { size: 'medium' },
+  route: { size: 'medium' },
+  hire: { size: 'medium' },
+  bonus: { size: 'medium', sound: 'collect' },         // the three daily goals and their bonus, collected
+  credits: { size: 'medium' },                         // something bought with credits
+  milestone: { size: 'small' },
+  ready: { size: 'small' },                            // an order is full and can be delivered
+  goal: { size: 'small' },                             // a goal is done, or one is collected
+  stage: { size: 'small' },                            // a stage of a building is finished
+  send: { size: 'small' },                             // goods sent to the building site
+  build: { size: 'small', sound: 'fanfare' },          // a building is started
+  sell: { size: 'small', sound: 'cash' },              // sold from the warehouse
+};
+/** What a moment is heard, felt and seen as: { sound, buzz, confetti, punch }. An unknown one is a tap. */
+export function feelOf(moment) {
+  const m = MOMENTS[moment], f = FEEL[m?.size] || FEEL.tap;
+  return { ...f, sound: m?.sound || f.sound };
+}
+
 // --- the log -----------------------------------------------------------------------------------------
+/** Which Headquarters tab a line of the log leads to, by its kicker; null for a line that is only news (an unlock in a yard). */
+const LOG_TABS = { Goal: 'goals', Achievement: 'goals', Event: 'goals', Milestone: 'overview', Promoted: 'overview', Contract: 'contracts',
+  'Building site': 'construction', Built: 'construction' };
+export function logTarget(entry) {
+  if (entry?.kicker === 'New' && entry.title === 'Company founded') return 'overview';
+  return LOG_TABS[entry?.kicker] || null;
+}
 const LOG_TEXT = { kicker: 40, title: 120, desc: 240, symbol: 24 };   // the longest each part of a kept entry may be
 /**
  * The last announcements, newest first, and how many of them the player has not looked at. The list can be

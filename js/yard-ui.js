@@ -49,15 +49,23 @@ export class YardUi {
     hud.start = {
       first: loading.firstVisit(game.saveKey), yards: AREAS.length,
       onStart: () => { game.sfx.unlock(); game.sfx.click(); },
+      // Already playing elsewhere: the account sheet, on its "Sign in" side. Only where accounts exist.
+      onSignIn: game.account?.supported ? () => { document.getElementById('btn-account')?.click(); document.getElementById('acc-tab-in')?.click(); } : null,
     };
 
-    // Someone at a keyboard is told once how to walk. Fingers find the stick by themselves.
+    // Everyone is told once how to walk: the keys at a keyboard, and on a touch screen a finger that drags,
+    // shown by a touch point sliding to and fro, because the stick is invisible until a finger lands.
+    // A touch player who has finished the tutorial already knows: they are not told again after an update.
     this.moveHint = '';
     const keyboard = typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches;
-    if (keyboard && !this.settings.moveHintSeen) {
+    if (!this.settings.moveHintSeen && (keyboard || !game.econ.tutorialDone)) {
       this.moveHint = 'wait';
+      this.moveText = keyboard ? 'WASD or arrow keys to move' : 'Drag anywhere to walk';
+      this.dragShow = keyboard ? null : el('div', 'drag-show');
+      if (this.dragShow) { this.dragShow.hidden = true; this.dragShow.setAttribute('aria-hidden', 'true'); document.getElementById('fx').append(this.dragShow); }
       game.input.onFirstMove = () => {
         if (this.moveHint === 'shown') hud.hideHint();
+        this.dragShow?.remove(); this.dragShow = null;
         this.moveHint = '';
         this.settings.set('moveHintSeen', true);
       };
@@ -74,7 +82,10 @@ export class YardUi {
     if (this.labelTimer <= 0) { this.labelTimer = LABEL_EVERY; this.slow(); }
     if (this.peek) this.lookOn(dt);
     this.ring.update(dt, this.peek ? this.peek.zone : null);
-    if (this.moveHint === 'wait' && loading.gone && !g.paused && !g.hqOpen) { this.moveHint = 'shown'; this.hud.hint('WASD or arrow keys to move'); }
+    if (this.moveHint === 'wait' && loading.gone && !g.paused && !g.hqOpen) {
+      this.moveHint = 'shown'; this.hud.hint(this.moveText);
+      if (this.dragShow) this.dragShow.hidden = false;
+    }
   }
   /** Four times a second: the labels in the yard and the save status; once a second, the income beside the cash. */
   slow() {
