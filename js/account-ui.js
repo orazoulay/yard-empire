@@ -56,7 +56,7 @@ export function bindAccountUi(account, { onOpen } = {}) {
     onOpen?.();
     if (byPlayer) (account.user ? $('acc-close') : account.needsEmail ? $('acc-email') : name).focus({ preventScroll: true });
   };
-  const close = () => { sheet.hidden = true; account.open = false; pass.value = ''; show(error, ''); show(good, ''); hidePasswords(); judge(); if (!account.user) endReset(); };
+  const close = () => { sheet.hidden = true; account.open = false; pass.value = ''; show(error, ''); show(good, ''); hidePasswords(); judge(); if (!account.user && !byLink) endReset(); };   // a new password by link stays ready: the link works once
   /** Runs one request with the button disabled, so a slow network cannot send it twice. */
   const busy = async (button, label, work) => {
     const before = button.textContent;
@@ -146,8 +146,10 @@ export function bindAccountUi(account, { onOpen } = {}) {
   // --- forgot password: a code by email, then the new password ---------------------------------------
   const reset = $('acc-reset-form'), resetError = $('acc-reset-error'), step2 = $('acc-reset-step2'), resetSubmit = $('acc-reset-submit');
   let sentTo = null;   // the email a code went to: the second step is showing
+  let byLink = false;  // the player came by the link in the email: no code is asked, the link was the proof
   function endReset() {
-    sentTo = null; reset.hidden = true; form.hidden = false; step2.hidden = true;
+    sentTo = null; byLink = false; reset.hidden = true; form.hidden = !!account.user; me.hidden = !account.user; step2.hidden = true;
+    $('acc-reset-code-field').hidden = false; $('acc-reset-back').textContent = 'Back to sign in';
     $('acc-reset-email').readOnly = false; $('acc-reset-code').value = ''; $('acc-reset-pass').value = '';
     $('acc-reset-note').textContent = 'Enter the email of your account. We send a code to it.';
     resetSubmit.textContent = 'Send the code'; show(resetError, '');
@@ -162,12 +164,23 @@ export function bindAccountUi(account, { onOpen } = {}) {
     e.preventDefault();
     show(resetError, '');
     const email = $('acc-reset-email').value.trim();
+    if (byLink) {
+      if ($('acc-reset-pass').value.length < 8) return show(resetError, 'Password must be 8 characters or more');
+      const r = await busy(resetSubmit, 'One moment…', () => account.resetByLink($('acc-reset-pass').value));
+      if (!r.ok) return show(resetError, r.error);
+      if (r.signIn) {   // not the device that asked for the email: the password is changed, signing in is by hand
+        endReset(); hidePasswords();
+        if (!account.user) { setMode('in'); $('acc-email').value = r.email; show(good, 'Your password is changed. Sign in with it.'); }
+        else $('acc-status').textContent = 'The password was changed.';
+      }
+      return;   // otherwise the page reloads, signed in
+    }
     if (!sentTo) {
       if (!/^\S+@\S+\.\S+$/.test(email)) return show(resetError, 'Enter a valid email address');
       const r = await busy(resetSubmit, 'Sending…', () => account.forgotPassword(email));
       if (!r.ok) return show(resetError, r.error);
       sentTo = email; step2.hidden = false; $('acc-reset-email').readOnly = true;
-      $('acc-reset-note').textContent = 'If an account has this email, a code is on its way. It can take a minute. Enter it here with a new password.';
+      $('acc-reset-note').textContent = 'If an account has this email, an email is on its way. It can take a minute. Open the link in it, or enter the code from it here with a new password.';
       resetSubmit.textContent = 'Set the new password';
       return $('acc-reset-code').focus({ preventScroll: true });
     }
@@ -177,10 +190,19 @@ export function bindAccountUi(account, { onOpen } = {}) {
   });
 
   setMode('new');
+  if (account.reset) {   // the link in the "new password" email opened the game: only the new password is asked
+    byLink = true; form.hidden = true; me.hidden = true; reset.hidden = false; step2.hidden = false;
+    $('acc-reset-code-field').hidden = true;
+    $('acc-reset-email').value = account.reset.email; $('acc-reset-email').readOnly = true;
+    $('acc-reset-note').textContent = 'Choose a new password for this account.';
+    resetSubmit.textContent = 'Set the new password'; $('acc-reset-back').textContent = 'Not now';
+    open();
+  }
   // Show the sheet by itself when there is news (signed out, suspended), and once to a new guest.
   const flash = account.takeFlash();
   let seen = true;
   try { seen = !!localStorage.getItem(SEEN_KEY); localStorage.setItem(SEEN_KEY, '1'); } catch { /* private mode */ }
+  if (account.reset) return;
   if (!user && flash) { setMode('in'); open(flash, false, account.flashGood); } else if (!user && !seen) open();
   else if (user && flash) showNotice('account', { text: flash, tone: 'gold', seconds: 8 });   // signed in by the link in the email
 }

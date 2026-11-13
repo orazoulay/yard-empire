@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Yard Empire</title>
+  <style>
+    html { background: #0e1319; color: #a7b0bd; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    body { max-width: 520px; margin: 20vh auto 0; padding: 0 20px; text-align: center; }
+    b { color: #f1f3f6; } a { color: #e3b341; }
+  </style>
+</head>
+<body>
+  <p><b>This page does not exist.</b></p>
+  <p><a id="home" href="./">Go to Yard Empire</a></p>
+  <script>
+    // An address under the game that is no file: a mistyped link, or a link from an email that was written for another
+    // kind of site. The game is in the nearest folder above this address that holds its manifest. Go there, and keep
+    // what an email's link carried, so the game can use it.
+    (async () => {
+      const folders = location.pathname.split('/').slice(1, -1);
+      for (let n = folders.length; n >= 0; n--) {
+        const root = '/' + folders.slice(0, n).map(f => f + '/').join('');
+        try {
+          const r = await fetch(root + 'manifest.webmanifest', { cache: 'no-store' });
+          if (!r.ok || !/Yard Empire/.test(await r.text())) continue;
+          document.getElementById('home').href = root;
+          const carried = /[?&](token_hash|error|error_code)=/.test(location.search) ? location.search : '';
+          location.replace(root + carried + location.hash);
+          return;
+        } catch { /* no connection: the link above stays */ }
+      }
+    })();
+  </script>
+</body>
+</html>

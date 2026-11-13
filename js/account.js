@@ -56,6 +56,7 @@ export class Account {
     this.busy = false;
     this.again = false;       // an upload was asked for while one was on its way
     this.flashGood = false;   // the message takeFlash() gave was good news
+    this.reset = null;        // { email }: the player came by the "new password" link in an email; the form for it opens
   }
 
   get saveKey() { return saveKey(this.user?.id); }
@@ -74,6 +75,7 @@ export class Account {
     if (me.data?.accounts !== true) return this;    // no account server behind this page
     this.supported = true; this.online = true;
     this.user = me.data.user;
+    this.reset = me.data.reset || null;
     if (me.data.banned) this.flash('This account is suspended.');
     else if (me.data.note) this.flash(me.data.note, me.data.noteGood === true);   // the player came back through the link in an email
     else if (cached && !this.user) this.flash('You were signed out. Sign in again to keep saving to your account.');
@@ -147,6 +149,16 @@ export class Account {
   }
   /** Set a new password with the code from that email. On success the page reloads, signed in. */
   async resetPassword(email, code, password) { return this.enter(await this.call('POST', 'password/reset', { email, code, password })); }
+
+  /**
+   * Set a new password with the pass the link in the email brought (this.reset). On the device that asked for the
+   * email the page reloads, signed in. Anywhere else: { ok, signIn: true, email }, and the player signs in by hand.
+   */
+  async resetByLink(password) {
+    const r = await this.call('POST', 'password/link', { password });
+    if (r.ok && !r.data?.user) { this.reset = null; return { ok: true, signIn: true, email: r.data?.email || '' }; }
+    return this.enter(r);
+  }
 
   enter(r) {
     if (!r.ok || !r.data?.user) return { ok: false, error: problem(r) };
