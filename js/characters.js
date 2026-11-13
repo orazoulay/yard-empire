@@ -77,10 +77,12 @@ export class Character {
 
     this.torso = new THREE.Group(); this.torso.position.y = 0.75; this.rig.add(this.torso);   // from the hips up
     const body = box(0.8, 0.8, 0.5, shirt, { round: 0.12 }); body.position.y = 0.4; this.torso.add(body);
+    this.paint = { shirt: [body], pants: [], helmet: [], vest: [] };   // the meshes of each colour of the clothes, for dress()
     const belt = box(0.82, 0.12, 0.52, 0x8b4a24); belt.position.y = 0.03; this.torso.add(belt);
     if (vest != null) {   // two bright strips over the shoulders; not every trade wears them
       const vest1 = box(0.2, 0.7, 0.54, vest); vest1.position.set(-0.22, 0.43, 0); this.torso.add(vest1);
       const vest2 = vest1.clone(); vest2.position.x = 0.22; this.torso.add(vest2);
+      this.paint.vest.push(vest1);   // the two strips share one material
     }
     if (apron != null) {  // a baker, a smith, a carpenter: an apron down the front with a bib
       const skirt = box(0.74, 0.5, 0.06, apron, { round: 0.03 }); skirt.position.set(0, 0.22, 0.27); this.torso.add(skirt);
@@ -93,7 +95,8 @@ export class Character {
     for (const x of [-0.14, 0.14]) { const brow = box(0.14, 0.035, 0.05, hair, { map: null }); brow.position.set(x, 0.42, 0.31); brow.castShadow = false; this.head.add(brow); }
     const eyeL = box(0.08, 0.1, 0.05, 0x222222); eyeL.position.set(-0.14, 0.33, 0.31); this.head.add(eyeL);
     const eyeR = eyeL.clone(); eyeR.position.x = 0.14; this.head.add(eyeR);
-    this.head.add(makeHat(hat, helmet));
+    const hatGroup = makeHat(hat, helmet); this.head.add(hatGroup);
+    hatGroup.traverse(o => { if (o.isMesh && o.material?.color?.getHex() === helmet) this.paint.helmet.push(o); });
     const hand = () => box(0.2, 0.16, 0.2, skin, { round: 0.06 });
     if (pack) {   // the player carries a pack, with a bedroll on top
       const bag = box(0.56, 0.6, 0.26, 0x7a5a36, { round: 0.1 }); bag.position.set(0, 0.42, -0.36); this.torso.add(bag);
@@ -106,6 +109,8 @@ export class Character {
     const boot = () => { const m = box(0.32, 0.16, 0.44, 0x3b2a1e, { round: 0.06 }); m.position.z = 0.05; return m; };
     this.legL = limb(0.3, 0.62, 0.34, pants, -0.2, 0.75, boot()); this.rig.add(this.legL);
     this.legR = limb(0.3, 0.62, 0.34, pants, 0.2, 0.75, boot()); this.rig.add(this.legR);
+    this.paint.shirt.push(this.armL.children[0], this.armR.children[0]);   // a limb is its pivot with the sleeve or the trouser leg first
+    this.paint.pants.push(this.legL.children[0], this.legR.children[0]);
 
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 32),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: ringOpacity, depthWrite: false, toneMapped: false }));
@@ -192,6 +197,14 @@ export class Character {
     L.vx += ((wantX - L.x) * k - L.vx * damp) * dt; L.x += L.vx * dt;
     const still = Math.abs(L.z) + Math.abs(L.x) + Math.abs(L.vz) + Math.abs(L.vx) < 0.0015 && speed === 0;
     this.stack.leanZ = still ? 0 : L.z; this.stack.leanX = still ? 0 : L.x;
+  }
+
+  /**
+   * Put other colours on the clothes: the player's Outfit colours, bought with credits (js/credits.js).
+   * @param colors  { shirt, pants, helmet, vest } as numbers; a part left out keeps its colour
+   */
+  dress(colors) {
+    for (const [part, meshes] of Object.entries(this.paint)) if (colors?.[part] != null) for (const m of meshes) m.material.color.setHex(colors[part]);
   }
 
   get headPos() { return new THREE.Vector3(this.pos.x, 2.9 + this.stack.height, this.pos.z); }

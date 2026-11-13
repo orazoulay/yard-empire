@@ -97,6 +97,21 @@ button { font-family: inherit; }
 #cash-rate { font-size: .65625rem; font-weight: 600; letter-spacing: 0; color: var(--muted); white-space: nowrap; }
 #cash-rate.down { color: var(--red); }
 #cash-rate[hidden] { display: none; }
+/* Credits: a second currency, kept by the server. A violet gem and a violet edge tell it from the money at a glance. */
+.pill.credits {
+  pointer-events: auto; cursor: pointer; gap: 6px; padding: 0 12px 0 9px; color: #e4dcff; font: inherit; font-weight: 700;
+  font-size: clamp(.9375rem, 3.8vw, 1.0625rem); height: clamp(34px, 8vw, 38px); border-color: rgba(143, 107, 255, .55);
+  background: linear-gradient(180deg, rgba(56, 40, 104, .82), rgba(34, 26, 64, .82)); transition: transform .12s;
+}
+.pill.credits[hidden] { display: none; }
+.pill.credits:active { transform: scale(.94); }
+.pill.credits .gem { width: 18px; height: 18px; flex: none; }
+#credits-value { min-width: 1ch; font-variant-numeric: tabular-nums; }
+#credits-value:empty { display: none; }   /* a guest, or no answer yet: the gem alone */
+.pill.credits.bump { animation: credits-bump .5s ease-out; }
+@keyframes credits-bump { 30% { transform: scale(1.14); } 100% { transform: scale(1); } }
+/* On a small phone the top bar is full: the logo gives way before anything else does. */
+@media (max-width: 360px) { #topbar:has(#credits-pill:not([hidden])) #logo { display: none; } }
 #cash.bump { animation: bump .25s; }
 @keyframes bump { 50% { transform: scale(1.12); } }
 /* saved or not: quieter than the chip beside it */
@@ -366,6 +381,36 @@ button.row:hover { background: #243040; }
 .r-lock { flex: none; color: var(--muted); font-size: 1rem; margin-top: 7px; }
 .r-bar { display: block; height: 4px; margin-top: 5px; border-radius: 2px; background: rgba(255, 255, 255, .14); overflow: hidden; }
 .r-bar i { display: block; height: 100%; border-radius: 2px; background: var(--yellow); }
+/* the credits store: rows like the yard list, a price on the right; what is owned is quiet, what is short says so */
+#store .r-icon { color: #c9b8ff; }
+.r-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-left: auto; }
+.r-price { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: .875rem; color: #e4dcff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.r-price .gem { width: 14px; height: 14px; }
+.row.owned { background: transparent; }
+.row.owned .r-price { color: var(--green); }
+.row.short .r-price { color: var(--muted); }
+.row.short .r-bar i { background: #8f6bff; }
+.store-btn {
+  flex: none; pointer-events: auto; min-width: 64px; height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(143, 107, 255, .7); background: #6a4fd6; color: #fff; font: inherit; font-size: .8125rem; font-weight: 700;
+}
+.store-btn.confirm { background: var(--green); border-color: #fff; color: #10151c; }
+.store-btn:disabled { background: transparent; color: var(--muted); border-color: var(--glass-border); cursor: default; }
+.store-head { font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 2px 0; }
+.store-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.store-choice {
+  pointer-events: auto; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 99px;
+  border: 1px solid var(--glass-border); background: rgba(0, 0, 0, .25); color: var(--text); font: inherit; font-size: .75rem; font-weight: 600;
+}
+.store-choice[aria-pressed="true"] { border-color: #c9b8ff; background: rgba(143, 107, 255, .3); }
+.store-choice i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .5); }
+.store-form { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; border: 1px dashed rgba(143, 107, 255, .55); }
+.store-form label { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; font-weight: 600; color: var(--muted); }
+.store-form input { height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--glass-border); background: rgba(0, 0, 0, .3); color: var(--text); font: inherit; font-size: .9375rem; }
+.store-msg { font-size: .8125rem; line-height: 1.4; text-align: center; padding: 2px 6px; }
+.store-msg[hidden] { display: none; }
+.store-msg.bad { color: var(--red); }
+.store-msg.good { color: var(--green); }
 .r-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .r-title { font-size: .90625rem; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
 .r-sub { font-size: .75rem; font-weight: 400; color: var(--muted); line-height: 1.3; }

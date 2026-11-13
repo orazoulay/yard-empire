@@ -156,6 +156,11 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     const r = await asPlayer('GET', '/rest/v1/profiles?select=id,username,role,status,listed,created_at&limit=1');
     return r.ok ? { ok: true, row: Array.isArray(r.data) ? r.data[0] || null : null } : { ok: false, r };
   }
+  /** One change to credits. An answer the function gave on purpose (a refusal with its words) is passed on as it came. */
+  async function creditsCall(body) {
+    const r = await asPlayer('POST', '/functions/v1/credits', body);
+    return r.ok || (r.status >= 400 && r.status < 500 && r.data?.code) || r.status === 0 ? r : fail(r);
+  }
   const board = period => (session ? asPlayer : (m, p, b) => send(m, p, b, { as: 'visitor' }))('POST', '/rest/v1/rpc/leaderboard', { period: period === 'week' ? 'week' : 'all' });
 
   const routes = {
@@ -302,6 +307,12 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
         leaderboard: row ? { value: row.value, stars: row.stars, yards: row.yards, heldBack: row.suspect, savedAt: row.updated_at } : null,
       });
     },
+    // Credits (supabase/migrations/20261113000000_credits.sql): read with the player's own pass, changed only through
+    // the `credits` Edge Function. A refusal comes back as it is (409 short, 404 unknown...): the store shows its words.
+    async 'GET credits'() { const r = await asPlayer('POST', '/rest/v1/rpc/credits_state', {}); return r.ok ? r : fail(r); },
+    async 'POST credits/buy'({ item, key }) { return creditsCall({ action: 'buy', item, key }); },
+    async 'POST credits/claim'({ task }) { return creditsCall({ action: 'claim', task }); },
+    async 'POST credits/grant'({ username, amount, note, key }) { return creditsCall({ action: 'grant', username, amount, note, key }); },
     async 'GET leaderboard'() { const r = await board('all'); return r.ok ? r : fail(r); },
     async 'GET leaderboard?period=week'() { const r = await board('week'); return r.ok ? r : fail(r); },
     async 'POST leaderboard'({ listed }) {

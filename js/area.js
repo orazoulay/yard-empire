@@ -151,7 +151,10 @@ export class Area {
       drawn.push({ side, x1, z1, x2, z2 });
       runs.push(...fenceRuns([x1, z1, x2, z2], [g, way].filter(o => o && o.side === side).map(o => ({ at: o.at, half: o.half ?? GATE_HALF }))));
     }
-    buildFence(this.group, runs, this.look.fence);   // rails, pickets, a wall, railings, mesh or glass: by the yard's look
+    // rails, pickets, a wall, railings, mesh or glass: by the yard's look, or the player's Fence choice (bought with credits)
+    this.fenceRuns = runs; this.fenceGroup = new THREE.Group(); this.group.add(this.fenceGroup);
+    this.fenceKind = this.game.fenceKind?.() || this.look.fence;
+    buildFence(this.fenceGroup, runs, this.fenceKind);
 
     this.lampSpots = addFenceLamps(this.game.scene, b, drawn, [g, way].filter(Boolean), GATE_HALF + 2.4);   // clear of the gates and of their signposts
     if (way) {   // the signpost beside the opening says where it leads
@@ -185,6 +188,15 @@ export class Area {
       post.position.set(gg.nx !== 0 ? gg.x : gg.x - along, 0, gg.nx !== 0 ? gg.z - along : gg.z);
       this.group.add(post);
     }
+  }
+
+  /** Draw the fence again in another kind ('' for the yard's own). Only the fence: gates, lamps and signposts stay. */
+  setFence(kind) {
+    const want = kind || this.look.fence;
+    if (!this.fenceGroup || want === this.fenceKind) return;
+    for (const o of [...this.fenceGroup.children]) { this.fenceGroup.remove(o); o.geometry?.dispose(); }
+    this.fenceKind = want;
+    buildFence(this.fenceGroup, this.fenceRuns, want);
   }
 
   /**

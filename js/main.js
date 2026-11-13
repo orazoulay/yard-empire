@@ -38,6 +38,10 @@ import { initPwa } from './pwa.js';
 import { initNative } from './native.js';
 import { Account } from './account.js';
 import { CLOUD } from './config.js';
+import { Credits } from './credits.js';           // credits: the server's answer about this player, kept in memory only
+import { bindStore } from './credits-ui.js';
+import { helperChores } from './sim/helpers.js';
+import { Pet } from './pets.js';
 import { supabaseTransport } from './cloud.js';
 import { bindAccountUi } from './account-ui.js';
 import { blankSave, logKey } from './sim/sync.js';
@@ -107,6 +111,9 @@ class Game {
 
     // The building site's footprints are asked for while the yards are built (their worn paths go around what stands in the way), so they exist first.
     this.siteRects = []; this.sitePart = 0; this.onSite = false; this.siteBusy = 0; this.siteGiven = -1;
+    // Credits (js/credits.js): owned only once the server says so in this visit. Built before the yards, which ask it for their fence.
+    this.credits = new Credits(account, { offered: !!CLOUD.url });
+    this.fenceKind = () => this.credits.look('fence');
     // Areas + the doors between them
     this.areas = AREAS.map((cfg, i) => new Area(this, cfg, AREAS.slice(0, i)));
     this.doors = [];
@@ -126,6 +133,7 @@ class Game {
     this.syncSite();
 
     this.player = new Character(scene, { pack: true });
+    this.pet = new Pet(scene);   // the Yard Dog, when the server says it is owned
     this.playerArea = this.areas[0];
     this.bubble = this.labels.add('bubble', '', () => this.player.headPos);
     this.guide = new Guide(scene);
@@ -175,6 +183,8 @@ class Game {
     this.hqOpen = false;
     this.hq = new Headquarters(this);
     this.ui = new YardUi(this, new Pulse(scene));   // yard interface: needs the HUD, the settings, the sound and the Headquarters above
+    this.store = bindStore(this);                      // the credit balance in the top bar, and the store behind it
+    this.credits.onChange(() => this.applyLooks());
     this.watch = new YardWatch(); this.hq.showName();   // more to do: what the Advisor reads, and the company's name in the header
     this.hud.setCash(this.econ.cash, true);
 
@@ -551,8 +561,22 @@ class Game {
     if (!quiet) { this.offerIn = 1; return; }   // look again in a second
     this.offerAccount?.();
   }
+  /** The looks bought with credits, as the server and the player's picks have them: put on, or taken off. */
+  applyLooks() {
+    this.player.dress(this.credits.look('outfit'));
+    const fence = this.credits.look('fence');
+    for (const a of this.areas) if (a.open) a.setFence(fence);
+  }
+  /** Once a second: the helpers bought with credits press the buttons they were bought for (js/sim/helpers.js). */
+  helpers() {
+    for (const d of helperChores(this.company, id => this.credits.owns(id))) {
+      this.afterCompanyAction(d.kind, d.result);
+      this.hud.hint(d.kind === 'send' ? `Site Foreman: ${fmt(d.result)} goods sent to the building site` : `Goal Clerk: +$${fmt(d.result.cash)} collected`, 2600);
+    }
+  }
   companyChores() {
     this.accountOffer();
+    this.helpers();
     this.company.refreshGoals(today());
     this.syncSite();   // cheap: it draws only when the picture changes: a stage finished, a build started, another twentieth of a stage arrived
     this.siteChores();
@@ -736,6 +760,7 @@ class Game {
     const p = this.player;
     p.move(v.x, v.z, v.len, dt, (a, b) => this.clampPlayer(a, b));
     this.playerArea = this.areaAt(p.pos) || this.playerArea;
+    this.pet.update(dt, p, this.credits.owns('dog'));
     // On the building site: the player stands on a foundation, not in it, and a building they walk into opens its front.
     const onSite = p.pos.x > SITE.gate.x && this.company.siteOpen;
     if (onSite || this.onSite) {
@@ -849,5 +874,8 @@ const game = window.game = new Game(account);
 account.onLeave = () => { game.save(); game.noSave = true; };
 game.offerAccount = bindAccountUi(account, { onOpen: () => game.sfx.click() }).offer;
 account.start();
+game.credits.refresh();   // what this player has in credits: asked once the account is known, and again when the connection comes back
+addEventListener('online', () => game.credits.refresh());
+addEventListener('yard:sync', e => { if (e.detail?.ok && !game.credits.online) game.credits.refresh(); });
 initPwa();
 initNative(game);

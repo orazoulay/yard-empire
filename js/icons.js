@@ -27,6 +27,7 @@ const SHAPES = {
   award: [c(12, 9, 5.5), p('M8.6 13.4L7 21l5-2.6 5 2.6-1.6-7.6')],
   star: [p('M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z')],
   check: [p('M5 12.5l4.5 4.5L19 7.5')],
+  gem: [p('M12 3.5l8 5.4-3.2 11H7.2L4 8.9z'), p('M4 8.9h16'), p('M12 3.5L9 8.9l3 11 3-11z')],   // credits, and what they buy
   dot: [c(12, 12, 1.6)],
   // what to do next, on the card at the bottom of the yard
   collect: [p('M12 4v10M8 10l4 4 4-4'), p('M5 16v3.5h14V16')],

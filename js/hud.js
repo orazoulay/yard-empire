@@ -7,7 +7,7 @@ import { Journal, ago, rateText, awayFacts, SHORTCUTS } from './ui-logic.js';
 
 // The icon of a card, by the small heading above its title, when the card does not name one itself.
 const KICKER_ICON = { Unlocked: 'upgrade', 'New area': 'expansion', New: 'businesses', Milestone: 'award', Promoted: 'star', Contract: 'contracts',
-  Achievement: 'award', Goal: 'goals', Tycoon: 'ranking', 'A new start': 'star', Event: 'star', 'Tutorial done': 'check' };
+  Achievement: 'award', Goal: 'goals', Tycoon: 'ranking', 'A new start': 'star', Event: 'star', 'Tutorial done': 'check', Credits: 'gem' };
 const CARD_MS = 3100, CARD_MS_BUSY = 2000;   // how long an unlock card stays; shorter while several more are waiting
 
 const $ = id => document.getElementById(id);
@@ -43,7 +43,7 @@ export class Hud {
     $('obj-show').addEventListener('click', () => this.onShowWay?.());
     $('area-chip').addEventListener('click', () => this.onYardChip?.());
     $('log-btn').addEventListener('click', () => this.showLog());
-    for (const id of ['yards', 'log', 'keys']) {
+    for (const id of ['yards', 'log', 'keys', 'store']) {
       const sheet = $(id);
       $(id + '-close').addEventListener('click', () => this.closeSheet(sheet));
       sheet.addEventListener('click', e => { if (e.target === sheet) this.closeSheet(sheet); });
