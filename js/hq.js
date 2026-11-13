@@ -1124,11 +1124,13 @@ export class Headquarters {
           : state === 'ready' ? this.button_('Start building', 'build-' + b.id, () => this.act('build', () => c.startBuild(b.id) && b), { cls: 'primary' })
             : chip(i > 0 ? `After the ${BUILDS[i - 1].name}` : 'Not yet', '', 'lock')));
     const show = this.button_('Show me the site', 'site-show', () => this.game.showSite());
+    const go = this.button_('Go to the site', 'site-go', () => this.game.goToSite());   // the player stands at the plot's entrance, and can walk into what is being built
     if (!running) {
       const all = list.every(x => x.state === 'done');
       return [
         section('Building site', note(all ? 'Everything here is built. The new quarter stands, and it stays when you sell the company.'
-          : 'Build something bigger than a yard. A build goes up in stages, from goods your yards make: while it runs, the goods a stage needs go to the site instead of being sold.'), show),
+          : 'Build something bigger than a yard. A build goes up in stages, from goods your yards make: while it runs, the goods a stage needs go to the site instead of being sold. You can walk onto the site through the opening in the east fence of the Department Store.'),
+          h('div', { class: 'hq-actions wrap' }, go, show)),
         section('What to build', ...cards),
       ];
     }
@@ -1152,7 +1154,8 @@ export class Headquarters {
         h('div', { class: 'hq-actions wrap' },
           this.switch_('Deliveries to the site', 'site-on', c.site.on, () => { c.setSiteOn(!c.site.on); this.game.save(); this.render(); }),
           this.button_(sendable ? `Send ${fmt(sendable)} from the warehouse` : 'Send from the warehouse', 'site-send', () => this.act('send', () => c.sendToSite()), { disabled: !sendable }),
-          show),
+          go, show),
+        note('The building rises as the goods arrive. Go to the site to watch, and to walk into it while it has no roof.'),
         note(c.site.on ? 'Goods arrive while you play. A rush order is served first, and a contract that needs the same good shares it with the site; time away pays cash as before.'
           : 'Deliveries are stopped: every good is sold as usual, and the site keeps what it has. Goods arrive while you play.')),
       section('Stages', ...stages),

@@ -184,6 +184,17 @@ html.bare #hud, html.bare #labels { visibility: hidden; }
   font-size: .75rem; letter-spacing: .5px; text-shadow: none; padding: 3px 10px; border-radius: 99px;
   background: var(--glass); border: 1px solid var(--glass-border);
 }
+/* the sign over a lot of the building site: the building, its stage and how far it is; on the site, each good too */
+.label.site-sign {
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 150px; max-width: 230px; padding: 6px 11px 7px; border-radius: 10px;
+  background: var(--glass); border: 1px solid var(--glass-border); text-shadow: none; text-align: center;
+}
+.ss-title { font-size: .8125rem; font-weight: 700; color: var(--yellow); letter-spacing: .02em; }
+.ss-sub { font-size: .6875rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.ss-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .16); overflow: hidden; }
+.ss-bar[hidden], .ss-goods[hidden] { display: none; }
+.ss-bar i { display: block; height: 100%; border-radius: 2px; background: var(--yellow); transition: width .4s; }
+.ss-goods { font-size: .6875rem; font-weight: 500; color: var(--muted); white-space: pre-line; line-height: 1.35; font-variant-numeric: tabular-nums; }
 /* near the player a machine's label also shows the batch in work and what waits in and out */
 .label.station-name .s-state { display: none; }
 .label.station-name.near { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 10px 5px; border-radius: 10px; }

@@ -56,13 +56,14 @@ export function addLamp(scene, x, z, nx, nz) {
  * @param clear  how far from the middle of the gate a lamp must keep
  * @returns where they stand, as stretches of fence ({ side, at, half }) for other things to keep clear of
  */
-export function addFenceLamps(scene, bounds, sides, gate, clear) {
+export function addFenceLamps(scene, bounds, sides, gates, clear) {
   const cx = (bounds.minX + bounds.maxX) / 2, cz = (bounds.minZ + bounds.maxZ) / 2, taken = [];
   for (const { side, x1, z1, x2, z2 } of sides) {
     const alongX = side === 'n' || side === 's';
     for (const t of [0.25, 0.75]) {
       let x = x1 + (x2 - x1) * t, z = z1 + (z2 - z1) * t;
-      if (gate && gate.side === side) {
+      for (const gate of [].concat(gates || [])) {   // one gate or several: a lamp never stands in an opening
+        if (!gate || gate.side !== side) continue;
         const along = alongX ? x : z, off = along - gate.at;
         if (Math.abs(off) < clear) { const moved = gate.at + (off < 0 ? -clear : clear); if (alongX) x = moved; else z = moved; }
       }

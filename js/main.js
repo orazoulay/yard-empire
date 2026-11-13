@@ -15,7 +15,7 @@ import { Economy } from './sim/economy.js';
 import { Company } from './sim/company.js';
 import { Headquarters } from './hq.js';
 import { RANKS, MEASURES, PRESTIGE, milestoneText } from './data/company.js';
-import { SITE } from './data/builds.js';
+import { SITE, BUILDS } from './data/builds.js';
 import { TUNING } from './data/tuning.js';
 import { chooseJob, busiestMachine, playerDest } from './sim/jobs.js';
 import { AREAS, ITEMS, RECIPES, BASE_CAPACITY, allUpgrades, gateGeom, reachOf } from './data/areas.js';
@@ -28,7 +28,9 @@ import { Particles } from './particles.js';
 import { Sky } from './sky.js';
 import { Trucks } from './trucks.js';
 import { YardLife } from './yardlife.js';
-import { Site } from './site.js';
+import { Site, SiteSign } from './site.js';
+import { Builders } from './builders.js';
+import { siteWalk, siteBlocks, siteEntrance, insideOf, groundAt, stagePart, siteSign, lotOf } from './sim/site.js';
 import { ZoomControl } from './zoom.js';
 import { View } from './view.js';
 import { RateMeter, offlineEarnings, OFFLINE_MIN_SECONDS, OFFLINE_EFFICIENCY, OFFLINE_CAP_SECONDS } from './sim/offline.js';
@@ -48,6 +50,8 @@ const inRect = (p, r) => p.x >= r.minX && p.x <= r.maxX && p.z >= r.minZ && p.z 
 /** The player's local day number (days since 1970): daily and weekly goals follow it. */
 const today = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
 const SOLD_KEY = 'lumber-tycoon-sold';   // stars of a sale, to celebrate after the reload
+const WALK = siteWalk();                 // the ground of the building site the player may step on, and the passage to it
+const BUSY_FOR = 25;                     // seconds the builders keep working after goods reached the site
 const OFFER_AFTER = 7;                   // seconds from a purchase to the offer of an account: the cards about it come first
 /** True when the straight line from a to b passes through the rectangle r. */
 function crosses(a, b, r) {
@@ -101,6 +105,8 @@ class Game {
     this.chores = 0;   // seconds until the next once-a-second company chores
     this.shownEvent = null;   // the event the player was last told about
 
+    // The building site's footprints are asked for while the yards are built (their worn paths go around what stands in the way), so they exist first.
+    this.siteRects = []; this.sitePart = 0; this.onSite = false; this.siteBusy = 0; this.siteGiven = -1;
     // Areas + the doors between them
     this.areas = AREAS.map((cfg, i) => new Area(this, cfg, AREAS.slice(0, i)));
     this.doors = [];
@@ -115,7 +121,9 @@ class Game {
     for (const a of this.areas) this.econ.areaOpen(a.id) ? a.buildOpen() : a.buildLocked();
     // The building site (js/data/builds.js): the plot and what has been built on it, drawn as the company has it.
     this.buildSite = new Site(scene);
-    this.buildSite.sync(this.company);
+    this.siteSign = new SiteSign(this.labels);
+    this.builders = new Builders(scene);
+    this.syncSite();
 
     this.player = new Character(scene, { pack: true });
     this.playerArea = this.areas[0];
@@ -289,6 +297,8 @@ class Game {
   allowed(p) {
     for (const a of this.areas) if (a.open && inRect(p, a.walkRect)) return true;
     for (const d of this.doors) if (this.econ.has(d.gateId) && inRect(p, d.rect)) return true;
+    // the building site, once it is open: the plot, and the passage from the Department Store through the two openings
+    if (this.company.siteOpen && (inRect(p, WALK.plot) || inRect(p, WALK.door))) return true;
     return false;
   }
   /** Returns where a move from prev to next may end: full move, a slide along a wall, or prev. */
@@ -308,6 +318,7 @@ class Game {
       if (s.type === 'processor') out.push({ minX: s.x - 3.5, maxX: s.x + 3.5, minZ: s.z - 1.4, maxZ: s.z + 3.9 });   // the body, the belt in front of it, and a step of clear ground
       else if (s.type === 'shop') out.push({ minX: s.x - 2.75, maxX: s.x + 2.75, minZ: s.z + 1.45, maxZ: s.z + 3.35 });
     }
+    out.push(...this.siteRects);   // on the building site: finished buildings, and the walls of the one in work
     return (this._blocks = out);
   }
   /** Where the player may step: inside the yards and doors like everyone, and not through a machine or a counter. */
@@ -347,6 +358,8 @@ class Game {
     } });
   }
   waypoint(pos, target) {
+    // From the building site the way to anything in a yard leads out through its opening: first to the plot's side of it, then through.
+    if (this.onSite && pos.x > SITE.gate.x) return pos.x > SITE.plot.minX + 1.4 && Math.abs(pos.z - SITE.gate.at) > 1 ? { x: SITE.plot.minX + 1.4, z: SITE.gate.at } : { x: SITE.gate.x - 1.4, z: SITE.gate.at };
     const A = this.areaAt(pos), B = this.areaAt(target);
     if (!A || !B || A === B) return target;
     const d = this.firstDoor(A.id, B.id);
@@ -475,7 +488,7 @@ class Game {
         card = { icon: '🎯', title: e.period === 'daily' ? 'Daily goal done' : 'Weekly goal done', desc: 'Collect your reward in the Headquarters', kicker: 'Goal' };
         this.sfx.collect();
       } else if (e.type === 'site') {   // the building site (js/data/builds.js): it opened, a stage was finished, a build was finished
-        card = { symbol: 'construction', title: 'The building site is open', desc: 'Build a house from what your yards make. See Construction in your Headquarters.', kicker: 'Building site' };
+        card = { symbol: 'construction', title: 'The building site is open', desc: 'Build a house from what your yards make. See Construction in your Headquarters, or walk in through the opening in the store\'s east fence.', kicker: 'Building site' };
         this.sfx.gate(); this.fx.confetti(60); this.showSite(false);
       } else if (e.type === 'stage') {
         card = { symbol: 'construction', title: e.stage.done, desc: `${e.build.name}: stage ${e.index + 1} of ${e.build.stages.length} is finished`, kicker: 'Building site' };
@@ -541,7 +554,8 @@ class Game {
   companyChores() {
     this.accountOffer();
     this.company.refreshGoals(today());
-    this.buildSite.sync(this.company);   // cheap: it draws only when a stage was finished or a build started
+    this.syncSite();   // cheap: it draws only when the picture changes: a stage finished, a build started, another twentieth of a stage arrived
+    this.siteChores();
     const c = this.company, event = c.eventNow();
     if ((event?.id || '') !== this.shownEvent) {   // say so when an event starts, and once when the game opens during one
       this.shownEvent = event?.id || '';
@@ -595,15 +609,50 @@ class Game {
    *                itself, an open Headquarters stays open and the camera stays where it is.
    */
   showSite(fromHq = true) {
-    this.buildSite.sync(this.company);   // what the camera is about to show is what the company has now
+    this.syncSite();   // what the camera is about to show is what the company has now
     // Shown by the game itself, the site does not take the camera from an open Headquarters, nor from a new yard that is
     // being shown: the site opens with the last gate, and the yard behind that gate is what the player has just paid for.
-    if (fromHq) this.hq.close(); else if (this.hqOpen || this.reveal) return;
+    // A player who stands on the site is looking at it already.
+    if (fromHq) this.hq.close(); else if (this.hqOpen || this.reveal || this.onSite) return;
     const p = SITE.plot;
     // The camera always shows the same width of ground, so a wide screen shows less depth: there it pulls back further,
     // or the tower at the back of the plot would be cut off.
     const wide = innerWidth > innerHeight;
     this.reveal = { t: 0, dur: 4.2, target: { x: (p.minX + p.maxX) / 2, z: (p.minZ + p.maxZ) / 2 + (wide ? 2 : 0) }, zoom: wide ? 1.75 : 0.55 };
+  }
+
+  /**
+   * The site as the company has it now: its picture, and the footprints nobody walks through. The stage in work is
+   * drawn as far as its goods have arrived, and the front wall of a building the player stands in is drawn low.
+   */
+  syncSite() {
+    const c = this.company, p = this.player?.pos;
+    const part = c.site.at ? stagePart(c.siteNeeds()) : 0;
+    const inside = p && this.onSite ? insideOf(c.site, part, p.x, p.z) : '';
+    this.sitePart = part;
+    if (!this.buildSite.sync(c, part, inside)) return;
+    this.siteRects = c.siteOpen ? siteBlocks(c.site, part) : [];
+    this._blocks = null;
+  }
+  /** Once a second: what the sign over the lot says, and whether the builders have something to do. */
+  siteChores() {
+    const c = this.company, needs = c.siteNeeds(), build = BUILDS.find(b => b.id === c.site.at);
+    this.siteSign.update(siteSign({ site: c.site, needs, open: c.siteOpen, labels: Object.fromEntries(needs.map(g => [g.item, ITEMS[g.item].label])), part: this.sitePart }), this.onSite);
+    const given = needs.reduce((sum, g) => sum + g.have, 0);
+    if (this.siteGiven >= 0 && given > this.siteGiven) this.siteBusy = BUSY_FOR; else if (this.siteBusy > 0) this.siteBusy--;
+    this.siteGiven = build ? given : -1;
+    this.builders.set(build && c.siteOpen ? { lot: lotOf(build), shape: build.shape, working: this.siteBusy > 0, count: this.lowGraphics ? 1 : 2, item: needs.find(g => g.have < g.need)?.item } : null);
+  }
+  /** "Go to the site" in the Headquarters: the player stands just inside the plot's entrance. */
+  goToSite() {
+    if (!this.company.siteOpen) return false;
+    const e = siteEntrance();
+    this.hq.close();
+    this.player.pos.set(e.x, 0, e.z);
+    this.playerArea = this.area(SITE.gate.yard) || this.playerArea;
+    this.camFocus.set(e.x, 0, e.z);
+    this.particles.emit({ x: e.x, y: 0.3, z: e.z }, { count: 18, color: 0xffffff, speed: 4, up: 4, life: 0.6, size: 0.18, spread: 0.8 });
+    return true;
   }
 
   /** Called when a gate is bought: build the new yard and pan the camera over it. */
@@ -687,6 +736,13 @@ class Game {
     const p = this.player;
     p.move(v.x, v.z, v.len, dt, (a, b) => this.clampPlayer(a, b));
     this.playerArea = this.areaAt(p.pos) || this.playerArea;
+    // On the building site: the player stands on a foundation, not in it, and a building they walk into opens its front.
+    const onSite = p.pos.x > SITE.gate.x && this.company.siteOpen;
+    if (onSite || this.onSite) {
+      this.onSite = onSite;
+      p.pos.y = onSite ? groundAt(this.company.site, this.sitePart, p.pos.x, p.pos.z) : 0;
+      this.syncSite();
+    }
 
     if (!this.paused) {
       const workerSpeed = TUNING.workerSpeed * this.company.mods.workerSpeed;
@@ -700,6 +756,7 @@ class Game {
       this.company.tick(dt);
       this.company.runRoutes(dt, route => this.truck(route));
       this.trucks.update(dt);
+      this.builders.update(dt);
       this.chores -= dt;
       if (this.chores <= 0) { this.chores = 1; this.companyChores(); }
       this.celebrate();
@@ -741,7 +798,7 @@ class Game {
       this.objTimer = 0.15;
       this.updateObjectiveCard(obj);
       const i = this.areas.indexOf(this.playerArea);
-      this.hud.setArea(this.playerArea.cfg.name, i + 1, this.areas.length);
+      this.hud.setArea(this.onSite ? 'Building site' : this.playerArea.cfg.name, i + 1, this.areas.length);
     }
 
     // camera: eased follow, with a pan + zoom-out while a new area is revealed

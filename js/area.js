@@ -9,6 +9,8 @@ import { Worker } from './characters.js';
 import { AREAS, gateGeom } from './data/areas.js';
 import { addFenceLamps, addYardProps, makeSignpost } from './scenery.js';
 import { wayAround, wearPaths } from './sim/yard.js';
+import { SITE } from './data/builds.js';
+import { fenceRuns } from './sim/site.js';
 
 export const GATE_HALF = 2.2;
 const SIDES = ['n', 's', 'w', 'e'];
@@ -77,12 +79,17 @@ export class Area {
     return from ? { side: ACROSS[from.gate.side], at: from.gate.at } : null;
   }
 
+  /** The opening in this yard's fence that leads to the building site (js/data/builds.js, SITE.gate), or null: only the Department Store has one. */
+  get siteWay() { return SITE.gate.yard === this.id ? SITE.gate : null; }
+
   /** Things along the fence that fit the yard's trade, kept clear of the gates and of what already stands there. */
   furnish() {
     const b = this.bounds, g = this.cfg.gate, gaps = [...this.lampSpots];   // nothing stands in a lamp post
     if (g) gaps.push({ side: g.side, at: g.at, half: GATE_HALF + 2.8 });               // the gate and its signpost
     const wayIn = this.wayIn;
     if (wayIn) gaps.push({ ...wayIn, half: GATE_HALF + 2.9 });                         // the open leaves of that gate fold back along this side
+    const way = this.siteWay;
+    if (way) gaps.push({ side: way.side, at: way.at, half: way.half + 2.8 });          // the way to the building site and its signpost
     for (const s of this.cfg.stations) {
       if (s.type === 'shop' && b.maxZ - s.z < 7) gaps.push({ side: 's', at: s.x, half: 3.6 });                            // behind the shop's sign
       if (s.type === 'source' && s.prop === 'mound' && s.z - b.minZ < 7) gaps.push({ side: 'n', at: s.x, half: 4.8 });   // the rock reaches the fence
@@ -137,18 +144,21 @@ export class Area {
     const b = this.bounds, g = this.cfg.gate;
     const ends = { n: [b.minX, b.minZ, b.maxX, b.minZ], s: [b.minX, b.maxZ, b.maxX, b.maxZ], w: [b.minX, b.minZ, b.minX, b.maxZ], e: [b.maxX, b.minZ, b.maxX, b.maxZ] };
     const runs = [], drawn = [];
+    const way = this.siteWay;   // the Department Store: an opening toward the building site, always open
     for (const side of SIDES) {
       if (this.sharedWithEarlier(side)) continue;
       const [x1, z1, x2, z2] = ends[side];
       drawn.push({ side, x1, z1, x2, z2 });
-      if (g && g.side === side) {
-        if (side === 'e' || side === 'w') { runs.push([x1, z1, x1, g.at - GATE_HALF]); runs.push([x1, g.at + GATE_HALF, x2, z2]); }
-        else { runs.push([x1, z1, g.at - GATE_HALF, z1]); runs.push([g.at + GATE_HALF, z1, x2, z2]); }
-      } else runs.push([x1, z1, x2, z2]);
+      runs.push(...fenceRuns([x1, z1, x2, z2], [g, way].filter(o => o && o.side === side).map(o => ({ at: o.at, half: o.half ?? GATE_HALF }))));
     }
     buildFence(this.group, runs, this.look.fence);   // rails, pickets, a wall, railings, mesh or glass: by the yard's look
 
-    this.lampSpots = addFenceLamps(this.game.scene, b, drawn, g, GATE_HALF + 2.4);   // clear of the gate and of its signpost
+    this.lampSpots = addFenceLamps(this.game.scene, b, drawn, [g, way].filter(Boolean), GATE_HALF + 2.4);   // clear of the gates and of their signposts
+    if (way) {   // the signpost beside the opening says where it leads
+      const post = makeSignpost('Building site', ARROW[way.side]);
+      post.position.set(b.maxX, 0, way.at - way.half - 1.1);
+      this.group.add(post);
+    }
 
     if (g) { // a gate of two leaves across the opening, shut until the gate is bought; wood or steel, to go with the fence
       const gg = gateGeom(b, g), bar = new THREE.Group(), H = GATE_HALF, paint = gatePaint(this.look.fence);

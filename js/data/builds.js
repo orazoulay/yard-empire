@@ -24,6 +24,9 @@ export const SITE = {
   surplus: ['glass', 'tool', 'cell', 'gem', 'ring'],
   // The plot, east of the Department Store. The camera looks north, so ground south of a yard is behind it.
   plot: { minX: 92, maxX: 116, minZ: 99, maxZ: 123 },
+  // The way in: an opening in the east fence of the Department Store (the fence stands at x) and one opposite it in the
+  // plot's own fence, at this z, between the tower's lot and the house's. half: half the width of the opening.
+  gate: { yard: 'store', side: 'e', x: 90, at: 110, half: 2.2 },
 };
 
 export const BUILDS = [
