@@ -42,6 +42,18 @@ function pageLink() {
   return l && h?.replaceState ? { hash: l.hash, search: l.search, clear: query => h.replaceState(h.state, '', l.pathname + (query ? '' : l.search)) } : null;
 }
 
+/**
+ * The game's own address, for the link in an email to come back to. Without it Supabase goes by where the request
+ * came from, and a browser only tells it the site (https://name.github.io/), not the folder the game is in: the
+ * link then ended on the host's "not found" page. Empty in the Android app, whose address is the phone's own, and
+ * outside a browser; Supabase then uses the address set in the project.
+ */
+function pageHome() {
+  const l = globalThis.location;
+  if (!l || !/^https?:$/.test(l.protocol || '') || globalThis.Capacitor?.isNativePlatform?.()) return '';
+  return l.origin + String(l.pathname || '/').replace(/[^/]*$/, '');
+}
+
 /** Supabase's own error texts, in the game's words. */
 function plain(status, data) {
   const text = String(data?.msg || data?.error_description || data?.message || data?.error || '');
@@ -62,11 +74,13 @@ function plain(status, data) {
 
 /**
  * @param cfg    { url, key }: the project's address and its public key
- * @param deps   { fetch, storage, now, link }: replaced in tests. `link` is { hash, search, clear(query) }: the page's address, where an email link arrives
+ * @param deps   { fetch, storage, now, link, home }: replaced in tests. `link` is { hash, search, clear(query) }: the page's address, where an email
+ *               link arrives. `home` is the game's own address, where such a link is asked to come back to
  * @returns call(method, path, body, { timeout, keepalive }) -> { status, ok, data }; never throws, status 0 = no connection
  */
-export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), storage = globalThis.localStorage, now = () => Date.now(), link = pageLink() } = {}) {
+export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), storage = globalThis.localStorage, now = () => Date.now(), link = pageLink(), home = pageHome() } = {}) {
   const base = cfg.url.replace(/\/+$/, '');
+  const back = home ? '?redirect_to=' + encodeURIComponent(home) : '';   // on the requests that make Supabase send an email with a link
   let session = read(storage, SESSION_KEY);   // { access, refresh, expires (seconds), email }
   const keep = s => { session = s; write(storage, SESSION_KEY, s); };
   const fromTokens = d => ({ access: d.access_token, refresh: d.refresh_token, expires: Math.floor(now() / 1000) + (d.expires_in || 3600), email: d.user?.email || session?.email });
@@ -175,7 +189,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       const free = await send('POST', '/rest/v1/rpc/username_free', { name: String(username || '') }, { as: 'visitor' });
       if (free.status === 0) return fail(free);
       if (free.ok && free.data === false) return { status: 409, ok: false, data: { error: 'Username must be 3 to 20 letters, numbers or underscores, and not taken.' } };
-      const r = await send('POST', '/auth/v1/signup', { email, password, data: { username } }, { as: 'visitor' });
+      const r = await send('POST', '/auth/v1/signup' + back, { email, password, data: { username } }, { as: 'visitor' });
       if (!r.ok) return fail(r);
       // Where emails are confirmed, Supabase answers a sign-up for an email that already has an account as if it were new,
       // only with no way of signing in listed, and sends nothing: waiting for that email would never end.
@@ -220,7 +234,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
      * the same either way, so the form cannot be used to find out who has an account.
      */
     async 'POST password/forgot'({ email }) {
-      const r = await send('POST', '/auth/v1/recover', { email }, { as: 'visitor' });
+      const r = await send('POST', '/auth/v1/recover' + back, { email }, { as: 'visitor' });
       if (r.status === 0 || r.status === 429) return fail(r);
       write(storage, RESET_KEY, String(email || '').trim().toLowerCase());   // so the link in that email may sign this device in
       return good({ ok: true });
