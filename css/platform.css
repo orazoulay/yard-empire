@@ -1,0 +1,58 @@
+/* The platform's own pieces on the game page: the status line (js/notice.js) and the "Something went wrong"
+   sheet (js/errors.js). Those modules link this file themselves; index.html does not.
+   It wears the game's look through the tokens of css/style.css. Each token is repeated here as a fallback,
+   because the sheet has to be readable even when the thing that went wrong is the main stylesheet. */
+
+/* ---------- status line ---------- */
+/* Sits just above the objective card, under the sheets (z-index 20), so it never covers a screen the player has opened. */
+.ye-notice {
+  position: fixed; left: 50%; bottom: calc(clamp(10px, 3vw, 18px) + env(safe-area-inset-bottom, 0px) + 78px); transform: translateX(-50%);
+  z-index: 15; display: flex; align-items: center; gap: 10px; width: max-content; max-width: calc(100vw - 2 * clamp(10px, 3vw, 18px));
+  min-height: 40px; padding: 5px 6px 5px 12px; border-radius: 10px;
+  background: var(--glass, rgba(14, 19, 25, .86)); border: 1px solid var(--glass-border, rgba(255, 255, 255, .15));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .2); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  color: var(--text, #f1f3f6); font: 600 13px/1.35 var(--font, "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  animation: ye-rise .2s ease-out;
+}
+.ye-notice[hidden] { display: none; }
+.ye-notice-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted, #a7b0bd); }
+.ye-notice[data-tone="gold"] .ye-notice-dot { background: var(--yellow, #e3b341); box-shadow: 0 0 0 3px rgba(227, 179, 65, .22); }
+.ye-notice[data-tone=""] .ye-notice-dot { display: none; }
+.ye-notice-text { min-width: 0; padding: 4px 6px 4px 0; }
+.ye-notice-btn {
+  flex: none; min-height: 34px; padding: 0 14px; border-radius: 8px; border: 0; cursor: pointer;
+  background: var(--text, #f1f3f6); color: #10151c; font: inherit;
+}
+.ye-notice-btn:hover { background: #fff; }
+.ye-notice-btn[hidden] { display: none; }
+.ye-notice-btn:focus-visible, .ye-oops-btn:focus-visible, .ye-oops-details:focus-visible { outline: 2px solid var(--yellow, #e3b341); outline-offset: 2px; }
+@keyframes ye-rise { from { transform: translate(-50%, 8px); opacity: 0; } }
+
+/* ---------- "Something went wrong" ---------- */
+.ye-oops {
+  width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); padding: 18px; overflow-y: auto;
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, .15)); border-radius: var(--radius, 12px);
+  background: #141a23; color: var(--text, #f1f3f6); box-shadow: 0 16px 48px rgba(0, 0, 0, .45);
+  font-family: var(--font, "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+}
+.ye-oops[open] { display: flex; flex-direction: column; gap: 8px; }
+.ye-oops::backdrop { background: rgba(5, 8, 12, .65); }
+.ye-oops h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.01em; line-height: 1.25; }
+.ye-oops p { margin: 0 0 4px; font-size: 14px; font-weight: 400; line-height: 1.45; color: var(--muted, #a7b0bd); }
+.ye-oops-details {
+  margin: 0 0 4px; max-height: 132px; padding: 10px; overflow: auto; border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .09); background: #0e1319; color: var(--muted, #a7b0bd);
+  font: 400 11.5px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+  -webkit-user-select: text; user-select: text;   /* the page turns selection off for the game; here it is the point */
+}
+.ye-oops-btn {
+  min-height: 44px; border-radius: 10px; border: 1px solid var(--glass-border, rgba(255, 255, 255, .15)); cursor: pointer;
+  background: var(--raised, #1c2531); color: var(--text, #f1f3f6); font-family: inherit; font-size: 15px; font-weight: 600;
+}
+.ye-oops-btn:hover { background: #243040; }
+.ye-oops-btn.primary { background: var(--text, #f1f3f6); color: #10151c; border-color: transparent; }
+.ye-oops-btn.primary:hover { background: #fff; }
+.ye-oops-btn.quiet { background: none; border-color: transparent; color: var(--muted, #a7b0bd); }
+.ye-oops-btn.quiet:hover { background: var(--raised, #1c2531); color: var(--text, #f1f3f6); }
+
+@media (prefers-reduced-motion: reduce) { .ye-notice { animation: none; } }

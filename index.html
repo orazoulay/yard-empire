@@ -2,24 +2,293 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-NfHJr+xcDJiAGqHYgFEaR5vX+0YDa2Tbke39iP8L6uY='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://mrxszsbwtsnhmfufyjmt.supabase.co; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0e1319">
+  <meta name="description" content="Saw logs, sell planks, open 20 yards and run the company behind them.">
   <title>Yard Empire</title>
-  <meta name="description" content="The public pages of the game Yard Empire: its privacy policy and how to delete an account.">
-  <link rel="stylesheet" href="legal/legal.css">
+  <!-- install on a phone: manifest for Android and desktop, the apple-* tags for iPhone and iPad -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Yard Empire">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- the font and three.js are packed with the game: nothing is loaded from another site -->
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.js" } }
+  </script>
 </head>
 <body>
-  <header>
-    <a class="brand" href="./">YARD <span>EMPIRE</span></a>
-    <nav><a href="legal/privacy.html">Privacy policy</a><a href="legal/delete-account.html">Delete your account</a></nav>
-  </header>
+  <canvas id="game"></canvas>
+  <div id="labels"></div>
 
-  <h1>Yard Empire</h1>
-  <p>Yard Empire is a game about building yards and a company. These are its public pages.</p>
+  <div id="hud">
+    <!-- Two rows: the name and the buttons, then the yard chip and the quiet things (saved or not, the log). -->
+    <header id="topbar">
+      <div class="top-row">
+        <div id="logo"><span class="top">YARD</span><span class="bottom">EMPIRE</span></div>
+        <div class="top-main">
+          <div id="cash" class="pill">
+            <svg class="bill" viewBox="0 0 32 20" aria-hidden="true"><rect x="1" y="1" width="30" height="18" rx="3" fill="#3ec25e" stroke="#1f8c3a" stroke-width="2"/><circle cx="16" cy="10" r="4.5" fill="none" stroke="#1f8c3a" stroke-width="2"/></svg>
+            <span class="cash-col"><span id="cash-value">0</span><span id="cash-rate" hidden></span></span>
+          </div>
+          <button id="hq-btn" class="icon-btn hq-open" aria-label="Business Headquarters" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 2h4a2 2 0 0 1 2 2v2h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4V4a2 2 0 0 1 2-2zm0 4h4V4h-4v2zm-6 6v2h7v-1h2v1h7v-2H4z"/></svg>
+            <span id="hq-dot" class="dot" hidden></span>
+          </button>
+          <button id="settings-btn" class="icon-btn" aria-label="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.620-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="top-row">
+        <button id="area-chip" class="pill small" aria-haspopup="dialog" aria-label="Go to a yard"><span class="dot"></span><span id="area-name">Sawmill Yard</span><span id="area-count" class="muted">1/2</span></button>
+        <div class="top-sub">
+          <div id="save-status" class="status" hidden><span id="save-icon" class="s-icon"></span><span id="save-text"></span></div>
+          <button id="log-btn" class="icon-btn mini" aria-haspopup="dialog" aria-label="What happened"><span id="log-icon" class="s-icon"></span><span id="log-dot" class="badge" hidden></span></button>
+        </div>
+      </div>
+    </header>
 
-  <h2>Pages</h2>
-  <ul>
-    <li><a href="legal/privacy.html">Privacy policy</a>: what the game keeps about you, why, and how to have it removed.</li>
-    <li><a href="legal/delete-account.html">Delete your account</a>: remove your account and everything stored for it. You do not need the game installed.</li>
-  </ul>
+    <div id="unlock" class="card" role="status">
+      <div class="u-icon" id="unlock-icon"></div>
+      <div class="u-text"><div class="u-kicker">Unlocked</div><div class="u-title" id="unlock-title"></div><div class="u-desc" id="unlock-desc"></div></div>
+      <div class="u-more" id="unlock-more" hidden></div>
+    </div>
+
+    <footer id="objective" class="card">
+      <button id="obj-show" class="o-main" aria-label="Show the way">
+        <span class="o-icon" id="obj-icon"></span>
+        <span class="o-body">
+          <span class="o-step" id="obj-step"></span>
+          <span class="o-text" id="obj-text">Collect logs</span>
+          <span class="o-progress">
+            <span class="bar"><span class="fill" id="obj-fill"></span></span>
+            <span class="o-sub" id="obj-sub"></span>
+          </span>
+        </span>
+      </button>
+      <button id="skip-tutorial" class="text-btn">Skip</button>
+    </footer>
+  </div>
+
+  <!-- A line of help above the objective card. Outside the HUD, so it can still speak while the HUD is hidden. -->
+  <div id="hint" class="pill small" role="status" hidden></div>
+  <div id="joystick"><div id="joystick-knob"></div></div>
+  <div id="fx"></div>
+
+  <div id="settings" class="sheet-backdrop" hidden>
+    <div class="sheet card tall" role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="sheet-title">Settings</div>
+      <div class="sheet-scroll">
+        <section class="sheet-group" aria-labelledby="grp-sound">
+          <h3 id="grp-sound" class="group-title">Sound</h3>
+          <div class="vol">
+            <button id="btn-sound" class="vol-toggle" aria-pressed="true">Sound</button>
+            <input id="vol-sound" type="range" min="0" max="100" step="5" value="100" aria-label="Sound volume">
+            <output id="vol-sound-val" for="vol-sound">100%</output>
+          </div>
+          <div class="vol">
+            <button id="btn-music" class="vol-toggle" aria-pressed="true">Music</button>
+            <input id="vol-music" type="range" min="0" max="100" step="5" value="100" aria-label="Music volume">
+            <output id="vol-music-val" for="vol-music">100%</output>
+          </div>
+          <button id="btn-haptics" class="sheet-btn toggle">Vibration: On</button>
+        </section>
+        <section class="sheet-group" aria-labelledby="grp-display">
+          <h3 id="grp-display" class="group-title">Display</h3>
+          <button id="btn-graphics" class="sheet-btn">Graphics: Auto</button>
+          <button id="btn-motion" class="sheet-btn toggle">Reduce motion: Off</button>
+          <button id="btn-text" class="sheet-btn toggle">Larger text: Off</button>
+          <button id="btn-fullscreen" class="sheet-btn">Fullscreen</button>
+          <button id="btn-bare" class="sheet-btn">Hide the interface</button>
+        </section>
+        <section class="sheet-group" aria-labelledby="grp-game">
+          <h3 id="grp-game" class="group-title">Game</h3>
+          <button id="btn-tutorial" class="sheet-btn">Replay tutorial</button>
+          <button id="btn-keys" class="sheet-btn">Keyboard shortcuts</button>
+          <button id="btn-reset" class="sheet-btn danger">Reset progress</button>
+          <div id="game-version" class="sheet-note small" hidden></div>
+        </section>
+        <section class="sheet-group" aria-labelledby="grp-account">
+          <h3 id="grp-account" class="group-title">Account</h3>
+          <div id="save-note" class="sheet-note"></div>
+          <button id="btn-account" class="sheet-btn account" hidden></button>
+          <button id="btn-install" class="sheet-btn install" hidden>Install app</button>
+          <div id="ios-install" class="sheet-note" hidden>To install on iPhone: tap <b>Share</b>, then <b>Add to Home Screen</b>.</div>
+          <a id="link-privacy" class="sheet-btn link" href="legal/privacy.html" target="_blank" rel="noopener">Privacy policy</a>
+        </section>
+      </div>
+      <button id="btn-close" class="sheet-btn primary">Back to the yard</button>
+    </div>
+  </div>
+
+  <div id="account" class="sheet-backdrop" hidden>
+    <div class="sheet card account" role="dialog" aria-modal="true" aria-label="Account">
+      <form id="acc-form" novalidate>
+        <div class="sheet-title">Save your progress</div>
+        <div class="sheet-note">An account keeps your yards safe and lets you play on any device.</div>
+        <div class="seg">
+          <button type="button" id="acc-tab-new" class="on">Create account</button>
+          <button type="button" id="acc-tab-in">Sign in</button>
+        </div>
+        <label class="field" id="acc-email-field" hidden><span>Email</span>
+          <input id="acc-email" name="email" type="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="254">
+        </label>
+        <label class="field" id="acc-name-field"><span>Username</span>
+          <input id="acc-name" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="20" required>
+        </label>
+        <label class="field"><span>Password</span>
+          <span class="pw"><input id="acc-pass" name="password" type="password" autocomplete="new-password" maxlength="200" required><button type="button" class="pw-toggle" data-for="acc-pass" aria-pressed="false" aria-label="Show the password">Show</button></span>
+        </label>
+        <div class="pw-meter" id="acc-strength" hidden><span class="pw-bars"><i></i><i></i><i></i></span><span class="pw-word"></span></div>
+        <div class="sheet-note small" id="acc-hint">3 to 20 letters, numbers or underscores. Password of 8 characters or more.</div>
+        <div class="sheet-error" id="acc-error" role="alert" hidden></div>
+        <button type="submit" id="acc-submit" class="sheet-btn primary">Create account</button>
+        <button type="button" id="acc-guest" class="sheet-btn">Keep playing as guest</button>
+        <button type="button" id="acc-forgot" class="text-btn" hidden>Forgot password?</button>
+      </form>
+      <form id="acc-reset-form" novalidate hidden>
+        <div class="sheet-title">Set a new password</div>
+        <div class="sheet-note" id="acc-reset-note">Enter the email of your account. We send a code to it.</div>
+        <label class="field"><span>Email</span>
+          <input id="acc-reset-email" type="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="254" required>
+        </label>
+        <div id="acc-reset-step2" class="acc-step" hidden>
+          <label class="field"><span>Code from the email</span>
+            <input id="acc-reset-code" inputmode="numeric" autocomplete="one-time-code" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="12">
+          </label>
+          <label class="field"><span>New password</span>
+            <span class="pw"><input id="acc-reset-pass" type="password" autocomplete="new-password" maxlength="200"><button type="button" class="pw-toggle" data-for="acc-reset-pass" aria-pressed="false" aria-label="Show the password">Show</button></span>
+          </label>
+        </div>
+        <div class="sheet-error" id="acc-reset-error" role="alert" hidden></div>
+        <button type="submit" id="acc-reset-submit" class="sheet-btn primary">Send the code</button>
+        <button type="button" id="acc-reset-back" class="sheet-btn">Back to sign in</button>
+      </form>
+      <div id="acc-me" class="acc-me" hidden>
+        <div class="acc-avatar" id="acc-avatar"></div>
+        <div class="sheet-title" id="acc-user"></div>
+        <div class="sheet-note" id="acc-status" role="status"></div>
+        <a id="acc-admin" class="sheet-btn link" href="admin/" hidden>Open admin portal</a>
+        <button type="button" id="acc-change" class="sheet-btn">Change password</button>
+        <form id="acc-pw-form" novalidate hidden>
+          <label class="field"><span>Current password</span>
+            <span class="pw"><input id="acc-pw-current" type="password" autocomplete="current-password" maxlength="200" required><button type="button" class="pw-toggle" data-for="acc-pw-current" aria-pressed="false" aria-label="Show the password">Show</button></span>
+          </label>
+          <label class="field"><span>New password</span>
+            <span class="pw"><input id="acc-pw-new" type="password" autocomplete="new-password" maxlength="200" required><button type="button" class="pw-toggle" data-for="acc-pw-new" aria-pressed="false" aria-label="Show the password">Show</button></span>
+          </label>
+          <div class="pw-meter" id="acc-pw-strength" hidden><span class="pw-bars"><i></i><i></i><i></i></span><span class="pw-word"></span></div>
+          <div class="sheet-error" id="acc-pw-error" role="alert" hidden></div>
+          <button type="submit" id="acc-pw-submit" class="sheet-btn primary">Save new password</button>
+        </form>
+        <button type="button" id="acc-export" class="sheet-btn">Download my data</button>
+        <button type="button" id="acc-delete" class="sheet-btn danger">Delete my account</button>
+        <form id="acc-del-form" novalidate hidden>
+          <div class="sheet-note small">This removes your account and everything the server keeps for it. It cannot be undone. Type your password to confirm.</div>
+          <label class="field"><span>Password</span>
+            <input id="acc-del-pass" type="password" autocomplete="current-password" maxlength="200" required>
+          </label>
+          <div class="sheet-error" id="acc-del-error" role="alert" hidden></div>
+          <button type="submit" id="acc-del-submit" class="sheet-btn danger confirm">Delete my account for good</button>
+        </form>
+        <button type="button" id="acc-signout" class="sheet-btn danger">Sign out</button>
+        <button type="button" id="acc-close" class="sheet-btn primary">Back to the yard</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="offline" class="sheet-backdrop" hidden>
+    <div class="sheet card offline" role="dialog" aria-modal="true" aria-label="Welcome back">
+      <div class="off-icon" id="off-icon"></div>
+      <div class="sheet-title">Welcome back</div>
+      <div class="off-text">While you were away your workers earned</div>
+      <div class="off-amount">
+        <svg class="bill" viewBox="0 0 32 20" aria-hidden="true"><rect x="1" y="1" width="30" height="18" rx="3" fill="#3ec25e" stroke="#1f8c3a" stroke-width="2"/><circle cx="16" cy="10" r="4.5" fill="none" stroke="#1f8c3a" stroke-width="2"/></svg>
+        <span id="off-amount"></span>
+      </div>
+      <dl class="off-facts">
+        <div><dt>Away for</dt><dd id="off-away"></dd></div>
+        <div><dt>Paid for</dt><dd id="off-time"></dd></div>
+        <div><dt>Paid at</dt><dd id="off-share"></dd></div>
+        <div><dt>Left today</dt><dd id="off-left"></dd></div>
+      </dl>
+      <button id="off-collect" class="sheet-btn primary">Collect</button>
+    </div>
+  </div>
+
+  <div id="hq" class="sheet-backdrop" hidden>
+    <div class="hq card" role="dialog" aria-modal="true" aria-label="Business Headquarters">
+      <header class="hq-head">
+        <div class="hq-rank-icon" id="hq-rank-icon"></div>
+        <div class="hq-head-text">
+          <div class="hq-kicker">Business Headquarters</div>
+          <div class="hq-title" id="hq-rank-name"></div>
+        </div>
+        <div class="pill small hq-cash">
+          <svg class="bill" viewBox="0 0 32 20" aria-hidden="true"><rect x="1" y="1" width="30" height="18" rx="3" fill="#3ec25e" stroke="#1f8c3a" stroke-width="2"/><circle cx="16" cy="10" r="4.5" fill="none" stroke="#1f8c3a" stroke-width="2"/></svg>
+          <span id="hq-cash">0</span>
+        </div>
+        <button id="hq-close" class="icon-btn" aria-label="Close Headquarters">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="hq-xp"><div class="bar"><div class="fill" id="hq-xp-fill"></div></div><div class="hq-sub" id="hq-xp-text"></div></div>
+      <div class="hq-main">
+        <nav id="hq-tabs" class="hq-tabs" role="tablist" aria-label="Headquarters sections"></nav>
+        <div id="hq-body" class="hq-body" role="tabpanel"></div>
+      </div>
+      <div id="hq-toast" class="hq-toast" role="status" aria-live="polite" hidden></div>
+    </div>
+  </div>
+
+  <!-- The yard list, the log and the shortcuts come after the Headquarters, so they open over it. -->
+  <div id="yards" class="sheet-backdrop" hidden>
+    <div class="sheet card tall" role="dialog" aria-modal="true" aria-label="Go to a yard">
+      <div class="sheet-title">Go to a yard</div>
+      <div id="yards-list" class="sheet-scroll rows"></div>
+      <button id="yards-close" class="sheet-btn primary">Back to the yard</button>
+    </div>
+  </div>
+
+  <div id="log" class="sheet-backdrop" hidden>
+    <div class="sheet card tall" role="dialog" aria-modal="true" aria-label="What happened">
+      <div class="sheet-title">What happened</div>
+      <div id="log-list" class="sheet-scroll rows"></div>
+      <button id="log-close" class="sheet-btn primary">Back to the yard</button>
+    </div>
+  </div>
+
+  <div id="keys" class="sheet-backdrop" hidden>
+    <div class="sheet card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div class="sheet-title">Keyboard shortcuts</div>
+      <dl id="keys-list" class="keys-list"></dl>
+      <button id="keys-close" class="sheet-btn primary">Back to the yard</button>
+    </div>
+  </div>
+
+  <div id="loading">
+    <div class="l-logo"><span class="top">YARD</span><span class="bottom">EMPIRE</span></div>
+    <div class="l-load" id="l-load">
+      <div class="l-bar" id="l-bar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="10"><div class="l-fill" id="l-fill"></div></div>
+      <div class="l-text" id="l-text">Loading the game</div>
+      <div class="l-tip" id="l-tip"></div>
+    </div>
+    <div class="l-start" id="l-start" hidden>
+      <p class="l-pitch" id="l-pitch"></p>
+      <button id="l-begin" class="sheet-btn primary">Start</button>
+    </div>
+  </div>
+
+  <!-- The loading screen has a script of its own with no three.js to wait for, so it can speak while the game's files arrive. -->
+  <script type="module" src="js/loading.js"></script>
+  <!-- first, so that it also sees a game file that fails to load -->
+  <script type="module" src="js/errors.js"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
