@@ -1,0 +1,40 @@
+/* The two public pages (privacy, deleting an account), in the game's colours. They stand on their own:
+   one stylesheet, the game's font, and nothing from another site. */
+@import url('../css/fonts.css');
+:root {
+  --bg: #0e1319; --surface: #141a23; --raised: #1c2531; --line: rgba(255, 255, 255, .12);
+  --ink: #f1f3f6; --ink2: #a7b0bd; --gold: #e3b341; --down: #f0706a; --up: #4cc38a;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); color: var(--ink); font: 16px/1.6 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { margin: 0 auto; max-width: 720px; padding: 32px 20px 64px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.brand { font-weight: 800; letter-spacing: .06em; color: var(--gold); text-decoration: none; }
+.brand span { color: #fff; }
+nav a { color: var(--ink2); font-size: 14px; margin-left: 16px; }
+h1 { font-size: 28px; line-height: 1.2; letter-spacing: -.02em; margin: 32px 0 4px; }
+h2 { font-size: 18px; margin: 32px 0 8px; }
+p, li { color: var(--ink2); }
+p { margin: 8px 0; }
+ul { padding-left: 20px; margin: 8px 0; }
+b, strong { color: var(--ink); font-weight: 600; }
+a { color: var(--gold); }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.updated { font-size: 14px; }
+table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-top: 1px solid var(--line); color: var(--ink2); }
+th { color: var(--ink); font-weight: 600; background: var(--surface); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin: 16px 0; }
+form { display: flex; flex-direction: column; gap: 12px; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--ink2); }
+input { height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); color: var(--ink); font: inherit; }
+button { height: 44px; border-radius: 10px; border: 0; font: inherit; font-weight: 600; cursor: pointer; background: var(--down); color: #2a0c0a; }
+button:disabled { opacity: .6; cursor: default; }
+.note { padding: 10px 12px; border-radius: 8px; font-size: 15px; }
+.note[hidden] { display: none; }
+.note.bad { background: rgba(240, 112, 106, .14); border: 1px solid rgba(240, 112, 106, .3); color: #f6a5a0; }
+.note.good { background: rgba(76, 195, 138, .12); border: 1px solid rgba(76, 195, 138, .3); color: var(--up); }
+@media (max-width: 480px) { table, tbody, tr, th, td { display: block; } th { border-top: 1px solid var(--line); } td { border-top: 0; padding-top: 4px; } }
+
+/* Only inside the Android app (legal/app.js) */
+.back { display: inline-block; margin-bottom: 14px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: none; }
