@@ -1,5 +1,6 @@
 // The account sheet: create an account, sign in, change password, sign out. Opened from Settings.
 import { passwordStrength } from './ui-logic.js';
+import { showNotice } from './notice.js';
 
 const $ = id => document.getElementById(id);
 const SEEN_KEY = 'lumber-tycoon-account-seen';
@@ -8,7 +9,7 @@ const SEEN_KEY = 'lumber-tycoon-account-seen';
 export function bindAccountUi(account, { onOpen } = {}) {
   const entry = $('btn-account');
   if (!account.supported) return;   // no account server: the game plays as a guest, with no account buttons
-  const sheet = $('account'), form = $('acc-form'), me = $('acc-me'), error = $('acc-error');
+  const sheet = $('account'), form = $('acc-form'), me = $('acc-me'), error = $('acc-error'), good = $('acc-ok');
   const name = $('acc-name'), pass = $('acc-pass'), submit = $('acc-submit');
   const pwForm = $('acc-pw-form'), pwError = $('acc-pw-error');
   let mode = 'new';
@@ -25,7 +26,7 @@ export function bindAccountUi(account, { onOpen } = {}) {
     $('acc-email-field').hidden = !account.needsEmail;
     $('acc-name-field').hidden = account.needsEmail && mode !== 'new';
     $('acc-forgot').hidden = !(account.needsEmail && mode === 'in');   // a code can only be sent where accounts have an email
-    show(error, '');
+    show(error, ''); show(good, '');
     judge();
   };
   /**
@@ -48,14 +49,14 @@ export function bindAccountUi(account, { onOpen } = {}) {
     }
   };
   /** @param byPlayer  the player asked for the sheet: the first field takes focus. Not when it opens by itself, where a phone keyboard would cover the yard unasked. */
-  const open = (message, byPlayer = false) => {
+  const open = (message, byPlayer = false, goodNews = false) => {
     sheet.hidden = false; account.open = true;
     pwForm.hidden = true; show(pwError, '');
-    if (message) show(error, message);
+    if (message) show(goodNews ? good : error, message);
     onOpen?.();
     if (byPlayer) (account.user ? $('acc-close') : account.needsEmail ? $('acc-email') : name).focus({ preventScroll: true });
   };
-  const close = () => { sheet.hidden = true; account.open = false; pass.value = ''; show(error, ''); hidePasswords(); judge(); if (!account.user) endReset(); };
+  const close = () => { sheet.hidden = true; account.open = false; pass.value = ''; show(error, ''); show(good, ''); hidePasswords(); judge(); if (!account.user) endReset(); };
   /** Runs one request with the button disabled, so a slow network cannot send it twice. */
   const busy = async (button, label, work) => {
     const before = button.textContent;
@@ -100,12 +101,17 @@ export function bindAccountUi(account, { onOpen } = {}) {
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    show(error, '');
+    show(error, ''); show(good, '');
     const r = await busy(submit, 'One moment…', () => {
       const email = $('acc-email').value.trim();
       if (mode === 'new') return account.register(name.value.trim(), pass.value, email);
       return account.signIn(account.needsEmail ? email : name.value.trim(), pass.value);
     });
+    if (r.pending) {   // the account is made; it opens when the link in the email is used. Not an error, and nothing more to create.
+      setMode('in');
+      $('acc-email').value = r.email || ''; pass.value = ''; judge();
+      return show(good, r.error);
+    }
     if (!r.ok) show(error, r.error);   // on success the page reloads into the player's own game
   });
 
@@ -175,5 +181,6 @@ export function bindAccountUi(account, { onOpen } = {}) {
   const flash = account.takeFlash();
   let seen = true;
   try { seen = !!localStorage.getItem(SEEN_KEY); localStorage.setItem(SEEN_KEY, '1'); } catch { /* private mode */ }
-  if (!user && flash) { setMode('in'); open(flash); } else if (!user && !seen) open();
+  if (!user && flash) { setMode('in'); open(flash, false, account.flashGood); } else if (!user && !seen) open();
+  else if (user && flash) showNotice('account', { text: flash, tone: 'gold', seconds: 8 });   // signed in by the link in the email
 }

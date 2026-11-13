@@ -55,6 +55,7 @@ export class Account {
     this.stopped = false;
     this.busy = false;
     this.again = false;       // an upload was asked for while one was on its way
+    this.flashGood = false;   // the message takeFlash() gave was good news
   }
 
   get saveKey() { return saveKey(this.user?.id); }
@@ -74,6 +75,7 @@ export class Account {
     this.supported = true; this.online = true;
     this.user = me.data.user;
     if (me.data.banned) this.flash('This account is suspended.');
+    else if (me.data.note) this.flash(me.data.note, me.data.noteGood === true);   // the player came back through the link in an email
     else if (cached && !this.user) this.flash('You were signed out. Sign in again to keep saving to your account.');
     if (this.user) { write(ID_KEY, this.user); await this.pull(); } else remove(ID_KEY);
     return this;
@@ -131,7 +133,12 @@ export class Account {
   // --- actions from the account sheet: each returns { ok, error? } -------------
   /** @param who  the username, or the email where the backend signs in by email */
   async signIn(who, password) { return this.enter(await this.call('POST', 'login', this.needsEmail ? { email: who, password } : { username: who, password })); }
-  async register(username, password, email) { return this.enter(await this.call('POST', 'register', { username, password, ...(this.needsEmail ? { email } : {}) })); }
+  /** @returns { ok } or, where the email must be confirmed first, { ok: false, pending: true, email, error }: made, but not signed in yet */
+  async register(username, password, email) {
+    const r = await this.call('POST', 'register', { username, password, ...(this.needsEmail ? { email } : {}) });
+    if (r.data?.pending) return { ok: false, pending: true, email: r.data.email || email, error: r.data.error };
+    return this.enter(r);
+  }
 
   /** Forgot password: have a code sent to this email. Only where the backend knows emails (see needsEmail). */
   async forgotPassword(email) {
@@ -196,8 +203,16 @@ export class Account {
     location.reload();
   }
 
-  flash(message) { try { sessionStorage.setItem(FLASH_KEY, message); } catch { /* private mode */ } }
+  /** @param good  good news (the email was confirmed): shown as such, not as a problem */
+  flash(message, good = false) {
+    try { sessionStorage.setItem(FLASH_KEY, message); if (good) sessionStorage.setItem(FLASH_KEY + '-good', '1'); else sessionStorage.removeItem(FLASH_KEY + '-good'); } catch { /* private mode */ }
+  }
   takeFlash() {
-    try { const m = sessionStorage.getItem(FLASH_KEY); sessionStorage.removeItem(FLASH_KEY); return m; } catch { return null; }
+    try {
+      const m = sessionStorage.getItem(FLASH_KEY);
+      this.flashGood = !!m && !!sessionStorage.getItem(FLASH_KEY + '-good');
+      sessionStorage.removeItem(FLASH_KEY); sessionStorage.removeItem(FLASH_KEY + '-good');
+      return m;
+    } catch { return null; }
   }
 }

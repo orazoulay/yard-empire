@@ -462,6 +462,9 @@ html.calm .icon-btn, html.calm .sheet-btn, html.calm #area-chip, html.calm .o-ic
 .sheet-note.small { font-size: .75rem; }
 .sheet-error { padding: 8px 10px; border-radius: 8px; background: rgba(240, 112, 106, .14); border: 1px solid rgba(240, 112, 106, .3); color: #f6a5a0; font-size: .84375rem; font-weight: 500; text-align: center; line-height: 1.35; }
 .sheet-error[hidden] { display: none; }
+/* good news in a form: the account was made and a link is on its way */
+.sheet-ok { padding: 8px 10px; border-radius: 8px; background: rgba(76, 195, 138, .12); border: 1px solid rgba(76, 195, 138, .3); color: #8fe0b6; font-size: .84375rem; font-weight: 500; text-align: center; line-height: 1.35; }
+.sheet-ok[hidden] { display: none; }
 .acc-avatar {
   width: 60px; height: 60px; margin: 0 auto; border-radius: 12px; display: grid; place-items: center;
   background: var(--raised); border: 1px solid rgba(227, 179, 65, .45); color: var(--yellow); font-size: 1.75rem; font-weight: 600;

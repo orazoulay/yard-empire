@@ -11,9 +11,31 @@
 
 const SESSION_KEY = 'yard-empire-session';
 const EARLY = 60;   // refresh the pass this many seconds before it runs out
+const WAITING_KEY = 'yard-empire-awaiting';   // the email this device signed up with and whose confirmation link it is waiting for
+const OLD_LINK = 'That link is too old or was already used. Sign in, or create the account again to get a new link.';
 
 const read = (store, key) => { try { return JSON.parse(store.getItem(key)); } catch { return null; } };
 const write = (store, key, value) => { try { value == null ? store.removeItem(key) : store.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } };
+
+/**
+ * What the link in a Supabase email brought back in the #part of the address: a pass, a problem, or nothing.
+ * @returns {{ access_token, refresh_token, expires_in, type } | { problem: string } | null}
+ */
+export function readLink(hash) {
+  const q = new URLSearchParams(String(hash || '').replace(/^#/, ''));
+  if (q.get('access_token') && q.get('refresh_token')) return { access_token: q.get('access_token'), refresh_token: q.get('refresh_token'), expires_in: Number(q.get('expires_in')) || 3600, type: q.get('type') || '' };
+  if (q.get('error') || q.get('error_code')) return { problem: q.get('error_code') || q.get('error') };
+  return null;
+}
+/** The email a pass was made out to. Only read to compare with the email this device signed up with; the server still checks the pass itself. */
+function emailOf(pass) {
+  try { return String(JSON.parse(atob(pass.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).email || '').toLowerCase() || null; } catch { return null; }
+}
+/** The page's address, where a link from an email arrives. Not there outside a browser. */
+function pageLink() {
+  const l = globalThis.location, h = globalThis.history;
+  return l && h?.replaceState ? { hash: l.hash, clear: () => h.replaceState(h.state, '', l.pathname + l.search) } : null;
+}
 
 /** Supabase's own error texts, in the game's words. */
 function plain(status, data) {
@@ -25,20 +47,41 @@ function plain(status, data) {
   if (/valid email|invalid format|email address .* is invalid/i.test(text)) return 'Enter a valid email address';
   if (/password/i.test(text) && /(at least|characters|weak|short)/i.test(text)) return 'Password must be 8 characters or more';
   if (/different from the old/i.test(text)) return 'The new password must differ from the current one';
+  const wait = /only request this after (\d+) seconds/i.exec(text);
+  if (wait) return `Wait ${wait[1]} seconds, then try again.`;
+  // Supabase's own sender only sends a few emails an hour: "wait a minute" would not be true
+  if (data?.error_code === 'over_email_send_rate_limit' || /email rate limit/i.test(text)) return 'Too many emails were sent in the last hour. Wait a while, then try again.';
   if (status === 429 || /rate limit|too many/i.test(text)) return 'Too many tries. Wait a minute and try again.';
   return data?.error && typeof data.error === 'string' && status !== 500 ? data.error : 'Something went wrong. Try again.';
 }
 
 /**
  * @param cfg    { url, key }: the project's address and its public key
- * @param deps   { fetch, storage, now }: replaced in tests
+ * @param deps   { fetch, storage, now, link }: replaced in tests. `link` is { hash, clear() }: the page's address, where an email link arrives
  * @returns call(method, path, body, { timeout, keepalive }) -> { status, ok, data }; never throws, status 0 = no connection
  */
-export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), storage = globalThis.localStorage, now = () => Date.now() } = {}) {
+export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), storage = globalThis.localStorage, now = () => Date.now(), link = pageLink() } = {}) {
   const base = cfg.url.replace(/\/+$/, '');
   let session = read(storage, SESSION_KEY);   // { access, refresh, expires (seconds), email }
   const keep = s => { session = s; write(storage, SESSION_KEY, s); };
   const fromTokens = d => ({ access: d.access_token, refresh: d.refresh_token, expires: Math.floor(now() / 1000) + (d.expires_in || 3600), email: d.user?.email || session?.email });
+
+  // The player opened the link in the confirmation email and it brought them back here. The pass in the address is
+  // taken only when this device is the one that signed up, with that same email: a link someone else made must not
+  // sign a player in to an account that is not theirs. Either way it leaves the address bar at once.
+  let news = null;       // what 'GET me' tells the player about the link: { note, good, signedIn }
+  const arrived = link ? readLink(link.hash) : null;
+  if (arrived) {
+    try { link.clear(); } catch { /* the address stays; nothing else depends on it */ }
+    const waiting = read(storage, WAITING_KEY), email = arrived.problem ? null : emailOf(arrived.access_token);
+    if (arrived.problem) news = { note: OLD_LINK };
+    else if (waiting && email && waiting === email) {
+      session = null;
+      keep(fromTokens({ ...arrived, user: { email } }));
+      write(storage, WAITING_KEY, null);
+      news = { note: 'Your email is confirmed. You are signed in.', good: true, signedIn: true };
+    } else if (arrived.type === 'signup') news = { note: 'Your email is confirmed. Sign in to continue.', good: true };
+  }
 
   /** One request. `as`: 'player' sends the signed-in player's pass, 'visitor' only the public key. */
   async function send(method, path, body, { as = 'player', timeout = 8000, keepalive = false } = {}) {
@@ -86,6 +129,16 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
   const routes = {
     /** Who is playing. Tells account.js that accounts exist here, and whether the pass on this device is still good. */
     async 'GET me'(body, opts) {
+      const r = await routes.who(body, opts);
+      if (news && r.ok) {   // said once, and truthfully: a pass the server refused did not sign anyone in
+        const refused = news.signedIn && !r.data.user;
+        r.data.note = refused ? OLD_LINK : news.note;
+        r.data.noteGood = !!news.good && !refused;
+        news = null;
+      }
+      return r;
+    },
+    async who() {
       if (!session) return good({ accounts: true, user: null });
       const p = await profile();
       if (!p.ok) return p.r.status === 0 ? { status: 0, ok: false, data: null } : good({ accounts: true, user: null });
@@ -99,8 +152,14 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       if (free.ok && free.data === false) return { status: 409, ok: false, data: { error: 'Username must be 3 to 20 letters, numbers or underscores, and not taken.' } };
       const r = await send('POST', '/auth/v1/signup', { email, password, data: { username } }, { as: 'visitor' });
       if (!r.ok) return fail(r);
+      // Where emails are confirmed, Supabase answers a sign-up for an email that already has an account as if it were new,
+      // only with no way of signing in listed, and sends nothing: waiting for that email would never end.
+      if (!r.data?.access_token && Array.isArray(r.data?.identities) && r.data.identities.length === 0) return { status: 409, ok: false, data: { error: 'That email already has an account. Sign in instead.' } };
       // With "confirm email" on, Supabase creates the account but gives no pass until the link in the email is opened.
-      if (!r.data?.access_token) return { status: 202, ok: false, data: { error: 'Almost done. Open the link we sent to your email, then sign in here.' } };
+      if (!r.data?.access_token) {
+        write(storage, WAITING_KEY, String(email || '').trim().toLowerCase());   // so the link may sign this device in when it comes back
+        return { status: 202, ok: false, data: { pending: true, email, error: 'Almost done. Open the link we sent to your email. It brings you back to the game. If you are not signed in then, sign in here.' } };
+      }
       keep(fromTokens(r.data));
       return good({ user: { id: r.data.user.id, username, role: 'player' } });
     },
@@ -108,6 +167,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       const r = await send('POST', '/auth/v1/token?grant_type=password', { email, password }, { as: 'visitor' });
       if (!r.ok || !r.data?.access_token) return fail(r);
       keep(fromTokens(r.data));
+      write(storage, WAITING_KEY, null);   // signed in by hand: no link is waited for any more
       const p = await profile();
       if (!p.ok || !p.row) { keep(null); return fail(p.ok ? { status: 500, data: null } : p.r); }
       if (p.row.status === 'banned') { keep(null); return { status: 403, ok: false, data: { error: 'This account is suspended.', banned: true } }; }
