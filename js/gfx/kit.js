@@ -106,6 +106,10 @@ export const GEO = {
     s.moveTo(-w / 2 - slant / 2, -h / 2); s.lineTo(w / 2 - slant / 2, -h / 2); s.lineTo(w / 2 + slant / 2, h / 2); s.lineTo(-w / 2 + slant / 2, h / 2); s.closePath();
     return new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false }).translate(0, 0, -depth / 2);
   }),
+  /** A faceted boulder of radius 1, to be stretched: a rock face, a lump of ore. */
+  rock: () => shape('kit-rock', () => new THREE.DodecahedronGeometry(1, 0)),
+  /** A cut stone of radius r, standing on its point. */
+  gem: (r = 1) => shape(`kit-gem|${r}`, () => new THREE.OctahedronGeometry(r, 0)),
   /** Half a drum lying along z: a hood, a curved roof. */
   vault: (r, len, seg = 10, open = false) => shape(`kit-vault|${r}|${len}|${seg}|${open}`, () => new THREE.CylinderGeometry(r, r, len, seg, 1, open, -Math.PI / 2, Math.PI).rotateX(-Math.PI / 2)),
 };
@@ -157,6 +161,12 @@ export function gauge(p, x, y, z, r = 0.12) {
   rod(p, r, 0.06, INK.steel, x, y, z, 'z', STEEL, 12);
   lit(rod(p, r * 0.8, 0.02, 0xf6f3e8, x, y, z + 0.03, 'z', undefined, 12), 0xfff3c8, 0.12);
   block(p, r * 0.1, r * 0.7, 0.01, 0xd63a2f, x + r * 0.15, y + r * 0.2, z + 0.045).rotation.z = -0.6;
+}
+/** A lantern with its middle at (x, y, z): a dark knob and foot around a pane that glows after dark. Returns the pane. */
+export function lantern(p, x, y, z, { glow = 0xffd27a, pane = 0xfff1c2, byDay = 0.08, s = 1 } = {}) {
+  block(p, 0.14 * s, 0.07 * s, 0.14 * s, INK.dark, x, y + 0.165 * s, z);   // small, so the pane shows around it from above
+  block(p, 0.3 * s, 0.05 * s, 0.3 * s, INK.dark, x, y - 0.155 * s, z);
+  return put(p, lit(box(0.28 * s, 0.26 * s, 0.28 * s, pane, { map: null, round: 0.04 * s }), glow, byDay), x, y, z);
 }
 /** Four legs and a top frame: a table, a stand, a gantry. Legs are `post` thick. */
 export function frame(p, w, h, d, color, x, y0, z, { post = 0.12, beam = true, o } = {}) {

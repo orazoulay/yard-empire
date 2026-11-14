@@ -2,10 +2,13 @@
 // its workers wear, the colours of its shop, the belt of its machines and what stands along its fences. Looks only: nothing here is
 // read by the rules. Every yard has an entry of its own; one that is missing falls back to its location.
 
-/** Ground kinds are drawn in js/textures.js (`ground`); `scale` is how many metres one tile of the picture covers. */
+/**
+ * Ground kinds are drawn in js/textures.js (`ground`); `scale` is how many metres one tile of the picture covers.
+ * `laid` marks a floor somebody laid (stone, tile, asphalt, concrete): feet scuff it, they do not tread a track into it.
+ */
 export const GROUNDS = {
-  soil: { scale: 9 }, chips: { scale: 8 }, furrows: { scale: 7 }, gravel: { scale: 6 }, cobble: { scale: 5 }, flags: { scale: 6 },
-  sand: { scale: 9 }, rock: { scale: 9 }, tile: { scale: 4 }, asphalt: { scale: 8 }, concrete: { scale: 7 },
+  soil: { scale: 9 }, chips: { scale: 8 }, furrows: { scale: 7 }, gravel: { scale: 6 }, cobble: { scale: 5, laid: true }, flags: { scale: 6, laid: true },
+  sand: { scale: 9 }, rock: { scale: 9 }, tile: { scale: 4, laid: true }, asphalt: { scale: 8, laid: true }, concrete: { scale: 7, laid: true },
 };
 /** Fence kinds are built in js/area.js. */
 export const FENCES = ['rail', 'picket', 'stone', 'brick', 'iron', 'mesh', 'glass'];
@@ -33,7 +36,7 @@ export const OUTFITS = {
   clerk:     { hat: 'cap',   helmet: 0x8e2f3a, shirt: [0xf4ecd8, 0xe9dfc6, 0xfbf5e6], pants: 0x2b2f36, apron: 0x8e2f3a, vest: null },
 };
 
-/** The paint of a shop: counter, counter top, sign board and the stripe on it. */
+/** The paint of a shop: counter, counter top, sign board and the stripe on it. Its body (`stand` below) is painted in them. */
 const SHOP = {
   red:    { counter: 0xd63a2f, top: 0xb52d24, board: 0xffd23f, stripe: 0xff8a1f },
   green:  { counter: 0x3a8f55, top: 0x2f7545, board: 0xf4ecd8, stripe: 0x2f7545 },
@@ -52,33 +55,39 @@ const BELT = {
   metropolis: { frame: 0x2f8f83, surface: '#1c4f4a', chevron: 'rgba(255,255,255,0.3)' },
 };
 
+/**
+ * The body of a shop: what its counter is built like. Each is a model in js/gfx/shops.js, painted in the yard's SHOP colours.
+ * No two yards that share a fence have the same one (tests/shops.test.mjs).
+ */
+export const SHOP_BODY = ['post', 'stall', 'masonry', 'front', 'weigh', 'depot', 'showcase', 'dock', 'showroom'];
+
 const BY_LOCATION = {
-  town:       { ground: 'soil', fence: 'rail', outfit: 'lumber', shop: 'red' },
-  city:       { ground: 'asphalt', fence: 'mesh', outfit: 'plant', shop: 'slate' },
-  metropolis: { ground: 'concrete', fence: 'glass', outfit: 'assembly', shop: 'teal' },
+  town:       { ground: 'soil', fence: 'rail', outfit: 'lumber', shop: 'red', stand: 'post' },
+  city:       { ground: 'asphalt', fence: 'mesh', outfit: 'plant', shop: 'slate', stand: 'dock' },
+  metropolis: { ground: 'concrete', fence: 'glass', outfit: 'assembly', shop: 'teal', stand: 'showroom' },
 };
 
 const BY_YARD = {
-  sawmill:     { ground: 'chips',    fence: 'rail',   outfit: 'lumber',    shop: 'red' },
-  carpentry:   { ground: 'flags',    fence: 'rail',   outfit: 'carpenter', shop: 'cream' },
-  quarry:      { ground: 'gravel',   fence: 'stone',  outfit: 'quarry',    shop: 'slate' },
-  farm:        { ground: 'furrows',  fence: 'picket', outfit: 'farmer',    shop: 'green' },
-  bakery:      { ground: 'cobble',   fence: 'brick',  outfit: 'baker',     shop: 'cream' },
-  glassworks:  { ground: 'sand',     fence: 'rail',   outfit: 'glazier',   shop: 'blue' },
-  ironmine:    { ground: 'rock',     fence: 'stone',  outfit: 'miner',     shop: 'slate' },
-  forge:       { ground: 'flags',    fence: 'iron',   outfit: 'smith',     shop: 'slate' },
-  oilfield:    { ground: 'sand',     fence: 'mesh',   outfit: 'rigger',    shop: 'red' },
-  goldmine:    { ground: 'rock',     fence: 'stone',  outfit: 'miner',     shop: 'cream' },
-  jewelry:     { ground: 'tile',     fence: 'iron',   outfit: 'jeweller',  shop: 'violet' },
-  gemmine:     { ground: 'gravel',   fence: 'stone',  outfit: 'miner',     shop: 'violet' },
-  powerplant:  { ground: 'asphalt',  fence: 'mesh',   outfit: 'plant',     shop: 'slate' },
-  steelworks:  { ground: 'flags',    fence: 'mesh',   outfit: 'smith',     shop: 'red' },
-  chemical:    { ground: 'concrete', fence: 'mesh',   outfit: 'lab',       shop: 'blue' },
-  electronics: { ground: 'tile',     fence: 'mesh',   outfit: 'lab',       shop: 'teal' },
-  engineplant: { ground: 'concrete', fence: 'glass',  outfit: 'assembly',  shop: 'teal' },
-  autofactory: { ground: 'asphalt',  fence: 'glass',  outfit: 'assembly',  shop: 'blue' },
-  robotics:    { ground: 'tile',     fence: 'glass',  outfit: 'lab',       shop: 'teal' },
-  store:       { ground: 'flags',    fence: 'glass',  outfit: 'clerk',     shop: 'wine' },
+  sawmill:     { ground: 'chips',    fence: 'rail',   outfit: 'lumber',    shop: 'red',      stand: 'post' },
+  carpentry:   { ground: 'flags',    fence: 'rail',   outfit: 'carpenter', shop: 'cream',    stand: 'front' },
+  quarry:      { ground: 'gravel',   fence: 'stone',  outfit: 'quarry',    shop: 'slate',    stand: 'masonry' },
+  farm:        { ground: 'furrows',  fence: 'picket', outfit: 'farmer',    shop: 'green',    stand: 'stall' },
+  bakery:      { ground: 'cobble',   fence: 'brick',  outfit: 'baker',     shop: 'cream',    stand: 'front' },
+  glassworks:  { ground: 'sand',     fence: 'rail',   outfit: 'glazier',   shop: 'blue',     stand: 'stall' },
+  ironmine:    { ground: 'rock',     fence: 'stone',  outfit: 'miner',     shop: 'slate',    stand: 'weigh' },
+  forge:       { ground: 'flags',    fence: 'iron',   outfit: 'smith',     shop: 'slate',    stand: 'masonry' },
+  oilfield:    { ground: 'sand',     fence: 'mesh',   outfit: 'rigger',    shop: 'red',      stand: 'depot' },
+  goldmine:    { ground: 'rock',     fence: 'stone',  outfit: 'miner',     shop: 'cream',    stand: 'masonry' },
+  jewelry:     { ground: 'tile',     fence: 'iron',   outfit: 'jeweller',  shop: 'violet',   stand: 'showcase' },
+  gemmine:     { ground: 'gravel',   fence: 'stone',  outfit: 'miner',     shop: 'violet',   stand: 'weigh' },
+  powerplant:  { ground: 'asphalt',  fence: 'mesh',   outfit: 'plant',     shop: 'slate',    stand: 'dock' },
+  steelworks:  { ground: 'flags',    fence: 'mesh',   outfit: 'smith',     shop: 'red',      stand: 'weigh' },
+  chemical:    { ground: 'concrete', fence: 'mesh',   outfit: 'lab',       shop: 'blue',     stand: 'depot' },
+  electronics: { ground: 'tile',     fence: 'mesh',   outfit: 'lab',       shop: 'teal',     stand: 'dock' },
+  engineplant: { ground: 'concrete', fence: 'glass',  outfit: 'assembly',  shop: 'teal',     stand: 'weigh' },
+  autofactory: { ground: 'asphalt',  fence: 'glass',  outfit: 'assembly',  shop: 'blue',     stand: 'showroom' },
+  robotics:    { ground: 'tile',     fence: 'glass',  outfit: 'lab',       shop: 'teal',     stand: 'showcase' },
+  store:       { ground: 'flags',    fence: 'glass',  outfit: 'clerk',     shop: 'wine',     stand: 'showroom' },
 };
 
 /**
@@ -130,14 +139,14 @@ const DRESS = {
 /**
  * The look of a yard.
  * @param area  { id, location }
- * @returns {{ ground: string, scale: number, fence: string, outfit: object, shop: object, belt: object, dress: object }}
+ * @returns {{ ground: string, scale: number, fence: string, outfit: object, shop: object, shopBody: string, belt: object, dress: object }}
  */
 export function lookOf(area) {
   const location = BY_LOCATION[area?.location] ? area.location : 'town';
   const pick = BY_YARD[area?.id] || BY_LOCATION[location];
   return {
     ground: pick.ground, scale: GROUNDS[pick.ground].scale, fence: pick.fence,
-    outfit: OUTFITS[pick.outfit], outfitName: pick.outfit, shop: SHOP[pick.shop], shopName: pick.shop, belt: BELT[location],
+    outfit: OUTFITS[pick.outfit], outfitName: pick.outfit, shop: SHOP[pick.shop], shopName: pick.shop, shopBody: pick.stand, belt: BELT[location],
     dress: DRESS[area?.id] || DRESS_BY_LOCATION[location],
   };
 }

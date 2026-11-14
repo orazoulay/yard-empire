@@ -4,7 +4,7 @@ import { bake } from './engine/bake.js';
 import { box, mat, makeRoundTrees, makeTrees, randomTreesIn, soaks } from './world.js';
 import { ground, wornGround } from './textures.js';
 import { buildFence, gatePaint } from './fences.js';
-import { lookOf } from './data/looks.js';
+import { GROUNDS, lookOf } from './data/looks.js';
 import { createStation, Plot } from './stations.js';
 import { Worker } from './characters.js';
 import { AREAS, gateGeom } from './data/areas.js';
@@ -116,7 +116,7 @@ export class Area {
     }
     game._blocks = null;
     if (this.worn) { this.group.remove(this.worn); this.worn.geometry.dispose(); this.worn.material.alphaMap.dispose(); this.worn.material.dispose(); }
-    this.worn = wornGround(b.maxX - b.minX, b.maxZ - b.minZ, legs, [...spots.feeds, ...spots.goods, ...spots.shops].map(local));
+    this.worn = wornGround(b.maxX - b.minX, b.maxZ - b.minZ, legs, [...spots.feeds, ...spots.goods, ...spots.shops].map(local), !!GROUNDS[this.look.ground]?.laid);
     this.worn.position.x = (b.minX + b.maxX) / 2; this.worn.position.z = (b.minZ + b.maxZ) / 2;
     this.group.add(this.worn);
   }

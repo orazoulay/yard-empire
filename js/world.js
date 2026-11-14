@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 
 import { bark, edge, grass, rings } from './textures.js';
-import { cityEdge, mulberry, offRects } from './sim/site.js';
+import { mulberry, offRects } from './sim/site.js';
+import { makeCityEdge } from './gfx/cityedge.js';
 import { cameraFrame } from './sim/yard.js';
 import { sharedMaterial, boxShape, cylinderShape, glowing } from './engine/materials.js';
 export { mulberry };   // the run of numbers the scenery is drawn from; it lives with the plain layouts now (js/sim/site.js)
@@ -340,12 +341,16 @@ export function createWorld(areaRects, clear = []) {
   const undergrowth = makeUndergrowth(offRects(bushes, clear), offRects(stones, clear)), blossom = makeFlowers(offRects(flowers, clear));
   scene.add(undergrowth, blossom);
   const city = areaRects.filter(r => r.city);
-  if (city.length) scene.add(makeCityEdge(city, clear));
+  const cityRim = city.length ? makeCityEdge(city, clear) : null;
+  if (cityRim) scene.add(cityRim);
+  const edgeCasters = [];   // the joined buildings and street furniture of the city's edge that throw shadows (named 'city-still' in js/gfx/cityedge.js)
+  cityRim?.traverse(m => { if (m.name === 'city-still') edgeCasters.push(m); });
   // What the low graphics level thins out. The instances were placed at random, so drawing only the
   // first part of each list thins evenly; nothing is rebuilt, and the full count comes back the same way.
   const thinned = [...undergrowth.children, blossom].map(mesh => ({ mesh, full: mesh.count }));
   function setDetail(low) {
     for (const t of thinned) { t.mesh.count = low ? Math.ceil(t.full * 0.4) : t.full; t.mesh.castShadow = !low && t.mesh !== blossom; }
+    for (const m of edgeCasters) m.castShadow = !low;   // like the yards' own dressing: on Low the city's edge throws no shadows
   }
 
   /**
@@ -389,36 +394,4 @@ export function createWorld(areaRects, clear = []) {
     sun.target.position.copy(_at);
   }
   return { scene, camera, updateCamera, sun, hemi, setDetail };
-}
-
-/**
- * What stands around Industrial City: asphalt on three sides, low buildings to the south and at the
- * ends, and two striped chimneys. Nothing here is taller than the camera can see over, and nothing
- * lies under a yard (the yards draw their own ground).
- */
-function makeCityEdge(rects, clear = []) {
-  const g = new THREE.Group();
-  // Where everything stands is worked out as plain numbers (js/sim/site.js, cityEdge), from the run of numbers it was
-  // always drawn from; `clear` is ground to keep free, and the buildings that stood on it are left out.
-  const layout = cityEdge(rects, clear);
-  const slab = (x0, x1, z0, z1) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), soaks(mat(0x5c626b)));
-    m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0.006, (z0 + z1) / 2); m.receiveShadow = true; g.add(m);
-  };
-  for (const s of layout.slabs) slab(...s);   // south, west, east
-  const WALLS = [0x9aa3ad, 0xb8855f, 0x7f8a94, 0xc9b79c, 0x8a6f5a];
-  const ROOFS = [0xb5533c, 0x4f8fa3, 0x9aa3ad, 0xc98a4b, 0x6fa36b];   // seen from above, the roofs are what the player sees
-  for (const { x, z, w, d, h: hgt, wall, roof: top, vx, vz } of layout.buildings) {
-    const body = box(w, hgt, d, WALLS[wall]); body.position.set(x, hgt / 2, z); g.add(body);
-    const roof = box(w + 0.3, 0.25, d + 0.3, ROOFS[top]); roof.position.set(x, hgt + 0.12, z); g.add(roof);
-    const vent = box(0.9, 0.5, 0.9, 0xe3e7ea); vent.position.set(vx, hgt + 0.5, vz); g.add(vent);
-    for (let y = 1.2; y < hgt - 0.6; y += 1.5) {   // rows of lit windows on the side facing the yards
-      const lights = lit(box(w * 0.7, 0.45, 0.08, 0xffe9a8, { map: null }), 0xffd27a, 0.3); lights.position.set(x, y, z - d / 2 - 0.03); g.add(lights);
-    }
-  }
-  for (const [x, z] of layout.chimneys) {   // chimneys at the two far corners
-    for (let i = 0; i < 6; i++) { const ring = cyl(0.85 - i * 0.05, 0.9 - i * 0.05, 1.6, i % 2 ? 0xf2f2f2 : 0xd4483b, 12); ring.position.set(x, 0.8 + i * 1.6, z); g.add(ring); }
-    CITY_STACKS.push({ x, y: 9.8, z });
-  }
-  return g;
 }

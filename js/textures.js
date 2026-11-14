@@ -269,21 +269,27 @@ const beamImage = () => image('beam', 128, (g, N) => {
 });
 export const beamMap = () => texture(beamImage(), { color: false });
 
+/** How dark the worn ground is. Soft ground (soil, sand, gravel, rock) shows a trodden track; a laid floor only a scuff. */
+export const WEAR = { soft: 0.24, hard: 0.1 };
 /**
  * The ground of a yard where it is walked on most: a darker, worn patch along every path and where
  * people stand. Drawn once for a yard (and again when a machine is added), from the yard's own paths.
  * @param w, d    size of the yard
  * @param paths   [{ a, b, weight }] with points measured from the yard's north-west corner
  * @param spots   [{ x, z }] where people stand, measured the same way
+ * @param hard    true for a laid floor (stone, tile, asphalt, concrete): feet leave a faint scuff on it, not a trodden track
  */
-export function wornGround(w, d, paths, spots = []) {
+export function wornGround(w, d, paths, spots = [], hard = false) {
   const N = 256, c = document.createElement('canvas'); c.width = c.height = N;
   const g = c.getContext('2d');
   g.fillStyle = '#000'; g.fillRect(0, 0, N, N);
   g.scale(N / w, N / d);   // from here on, one unit is one step in the yard
   g.globalCompositeOperation = 'lighter'; g.lineCap = 'round'; g.strokeStyle = g.fillStyle = '#fff';
   // A path is laid down as a few strokes, wide and faint to narrow and firm: that gives it a soft edge.
-  for (const [width, alpha] of [[3.4, 0.07], [2.6, 0.09], [1.9, 0.11], [1.2, 0.13], [0.6, 0.1]]) {
+  // The widest stroke was 3.4 steps: on a pale floor the tracks then read as the shadows of things that are not there.
+  const narrow = hard ? 0.6 : 0.72;
+  for (const [wide, alpha] of [[3.4, 0.07], [2.6, 0.09], [1.9, 0.11], [1.2, 0.13], [0.6, 0.1]]) {
+    const width = wide * narrow;
     g.lineWidth = width;
     for (const p of paths) {
       g.globalAlpha = alpha * p.weight;
@@ -295,7 +301,7 @@ export function wornGround(w, d, paths, spots = []) {
   const t = new THREE.CanvasTexture(c);
   t.anisotropy = anisotropy;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d),
-    new THREE.MeshBasicMaterial({ alphaMap: t, color: 0x2c261c, transparent: true, opacity: 0.36, depthWrite: false }));   // dark and nearly grey: it has to sit on soil and on asphalt alike
+    new THREE.MeshBasicMaterial({ alphaMap: t, color: hard ? 0x2a2a2c : 0x3a2c18, transparent: true, opacity: hard ? WEAR.hard : WEAR.soft, depthWrite: false }));   // earth-brown on soft ground, a grey scuff on a floor
   m.rotation.x = -Math.PI / 2; m.position.y = 0.013;   // above the yard's ground, under the soft shadows
   return m;
 }
@@ -423,10 +429,20 @@ const GROUND_IMAGES = {
   }),
   // the mines: dark, broken rock
   rock: () => image('ground:rock', 256, (g, N, rnd) => {
-    const big = clouds(rnd), mid = noise(rnd, 13);
-    pixels(g, N, (u, v) => 138 + 70 * big(u, v) + 40 * smooth(0.45, 0.6, mid(u, v)));
-    for (let i = 0; i < 14; i++) crack(g, N, rnd, 0.5);
-    speck(g, N, rnd, 900, 0.18, 0.3);
+    const big = clouds(rnd), fine = noise(rnd, 34);
+    pixels(g, N, (u, v) => 170 + 46 * big(u, v) + 20 * fine(u, v));
+    // flat stones bedded in the ground: each a shade lighter than the ground, with a shadow under its lower edge
+    for (let i = 0; i < 44; i++) {
+      const x = rnd() * N, y = rnd() * N, r = 5 + rnd() * 9, turn = rnd() * 6.3, v = 206 + rnd() * 40, corners = 6 + Math.floor(rnd() * 3);
+      const rim = Array.from({ length: corners }, (_, k) => { const a = turn + k / corners * 6.283, d = r * (0.7 + rnd() * 0.4); return [Math.cos(a) * d * 1.25, Math.sin(a) * d]; });
+      const stone = (px, py) => { g.beginPath(); rim.forEach(([ox, oy], k) => k ? g.lineTo(px + ox, py + oy) : g.moveTo(px + ox, py + oy)); g.closePath(); g.fill(); };
+      tiled(N, x, y, 22, (px, py) => {
+        g.fillStyle = 'rgba(25,20,14,0.3)'; stone(px + 0.9, py + 1.5);
+        g.fillStyle = `rgba(${v | 0},${v | 0},${v - 5 | 0},0.82)`; stone(px, py);
+      });
+    }
+    for (let i = 0; i < 7; i++) crack(g, N, rnd, 0.34);
+    speck(g, N, rnd, 1200, 0.16, 0.28);
   }),
   // the jeweller's, the electronics and the robotics factory: square tiles in two tones
   tile: () => image('ground:tile', 256, (g, N, rnd) => {

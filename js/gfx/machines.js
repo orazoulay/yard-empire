@@ -961,5 +961,8 @@ export function buildMachine(g, recipe, traits) {
   const key = MACHINES[id] ? id : BY_LOOK[recipe.look] || 'workshop';
   const built = MACHINES[key](g, recipe.colors);
   dress(g, built.fit, recipe, traits);
+  // Every model leaves here in its rest pose. Nine of them are put together with fires lit, a stream pouring or an arm
+  // mid-stroke, and a machine that had never run showed that until its first batch was over (found by tools/bench/yards.mjs).
+  built.animate(0, 0, 0);
   return { animate: built.animate, chimneys: g.userData.chimneys || null, fx: WORK_FX[key] || null };
 }

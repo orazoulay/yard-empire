@@ -1,7 +1,7 @@
 // 3D stations built from data: Source, ProcessorStation, Shop, Plot.
 import * as THREE from 'three';
-import { box, cyl, mat, lit } from './world.js';
-import { softShadow, stripes, wood } from './textures.js';
+import { box, cyl } from './world.js';
+import { softShadow, stripes } from './textures.js';
 import { addPallet, makeItem, Stack, stackBase } from './items3d.js';
 import { Processor } from './sim/processor.js';
 import { RECIPES, ITEMS, AREAS } from './data/areas.js';
@@ -14,6 +14,8 @@ import { machineTraits } from './sim/yard.js';
 import { addLightPool } from './scenery.js';
 import { buildMachine } from './gfx/machines.js';
 import { productShape } from './gfx/products.js';
+import { buildMine, buildDerrick } from './gfx/sources.js';
+import { buildShop, COUNTER_TOP, SAMPLE_AT, TILL_AT } from './gfx/shops.js';
 import { bake, moving } from './engine/bake.js';
 
 const PICK_RATE = TUNING.pickRate, DROP_RATE = TUNING.dropRate, PZ = TUNING.procZone;
@@ -119,31 +121,14 @@ export class Source extends Station {
     }
     heap.castShadow = true; heap.receiveShadow = true; heap.computeBoundingSphere();
     this.pile.add(heap);
-    if (cfg.prop === 'mound') this.buildMound();
-    if (cfg.prop === 'derrick') this.buildDerrick();
+    // what stands behind the pile and says where it comes from (js/gfx/sources.js): a mine entrance or an oil derrick
+    if (cfg.prop === 'mound') buildMine(this.group, cfg.item);
+    if (cfg.prop === 'derrick') this.pump = buildDerrick(this.group).pump;   // the travelling block: it goes up and down
     moving(this.pile, this.pump); bake(this.group);   // the pile bounces and the pump goes up and down; the rest is joined
     this.usable = true;
     this.hint = game.labels.add('machine', '', () => ({ x: cfg.x, y: 1.6, z: cfg.z }));
   }
   dispose() { super.dispose(); this.game.labels.remove(this.hint); }
-  buildMound() {
-    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(2.6, 0), mat(0x6f6a66, { flatShading: true }));
-    rock.scale.set(1.5, 0.9, 0.8); rock.position.set(0, 1.0, -2.6); rock.castShadow = true; rock.receiveShadow = true;
-    this.group.add(rock);
-    const hole = box(1.6, 1.5, 0.3, 0x1c1a19); hole.position.set(0, 0.75, -1.55); this.group.add(hole);
-    for (const px of [-0.95, 0.95]) { const b = box(0.22, 1.7, 0.3, 0x8b5a2b); b.position.set(px, 0.85, -1.4); this.group.add(b); }
-    const lintel = box(2.2, 0.24, 0.32, 0x8b5a2b); lintel.position.set(0, 1.75, -1.4); this.group.add(lintel);
-  }
-  buildDerrick() {
-    const g = new THREE.Group(); g.position.set(0, 0, -2.6);
-    for (const [x, z] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) {
-      const leg = box(0.16, 4.6, 0.16, 0x4a4f57); leg.position.set(x * 0.6, 2.2, z * 0.6); leg.rotation.z = -x * 0.14; leg.rotation.x = z * 0.14; g.add(leg);
-    }
-    for (const y of [1.2, 2.6]) { const ring = box(1.5 - y * 0.25, 0.12, 1.5 - y * 0.25, 0x4a4f57); ring.position.y = y; g.add(ring); }
-    const topCap = box(0.6, 0.3, 0.6, 0xe0452f); topCap.position.y = 4.5; g.add(topCap);
-    this.pump = box(0.2, 1.4, 0.2, 0x2e3238); this.pump.position.y = 1.4; g.add(this.pump);
-    this.group.add(g);
-  }
   provides(item) { return item === this.item ? 999 : 0; }
   /** At the edge of the pile, on the side the worker comes from: nobody wades into the middle of a heap. */
   standAt(zone, from) {
@@ -307,7 +292,6 @@ export class ProcessorStation extends Station {
 }
 
 // ------------------------------------------------------------------ shops
-const COUNTER_TOP = 1.43;                 // the height of the counter's surface
 const SLIDES = 6, COINS = 5;              // how many sliding items and coins a shop keeps for its sales
 const SLIDE_TIME = 0.4, COIN_TIME = 0.5;  // seconds
 
@@ -318,23 +302,14 @@ export class Shop extends Station {
     this.zones = [new Zone(cfg.x, cfg.z, TUNING.shopRadius, 'give', this)];
     const g = this.group;
     const under = softShadow(7, 3.8); under.position.set(0, 0.016, 2.5); g.add(under);
-    const paint = lookOf(AREAS.find(a => a.id === area)).shop;   // every yard's shop has its own colours
-    const counter = box(5, 1.3, 1.6, paint.counter, { ...wood({ rx: 2 }), round: 0.1 }); counter.position.set(0, 0.65, 2.3); g.add(counter);
-    const counterTop = box(5.2, 0.15, 1.8, paint.top, { ...wood({ rx: 2 }), round: 0.06 }); counterTop.position.set(0, 1.35, 2.3); g.add(counterTop);
-    this.till = new THREE.Group(); this.till.position.set(1.5, 1.4, 2.3); g.add(this.till);   // on the counter: it jumps on every sale
-    const reg = box(1.1, 0.8, 0.9, 0x3aa7d8, { round: 0.14, fine: 2, roughness: 0.4, metalness: 0.3 }); reg.position.y = 0.4; this.till.add(reg);
-    const regKeys = box(0.8, 0.1, 0.6, 0xe8f3f8); regKeys.position.set(0, 0.82, -0.05); this.till.add(regKeys);
+    // the counter itself (js/gfx/shops.js): every yard's shop has a body for its trade, in the yard's own colours
+    const look = lookOf(AREAS.find(a => a.id === area));
+    this.till = buildShop(g, look.shopBody, look.shop, this.items[0]).till;   // on the counter: it jumps on every sale
     this.kick = 0;
-    // sign board behind the counter (an awning would hide the counter from the top-down camera)
-    const board = box(3.2, 1.0, 0.16, paint.board, wood({ rx: 1.5 })); board.position.set(-0.9, 2.3, 3.2); g.add(board);
-    const stripe = box(3.2, 0.22, 0.18, paint.stripe); stripe.position.set(-0.9, 2.05, 3.2); g.add(stripe);
-    for (const px of [-2.3, 0.5]) { const p = cyl(0.08, 0.08, 1.9, 0x8b4a24, 6); p.position.set(px, 0.95, 3.2); g.add(p); }
     // a sample of what this shop buys, on the counter
-    this.sample = makeItem(this.items[0]); this.sample.position.set(-1.2, 1.45, 2.3); g.add(this.sample);
+    this.sample = makeItem(this.items[0]); this.sample.position.set(SAMPLE_AT.x, SAMPLE_AT.y, SAMPLE_AT.z); g.add(this.sample);
     g.add(dashedPad(3.2, 2.6));
-    // a lantern on the sign and a pool of light at the counter: the shop is found after dark
-    const lantern = lit(box(0.3, 0.24, 0.2, 0xfff1c2, { map: null, round: 0.04 }), 0xffd27a, 0.08); lantern.position.set(-0.9, 2.94, 3.2); g.add(lantern);
-    addLightPool(game.scene, cfg.x, cfg.z + 1.4, 7.5);
+    addLightPool(game.scene, cfg.x, cfg.z + 1.4, 7.5);   // with the body's lantern, a pool of light at the counter: the shop is found after dark
     moving(this.till, this.sample); bake(g);   // the till jumps and the sample bounces on a sale
     this.slides = []; this.coins = []; this.selling = false;   // goods sliding over the counter and coins out of the till (see showSale)
     this.label = game.labels.add('zone', cfg.name.toUpperCase(), () => ({ x: cfg.x, y: 0.3, z: cfg.z - 0.3 }));
@@ -375,7 +350,7 @@ export class Shop extends Station {
       this.kick = settle(this.kick, dt, 7);
       const k = this.kick;
       this.till.scale.set(1 + 0.1 * k, 1 + 0.22 * k, 1 + 0.1 * k);
-      this.sample.position.y = 1.45 + 0.25 * k;
+      this.sample.position.y = SAMPLE_AT.y + 0.25 * k;
     }
     if (!this.selling) return;
     let live = false;
@@ -396,7 +371,7 @@ export class Shop extends Station {
       const k = c.t, m = c.mesh;
       if (k >= 1) { m.visible = false; continue; }
       live = true;
-      m.position.set(1.5 + (c.spin - 1.5) * 0.1, 2.3 + 1.5 * k * (1.35 - k), 2.3);   // up out of the till, and a little way back down
+      m.position.set(TILL_AT.x + (c.spin - 1.5) * 0.1, 2.3 + 1.5 * k * (1.35 - k), TILL_AT.z);   // up out of the till, and a little way back down
       m.rotation.z = c.spin + k * 9;                                                  // spinning, face to the camera
       m.scale.setScalar(Math.min(1, k / 0.12) * Math.min(1, (1 - k) / 0.25));
     }
