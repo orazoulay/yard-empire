@@ -1,3 +1,4 @@
+// @ts-check
 // Pure rules for account saves: where each player's progress is kept on the device, and which copy
 // wins when the device and the server disagree. No network or storage calls here.
 

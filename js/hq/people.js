@@ -1,6 +1,6 @@
 // The Team tab (workers, managers and staff) and the Ranking tab (the leaderboard).
 // Added to the Headquarters class in js/hq.js (see mix() in js/hq/kit.js): `this` is the Headquarters.
-import { RANKING, h, empty, money, exact, amount, rate, sub, chip, section, note, row } from './kit.js';
+import { RANKING, h, empty, money, amount, rate, chip, section, note, row } from './kit.js';
 import { STAFF, STAFF_RULES } from '../data/company.js';
 import { AREAS } from '../data/areas.js';
 import { icon } from '../icons.js';

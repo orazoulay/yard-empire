@@ -1,3 +1,4 @@
+// @ts-check
 // Credits on the game's side: what the server says this player has, and asking it for changes.
 //
 // The server decides everything (supabase/migrations/20261113000000_credits.sql). This module keeps its last answer

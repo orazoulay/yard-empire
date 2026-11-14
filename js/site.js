@@ -1,3 +1,4 @@
+// @ts-check
 // The building site in the world: the plot east of the Department Store, and on it the builds as far as they
 // have got. What stands where is worked out as plain numbers in js/sim/site.js; this file only draws it.
 //

@@ -1,3 +1,4 @@
+// @ts-check
 // What the player's preferences mean, apart from where they are kept: reading a saved copy of any age,
 // the two volume sliders, and the mute key. No page needed; tested in tests/yard-interface.test.mjs.
 

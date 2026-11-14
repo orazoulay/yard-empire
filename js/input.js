@@ -1,3 +1,4 @@
+// @ts-check
 // Virtual joystick (touch / mouse drag anywhere) + keyboard. Produces a 2D move vector.
 import { stick } from './ui-logic.js';
 

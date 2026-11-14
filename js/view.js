@@ -1,3 +1,4 @@
+// @ts-check
 // What the camera can see. Machines, workers and trucks ask before they animate themselves: what is
 // out of sight is not moved, not posed and not drawn, though its rules run as ever.
 //

@@ -1,3 +1,4 @@
+// @ts-check
 // Everything about the company as data: cost rates, ranks, milestones, research, contracts,
 // truck routes, the market, Headquarters tabs and the locations on the roadmap.
 // Adding a technology, a milestone, a contract kind or a location is a change here, not in the rules.

@@ -1,3 +1,4 @@
+// @ts-check
 // Where the game keeps accounts and saved games.
 //
 // With a Supabase project named here, sign-in, saves and the leaderboard go to it (js/cloud.js).

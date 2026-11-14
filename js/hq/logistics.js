@@ -1,6 +1,6 @@
 // The Logistics tab: the routes between yards and the trucks that run them.
 // Added to the Headquarters class in js/hq.js (see mix() in js/hq/kit.js): `this` is the Headquarters.
-import { h, empty, money, exact, bar, label, yardName, chip, marked, section, note, row } from './kit.js';
+import { h, empty, money, bar, label, yardName, chip, marked, section, note, row } from './kit.js';
 import { fmt } from '../format.js';
 import { FINANCE } from '../data/company.js';
 import { routesWithin } from '../sim/hqview.js';

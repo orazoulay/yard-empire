@@ -1,3 +1,4 @@
+// @ts-check
 // Pure market rules: what the goods of a market location sell for, as a share of their normal price.
 // No rendering and no browser APIs here; the numbers are in MARKET (js/data/company.js).
 //

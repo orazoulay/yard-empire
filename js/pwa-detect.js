@@ -1,3 +1,4 @@
+// @ts-check
 // Pure checks used by the install UI, kept apart from the browser calls so they can be tested.
 
 /** iPhone, iPod, or iPad. Recent iPads report themselves as a Mac, but only they have a touch screen. */

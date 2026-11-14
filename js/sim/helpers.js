@@ -1,3 +1,4 @@
+// @ts-check
 // What the helpers bought with credits do, as plain rules on the company: no drawing, no network.
 // A helper does what the player can already do with a button, and nothing more: the Site Foreman presses "Send from the
 // warehouse" on the building site, the Goal Clerk presses "Claim" on a finished goal. So a company with helpers earns

@@ -1,3 +1,4 @@
+// @ts-check
 // Pure processing-station logic: N inputs in, M outputs out, timed. Used for saws, workshops, ...
 // A recipe may name a second material (input2, inCount2): the machine then needs enough of both.
 

@@ -9,8 +9,8 @@
 import * as THREE from 'three';
 
 /**
- * @param canvas    the page's <canvas>
- * @param o.remake  called after the context came back: make again what was drawn into textures once
+ * @param {HTMLCanvasElement} canvas  the page's <canvas>
+ * @param {{ remake?: () => void }} [o]  remake: called after the context came back, to make again what was drawn into textures once
  * @returns the renderer, with .lost (true while the context is gone)
  */
 export function createRenderer(canvas, { remake } = {}) {

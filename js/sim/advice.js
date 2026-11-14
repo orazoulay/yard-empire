@@ -1,3 +1,4 @@
+// @ts-check
 // Advice from the books: what holds a yard back, read from its last minute. Pure: no rendering, no browser.
 //
 // Two parts. YardWatch keeps a minute of readings of each yard's machines, which count for themselves how

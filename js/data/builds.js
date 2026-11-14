@@ -1,3 +1,4 @@
+// @ts-check
 // The building site: what a company that has opened every yard builds next. Data only; the rules are in
 // js/sim/company.js (the part headed "the building site") and tests/construction.test.mjs.
 //

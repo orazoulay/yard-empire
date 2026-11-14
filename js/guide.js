@@ -1,3 +1,4 @@
+// @ts-check
 // Animated green chevrons from the player to the current objective, plus a pulsing target ring.
 import * as THREE from 'three';
 

@@ -1,3 +1,4 @@
+// @ts-check
 // Redrawing without rebuilding: the Headquarters is drawn again twice a second, and patch() makes the page show the new
 // drawing while touching only what changed.
 // The screen is drawn again twice a second. Most of the time most of it has not changed, and replacing

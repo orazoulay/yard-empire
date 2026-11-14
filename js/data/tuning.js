@@ -1,3 +1,4 @@
+// @ts-check
 // Movement and timing constants shared by the game and the balance simulator (tools/balance).
 // Change a number here and both stay in step.
 export const TUNING = {

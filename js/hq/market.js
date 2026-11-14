@@ -1,6 +1,6 @@
 // The Market tab: what goods sell for now against normal, with a price chart for each.
 // Added to the Headquarters class in js/hq.js (see mix() in js/hq/kit.js): `this` is the Headquarters.
-import { h, s, money, exact, amount, figure, ago, bar, label, yardName, cap, chip, marked, note, row } from './kit.js';
+import { h, s, money, amount, figure, ago, bar, label, yardName, cap, chip, marked, note, row } from './kit.js';
 import { MARKET } from '../data/company.js';
 import { Series } from '../sim/series.js';
 import { exactMoney, isShortened } from '../sim/hqview.js';

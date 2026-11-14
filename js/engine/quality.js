@@ -88,7 +88,9 @@ export class AutoQuality {
       }
       // Fewer pixels only help a device held back by its graphics chip. When the script fills most of the frame, the
       // processor is what is slow, and a blurrier picture would buy nothing.
-      const gpuBound = pick(work, 0.5) < median * 0.6;
+      // "Held back by the graphics chip" means the script takes under half of the time between frames and at least a
+      // whole screen refresh goes by with no script running. A slow processor that just misses a refresh does not count.
+      const script = pick(work, 0.5), gpuBound = script < median * 0.5 && median - script > 18;
       if (gpuBound && this.scale > o.minScale + 1e-6) return this.change(this.level, Math.max(o.minScale, +(this.scale - 0.125).toFixed(3)));
       return null;
     }

@@ -1,3 +1,4 @@
+// @ts-check
 // Line icons for the Headquarters screen, drawn as SVG so they look the same on every device.
 // One style throughout: a 24 by 24 grid, 1.75 stroke, round ends, no fill, the colour of the text.
 // Built with createElementNS from the shapes below; nothing here is parsed as HTML.

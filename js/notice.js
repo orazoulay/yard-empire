@@ -1,3 +1,4 @@
+// @ts-check
 // The status line: one small line over the yard for things the player should know but that must not stop
 // the game: "A new version is ready", "You are offline", "Back online". It makes its own element and
 // brings its own stylesheet (css/platform.css), so the page does not have to know about it.

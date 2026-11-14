@@ -1,3 +1,4 @@
+// @ts-check
 // The yard's interface where it meets the running game: what the labels in the yard say, the carry
 // bubble, being shown the way, going to a yard, the keyboard shortcuts, the comfort settings, hiding
 // the interface, and whether the game is saved. The HUD draws; this file decides what, from game state.

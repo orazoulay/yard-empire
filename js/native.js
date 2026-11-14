@@ -1,3 +1,4 @@
+// @ts-check
 // The game inside its Android app (mobile/, built with Capacitor). A browser tab does these by itself;
 // an app has to be told: what the phone's Back button does, and that the buttons for installing and for
 // going fullscreen have no meaning here. In a browser this file does nothing.

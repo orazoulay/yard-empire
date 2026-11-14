@@ -1,3 +1,4 @@
+// @ts-check
 // The player's own zoom: the wheel of a mouse (or two fingers on a trackpad), a pinch on a touch
 // screen, and a double tap, a double click or the Home key to go back to normal.
 // The rules (limits, easing) are in js/sim/yard.js; this file only listens.

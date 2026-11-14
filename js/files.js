@@ -1,3 +1,4 @@
+// @ts-check
 // Handing the player a file the game made: a backup of the save, or a copy of what their account holds.
 // In a browser that is a download. Inside the Android app (mobile/) a page cannot download, so the file is
 // written to the app's own temporary folder and the phone's share sheet is opened on it: the player picks

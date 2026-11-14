@@ -1,3 +1,4 @@
+// @ts-check
 // The people behind the clients, and the story of an order. Pure, and words only: a story is worked out
 // from a contract each time it is shown and changes nothing. What is ordered, how much, what it pays and
 // how long a rush order has are the contract's own (js/sim/company.js); the texts (js/data/stories.js,

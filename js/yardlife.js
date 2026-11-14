@@ -1,9 +1,11 @@
+// @ts-check
 // The life of the yard that is only there to be looked at, run once a frame: workers who step around
 // each other, customers at the shops, splashes of rain, fireflies after dark, smoke over the city,
 // and thunder. It also passes the graphics level on to everything that draws less on "low".
 // Nothing here changes what is made, sold or earned.
 import { CITY_STACKS } from './world.js';
 import { Fireflies } from './scenery.js';
+import { setDressingDetail } from './gfx/props.js';
 import { Customers } from './customers.js';
 import { pushApart } from './sim/yard.js';
 import { TUNING } from './data/tuning.js';
@@ -31,7 +33,7 @@ export class YardLife {
   /**
    * The low graphics level, switched while the game runs: fewer bushes, stones and flowers and none
    * of their shadows, a fraction of the rain, smaller bursts of particles, thinner smoke, fewer
-   * fireflies, no splashes and no customers.
+   * fireflies, no splashes and no customers; the things along the fences throw no shadows and their flags hang still.
    */
   setLow(low) {
     this.low = low;
@@ -52,6 +54,7 @@ export class YardLife {
     if (!paused) { this.keepApart(dt); this.customers.update(dt, game); }
 
     sky.calm = game.calm;   // no lightning for players who asked for less motion
+    setDressingDetail(this.low, game.calm);   // and no flags flying, vents turning or beacons blinking
     if (sky.rumble) game.sfx.thunder();
 
     // rain lands: small splashes on the ground around what the camera looks at

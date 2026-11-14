@@ -1,3 +1,4 @@
+// @ts-check
 // Surfaces drawn in code: grass, soil, wood, bark, painted metal and soft shadows.
 // Each picture is made once on a canvas (there are no image files to load), repeats without a seam,
 // and is shared. Every call returns a texture of its own, so each use can repeat it differently.

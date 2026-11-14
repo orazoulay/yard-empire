@@ -1,3 +1,4 @@
+// @ts-check
 // The small pieces every tab of the Headquarters is built from: the element makers h() and s(), money and
 // time formatting, figures that carry their exact number, chips, rows, notes and sections, and mix(), which
 // lets each tab's file add its methods to the Headquarters class.

@@ -1,3 +1,4 @@
+// @ts-check
 // "How it works" for the Headquarters: one short card per tab, opened by its "?" button, and the three
 // cards of the tour a new company gets the first time it opens the Headquarters (js/hq.js).
 // Every figure here is read from the game's own rules, so the words cannot drift from what the game does.

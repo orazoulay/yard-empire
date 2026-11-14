@@ -8,7 +8,7 @@ import { lookOf } from './data/looks.js';
 import { createStation, Plot } from './stations.js';
 import { Worker } from './characters.js';
 import { AREAS, gateGeom } from './data/areas.js';
-import { addFenceLamps, addYardProps, makeSignpost } from './scenery.js';
+import { addFenceLamps, dressYard, makeSignpost } from './scenery.js';
 import { wayAround, wearPaths } from './sim/yard.js';
 import { SITE } from './data/builds.js';
 import { fenceRuns } from './sim/site.js';
@@ -84,19 +84,12 @@ export class Area {
   /** The opening in this yard's fence that leads to the building site (js/data/builds.js, SITE.gate), or null: only the Department Store has one. */
   get siteWay() { return SITE.gate.yard === this.id ? SITE.gate : null; }
 
-  /** Things along the fence that fit the yard's trade, kept clear of the gates and of what already stands there. */
+  /**
+   * Things along the fence that fit the yard's trade, and the marks on its floor. What must stay clear (the gates and
+   * their signposts, the lamps, the machines, the shop, the plots) is worked out with the layout, in js/sim/dressing.js.
+   */
   furnish() {
-    const b = this.bounds, g = this.cfg.gate, gaps = [...this.lampSpots];   // nothing stands in a lamp post
-    if (g) gaps.push({ side: g.side, at: g.at, half: GATE_HALF + 2.8 });               // the gate and its signpost
-    const wayIn = this.wayIn;
-    if (wayIn) gaps.push({ ...wayIn, half: GATE_HALF + 2.9 });                         // the open leaves of that gate fold back along this side
-    const way = this.siteWay;
-    if (way) gaps.push({ side: way.side, at: way.at, half: way.half + 2.8 });          // the way to the building site and its signpost
-    for (const s of this.cfg.stations) {
-      if (s.type === 'shop' && b.maxZ - s.z < 7) gaps.push({ side: 's', at: s.x, half: 3.6 });                            // behind the shop's sign
-      if (s.type === 'source' && s.prop === 'mound' && s.z - b.minZ < 7) gaps.push({ side: 'n', at: s.x, half: 4.8 });   // the rock reaches the fence
-    }
-    addYardProps(this.game.scene, this.cfg, gaps);
+    this.dressing = dressYard(this.game.scene, this.group, this.cfg, this.lampSpots);
   }
 
   /**

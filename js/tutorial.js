@@ -1,3 +1,4 @@
+// @ts-check
 // First-run tutorial: four steps driven by game state, shown in the objective card.
 import { fmt } from './format.js';
 

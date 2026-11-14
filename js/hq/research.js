@@ -1,6 +1,6 @@
 // The Research tab: what can be researched and what has been.
 // Added to the Headquarters class in js/hq.js (see mix() in js/hq/kit.js): `this` is the Headquarters.
-import { h, empty, money, exact, bar, chip, section, note, row } from './kit.js';
+import { h, empty, money, bar, chip, section, note, row } from './kit.js';
 import { RESEARCH, CATEGORIES } from '../data/company.js';
 import { modRows } from '../sim/hqview.js';
 

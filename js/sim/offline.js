@@ -1,3 +1,4 @@
+// @ts-check
 // Pure offline-earnings logic: measure what the workers earn per second while the game runs,
 // then pay a share of that, after the company's wages and upkeep, for the time the player was away.
 

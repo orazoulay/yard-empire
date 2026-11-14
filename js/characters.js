@@ -67,6 +67,11 @@ export class Character {
     this.squash = 0;
     this.hold = 0;                  // 0 = arms free, 1 = arms up under a stack
     this.rest = 0; this.wave = 0;   // a worker with nothing to do looks around, and waves when the player comes by
+    // What only the eye sees of the walk (pose): how much the legs step, the lean into a turn, the bend for a pick-up,
+    // the push of a drop, and how long the hands have been still. None of it moves the character.
+    // They are kept together in one object of their own, so that no name here can ever collide with a field of the
+    // rules (a worker's `reach` is the list of yards it delivers to).
+    this.anim = { gait: 0, roll: 0, bend: 0, give: 0, handsStill: 9, facing: 0, held: 0 };
     this.lean = { x: 0, z: 0, vx: 0, vz: 0 };   // the carried stack sways on a spring
     this.carry = new Carry();
     this.actionTimer = 0;
@@ -141,6 +146,7 @@ export class Character {
   /** Move along (vx, vz) if len > 0; `clamp(prev, next)` returns the allowed position. */
   move(vx, vz, len, dt, clamp) {
     let turn = 0;   // radians per second, for the sideways sway of the stack
+    const fromX = this.pos.x, fromZ = this.pos.z;
     if (len > 0.05) {
       const next = { x: this.pos.x + vx * this.speed * dt, z: this.pos.z + vz * this.speed * dt };
       const p = clamp ? clamp(this.pos, next) : next;
@@ -158,38 +164,66 @@ export class Character {
     this.group.position.copy(this.pos);
     this.group.rotation.y = this.heading;
     if (!this.seen) return;
-    this.pose(dt, len > 0.05 ? this.speed : 0, turn);
+    this.pose(dt, len > 0.05 ? this.speed : 0, turn, Math.hypot(this.pos.x - fromX, this.pos.z - fromZ));
     this.stack.set(this.carry.type, this.carry.count, this.back);
     this.stack.animate(dt);
     this.back = false;
   }
 
-  /** The walk cycle, the breathing, the raised arms and the swaying stack. */
-  pose(dt, speed, turn) {
-    const m = this.moving;
-    this.walkT += dt * (6 + this.speed * 0.7) * m;   // faster walkers take faster steps
+  /**
+   * The walk cycle, the breathing, the raised arms and the swaying stack. Only what is looked at: where the character
+   * stands and how fast it moves is decided in move(), and nothing here changes it.
+   * @param walked  the ground really covered this step, so that the legs step as far as the body went
+   */
+  pose(dt, speed, turn, walked = 0) {
+    const m = this.moving, a = this.anim;
+    // The legs follow the ground really covered: nobody walks on the spot against a fence, and whoever slides along a
+    // wall at half speed takes half steps. At full speed the pace of the steps is what it always was.
+    const pace = dt > 0 ? walked / dt : 0;
+    a.gait += ((pace > 0.25 ? Math.min(1, pace / (this.speed * 0.6)) : 0) - a.gait) * Math.min(1, dt * 10);
+    const g = a.gait;
+    this.walkT += walked * (6 / Math.max(pace, 1.5) + 0.7);
+    // Turning on the spot (a worker facing the pad it came for) is done with small steps, not by sliding round.
+    let spin = this.heading - a.facing; spin = Math.atan2(Math.sin(spin), Math.cos(spin)); a.facing = this.heading;
+    const rate = dt > 0 ? spin / dt : 0, shuffle = (1 - g) * Math.min(1, Math.abs(rate) / 2.5);
+    this.walkT += Math.abs(spin) * 2.6 * (1 - g);
     this.idleT += dt;
     this.squash = Math.max(0, this.squash - dt * 6);
-    const swing = Math.sin(this.walkT) * 0.75 * m;
+    // Hands: a pick-up bends the back for a moment, a drop pushes the arms forward; both are read off the load itself.
+    const count = this.carry.count;
+    if (count > a.held) a.bend = 1; else if (count < a.held) a.give = 1;
+    a.handsStill = count === a.held ? a.handsStill + dt : 0;
+    a.held = count;
+    a.bend = Math.max(0, a.bend - dt * 4); a.give = Math.max(0, a.give - dt * 5);
+    const swing = Math.sin(this.walkT) * (0.75 * g + 0.28 * shuffle);
     this.legL.rotation.x = swing; this.legR.rotation.x = -swing;
     this.hold += ((this.carry.empty ? 0 : 1) - this.hold) * Math.min(1, dt * 12);   // the arms go up, they do not snap up
-    const up = -2.8 * this.hold, free = 1 - this.hold;
-    this.armL.rotation.x = up - swing * free; this.armR.rotation.x = up + swing * free;
+    const up = -2.8 * this.hold, free = 1 - this.hold, push = 0.75 * a.give;
+    this.armL.rotation.x = up - swing * free + push - 0.9 * a.bend * free; this.armR.rotation.x = up + swing * free + push - 0.9 * a.bend * free;
     this.armL.rotation.z = -0.1 * free; this.armR.rotation.z = 0.1 * free;
     const breath = Math.sin(this.idleT * 2.2) * (1 - m);
-    this.torso.rotation.x = 0.1 * m * free;                       // leans into the walk when the hands are free
-    this.torso.rotation.y = Math.sin(this.walkT) * 0.1 * m * free;   // shoulders follow the arms
+    const load = this.hold * Math.min(1, count / 10);                // a tall stack is carried leaning back a little
+    this.torso.rotation.x = 0.1 * g * free + 0.26 * a.bend - 0.06 * load;   // leans into the walk when the hands are free, bends to pick up
+    this.torso.rotation.y = Math.sin(this.walkT) * 0.1 * g * free;   // shoulders follow the arms
     this.torso.scale.y = 1 + breath * 0.012;
-    this.head.rotation.x = -0.06 * m * free + breath * 0.015;
-    this.rig.position.y = Math.abs(Math.sin(this.walkT)) * 0.09 * m;
+    this.head.rotation.x = -0.06 * g * free + breath * 0.015 + 0.12 * a.bend - 0.05 * load;
+    // The body leans into a turn and the head turns first, the way a runner looks where they are going.
+    const lead = Math.max(-1, Math.min(1, rate / 6)) * Math.min(1, m + shuffle);
+    a.roll += (-0.085 * lead * m - a.roll) * Math.min(1, dt * 9);
+    this.rig.rotation.z = a.roll;
+    this.head.rotation.y = 0.3 * lead;
+    this.rig.position.y = Math.abs(Math.sin(this.walkT)) * (0.09 * g + 0.025 * shuffle);
     if (this.isWorker) {
       const k = Math.min(1, dt * 4);
       this.rest += ((this.resting && m < 0.1 ? 1 : 0) - this.rest) * k;
       this.wave += ((this.resting && this.greeting ? 1 : 0) - this.wave) * k;
-      this.head.rotation.y = Math.sin(this.idleT * 0.8) * 0.5 * this.rest * (1 - this.wave);   // looks left and right
+      this.head.rotation.y += Math.sin(this.idleT * 0.8) * 0.5 * this.rest * (1 - this.wave);   // looks left and right
+      this.rig.rotation.z += Math.sin(this.idleT * 0.9) * 0.02 * this.rest;                     // and shifts from one foot to the other
       const cycle = this.idleT % 7, brow = cycle < 1.1 ? Math.sin(Math.PI * cycle / 1.1) * this.rest * (1 - this.wave) : 0;   // now and then, a hand to the forehead
       this.armR.rotation.x += -2.3 * brow; this.armR.rotation.z += -0.45 * brow;
       this.armL.rotation.x += -2.7 * this.wave; this.armL.rotation.z += (-0.25 + Math.sin(this.idleT * 9) * 0.35) * this.wave;
+      // Standing at a machine with nothing to take or to give yet: a foot taps while it waits.
+      if (!this.resting && m < 0.1 && shuffle < 0.1 && a.handsStill > 1.2) this.legR.rotation.x = -0.22 * Math.max(0, Math.sin(this.idleT * 7));
     }
     this.rig.scale.set(1 + this.squash * 0.08, 1 - this.squash * 0.12, 1 + this.squash * 0.08);
     this.ring.scale.setScalar(1 + Math.sin(this.idleT * 3) * 0.035);

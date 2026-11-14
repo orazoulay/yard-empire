@@ -1,3 +1,4 @@
+// @ts-check
 // A short history of measurements for a chart: one sample per interval, the oldest dropped.
 // Pure: it is fed time and a function that reads the values, and knows nothing about the game.
 

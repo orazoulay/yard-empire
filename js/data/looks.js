@@ -1,5 +1,5 @@
 // What makes one yard look different from the next: the ground it stands on, the fence around it, what
-// its workers wear, the colours of its shop and the belt of its machines. Looks only: nothing here is
+// its workers wear, the colours of its shop, the belt of its machines and what stands along its fences. Looks only: nothing here is
 // read by the rules. Every yard has an entry of its own; one that is missing falls back to its location.
 
 /** Ground kinds are drawn in js/textures.js (`ground`); `scale` is how many metres one tile of the picture covers. */
@@ -82,9 +82,55 @@ const BY_YARD = {
 };
 
 /**
+ * What dresses a yard: the things along its fences and the marks on its floor. Looks only. The things are sized and
+ * placed in js/sim/dressing.js and drawn in js/gfx/props.js, under the names used here.
+ *   hero    the big pieces that say what the yard is: each is built once, at the back of the yard, if it fits
+ *   trade   the things of its trade: each stands at least once where there is room, some twice
+ *   filler  small things for the room that is left
+ *   verge   what grows or lies at the foot of the fence (the town only)
+ *   floor   how the gates and the floor are marked: 'boards', 'slabs', 'paint' (factory lines) or 'plaza'
+ *   line    the colour of the painted lines of 'paint' and 'plaza'
+ *   tints   colours for a thing that comes in several, when the yard has its own: { kind: [colours] }
+ */
+const GRASS = ['tuft', 'tuft', 'flower', 'tuft'], STONES = ['pebble', 'pebble', 'tuft'];
+const DRESS_BY_LOCATION = {
+  town:       { hero: [], trade: ['crates', 'barrels', 'sacks'], filler: ['crate', 'barrel', 'stump'], verge: GRASS, floor: 'boards' },
+  city:       { hero: [], trade: ['pallet', 'barrels', 'floodlight', 'bollards', 'hazardsign'], filler: ['crate', 'cones', 'barrel'], floor: 'paint', line: 0xf2b630 },
+  metropolis: { hero: [], trade: ['planter', 'bollardlights', 'planttree', 'bench'], filler: ['pallet', 'litterbin', 'planter'], floor: 'plaza', line: 0x2f8f83 },
+};
+const DRESS = {
+  sawmill:     { hero: ['timbershed'], trade: ['logdeck', 'sawhorse', 'plankstack', 'pennant', 'firewood', 'stumpaxe'], filler: ['stump', 'crates', 'barrel', 'toolrack', 'lantern'], verge: GRASS, floor: 'boards' },
+  carpentry:   { hero: ['toolshed'], trade: ['workbench', 'timberrack', 'chairframes', 'plankstack', 'sawhorse'], filler: ['crates', 'barrel', 'stump', 'toolrack'], verge: GRASS, floor: 'boards' },
+  quarry:      { hero: ['hoist'], trade: ['stoneblocks', 'wheelbarrow', 'lantern', 'brickpallet', 'toolrack', 'rocks'], filler: ['rocks', 'crate', 'barrel', 'stoneblocks'], verge: STONES, floor: 'slabs' },
+  farm:        { hero: ['windpump'], trade: ['haybales', 'scarecrow', 'trough', 'lantern', 'vegcrates', 'churns', 'wheelbarrow'], filler: ['sacks', 'barrel', 'haybales', 'crate'], verge: ['tuft', 'flower', 'flower'], floor: 'boards' },
+  bakery:      { hero: ['breadcart'], trade: ['cafetable', 'breadcrates', 'lantern', 'flowerbox', 'sacks', 'firewood', 'churns'], filler: ['barrel', 'crates', 'flowerbox', 'sacks'], verge: ['flower', 'tuft'], floor: 'slabs' },
+  glassworks:  { hero: ['sandsilo'], trade: ['glassrack', 'sandheap', 'lantern', 'carboys', 'wheelbarrow', 'crates'], filler: ['barrel', 'crate', 'sandheap', 'carboys'], verge: ['tuft', 'pebble'], floor: 'boards' },
+  ironmine:    { hero: ['minecart'], trade: ['pitprops', 'oreheap', 'lantern', 'toolrack', 'barrels'], filler: ['rocks', 'crate', 'lantern', 'pitprops'], verge: STONES, floor: 'slabs' },
+  forge:       { hero: ['hearth'], trade: ['anvil', 'coalbin', 'barrack', 'quenchtub', 'toolrack'], filler: ['barrel', 'crates', 'anvil', 'coalbin'], verge: ['pebble'], floor: 'slabs' },
+  oilfield:    { hero: ['bullettank'], trade: ['pipestack', 'valvetree', 'drumrack', 'windsock', 'floodlight', 'hazardsign'], filler: ['barrels', 'barrel', 'cones', 'pipestack'], verge: ['pebble', 'tuft'], floor: 'slabs',
+                 tints: { barrel: [0x2e3238, 0xe0452f, 0x2e3238], barrels: [0x2e3238, 0xe0452f], drumrack: [0xe0452f, 0x2e3238] } },
+  goldmine:    { hero: ['sluice'], trade: ['minecart', 'strongboxes', 'goldpans', 'lantern', 'pitprops'], filler: ['rocks', 'sacks', 'barrel', 'strongboxes'], verge: STONES, floor: 'slabs',
+                 tints: { minecart: [0xd9b23c], oreheap: [0xd9b23c] } },
+  jewelry:     { hero: ['gempost'], trade: ['displaycase', 'velvetrope', 'safe', 'topiary', 'bench', 'lampglobe'], filler: ['topiary', 'flowerbox', 'litterbin', 'displaycase'], verge: ['flower'], floor: 'slabs' },
+  gemmine:     { hero: ['crystals'], trade: ['minecart', 'lantern', 'oreheap', 'crystals', 'crates'], filler: ['rocks', 'barrel', 'lantern', 'rocks'], verge: STONES, floor: 'slabs',
+                 tints: { minecart: [0xb9a6ff], oreheap: [0x8f7fd6] } },
+  powerplant:  { hero: ['transformer'], trade: ['switchgear', 'cabledrums', 'cellrack', 'pylon', 'floodlight', 'hazardsign', 'bollards'], filler: ['barrels', 'cones', 'pallet', 'cabledrums'], floor: 'paint', line: 0xf2b630,
+                 tints: { barrels: [0xd94a36, 0xe0a52f] } },
+  steelworks:  { hero: ['gantry', 'ventshed'], trade: ['coils', 'beams', 'slagbin', 'gascyl', 'floodlight', 'bollards'], filler: ['pallet', 'barrel', 'cones', 'beams'], floor: 'paint', line: 0xf2b630 },
+  chemical:    { hero: ['tankfarm', 'piperack'], trade: ['totes', 'drumpallet', 'shower', 'windsock', 'floodlight', 'hazardsign'], filler: ['barrels', 'cones', 'bollards', 'totes'], floor: 'paint', line: 0xf2b630,
+                 tints: { barrels: [0x3f7fc4, 0x4c9a5a] } },
+  electronics: { hero: ['dishmast'], trade: ['servers', 'solar', 'acunit', 'partsbins', 'floodlight', 'handtruck', 'pallet'], filler: ['pallet', 'crate', 'bollards', 'cones'], floor: 'paint', line: 0xf2b630,
+                 tints: { pallet: [0x3f7fc4, 0x8fa9c2, 0x2f6fd6], crate: [0x3f7fc4, 0x8fa9c2] } },
+  engineplant: { hero: ['neongear'], trade: ['forklift', 'enginestand', 'toolchest', 'planter', 'bollardlights', 'planttree'], filler: ['pallet', 'planter', 'cones', 'litterbin'], floor: 'plaza', line: 0x2f8f83 },
+  autofactory: { hero: ['neoncar'], trade: ['carbody', 'tyres', 'panelrack', 'chargepost', 'planter', 'cones'], filler: ['tyres', 'planter', 'bollardlights', 'planttree'], floor: 'plaza', line: 0x2f7fd6 },
+  robotics:    { hero: ['neonbot'], trade: ['chargedock', 'dronepad', 'armcrate', 'servers', 'planter', 'bollardlights'], filler: ['planter', 'planttree', 'partsbins', 'litterbin'], floor: 'plaza', line: 0x25b8c9 },
+  store:       { hero: ['kiosk'], trade: ['showcase', 'giftstack', 'bunting', 'bench', 'balloons', 'planttree', 'lampglobe'], filler: ['planter', 'litterbin', 'bench', 'giftstack', 'flowerbox'], floor: 'plaza', line: 0xc9a24a },
+};
+
+/**
  * The look of a yard.
  * @param area  { id, location }
- * @returns {{ ground: string, scale: number, fence: string, outfit: object, shop: object, belt: object }}
+ * @returns {{ ground: string, scale: number, fence: string, outfit: object, shop: object, belt: object, dress: object }}
  */
 export function lookOf(area) {
   const location = BY_LOCATION[area?.location] ? area.location : 'town';
@@ -92,6 +138,7 @@ export function lookOf(area) {
   return {
     ground: pick.ground, scale: GROUNDS[pick.ground].scale, fence: pick.fence,
     outfit: OUTFITS[pick.outfit], outfitName: pick.outfit, shop: SHOP[pick.shop], shopName: pick.shop, belt: BELT[location],
+    dress: DRESS[area?.id] || DRESS_BY_LOCATION[location],
   };
 }
 

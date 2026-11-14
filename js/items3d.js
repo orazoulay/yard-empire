@@ -1,3 +1,4 @@
+// @ts-check
 // Goods in the world: one item (makeItem), a stack of them in hands or on a pad (Stack), and the pallets under the stacks.
 // What each product looks like is in js/gfx/products.js; here they are placed, stacked and moved.
 import * as THREE from 'three';

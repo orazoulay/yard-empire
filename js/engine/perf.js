@@ -44,7 +44,8 @@ export class DebugPanel {
   update(dt) {
     if ((this.age += dt) < 0.5) return;
     this.age = 0;
-    const g = this.game, r = g.renderer, s = g.stats.read(), info = r.info, mem = performance.memory, share = sharingStats();
+    const g = this.game, r = g.renderer, s = g.stats.read(), info = r.info, share = sharingStats();
+    const mem = /** @type {any} */ (performance).memory;   // the JS heap: Chrome only, so not in the standard types
     const q = g.quality, auto = g.settings.graphics === 'auto';
     this.el.textContent = [
       `${s.fps.toFixed(0)} fps  frame ${s.frameMs.toFixed(1)} ms (p95 ${s.frameP95.toFixed(1)})`,

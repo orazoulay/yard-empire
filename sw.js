@@ -6,7 +6,7 @@
 //
 // VERSION and PRECACHE are written by tools/make_precache.py: run it after adding, removing or changing a file
 // (tests/pwa.test.mjs fails when they are out of date). tools/make_site.py runs it on the folder it publishes.
-const VERSION = 'v169896946187';
+const VERSION = 'v340457744310';
 const SHELL = 'lumber-shell-' + VERSION;
 
 const PRECACHE = [
@@ -53,9 +53,19 @@ const PRECACHE = [
   'js/files.js',
   'js/format.js',
   'js/fx.js',
+  'js/game/camera.js',
+  'js/game/company-chores.js',
+  'js/game/feedback.js',
+  'js/game/graphics.js',
+  'js/game/loop.js',
+  'js/game/movement.js',
+  'js/game/objective.js',
+  'js/game/saving.js',
+  'js/game/site.js',
   'js/gfx/kit.js',
   'js/gfx/machines.js',
   'js/gfx/products.js',
+  'js/gfx/props.js',
   'js/guide.js',
   'js/hq.js',
   'js/hq/advisor.js',
@@ -93,6 +103,7 @@ const PRECACHE = [
   'js/sim/advice.js',
   'js/sim/backup.js',
   'js/sim/company.js',
+  'js/sim/dressing.js',
   'js/sim/economy.js',
   'js/sim/helpers.js',
   'js/sim/hqview.js',
