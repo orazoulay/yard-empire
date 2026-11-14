@@ -36,7 +36,7 @@ export class View {
     const b = this.ball, p = this.camera.position;
     b.center.set(x, 1.5, z); b.radius = r;
     if (!this.frustum.intersectsSphere(b)) return false;
-    const far = FOG_END + r;
+    const far = (this.camera.userData.fogFar ?? FOG_END) + r;   // the fog moves back with the camera (js/world.js)
     return (x - p.x) * (x - p.x) + (z - p.z) * (z - p.z) < far * far;
   }
 }

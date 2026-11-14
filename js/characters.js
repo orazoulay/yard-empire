@@ -1,6 +1,7 @@
 // Player and worker characters: low-poly mesh, movement, carried stack, worker AI.
 import * as THREE from 'three';
-import { box, cyl, GLOW } from './world.js';
+import { box, cyl, lit } from './world.js';
+import { bake, moving, paint } from './engine/bake.js';
 import { Carry } from './sim/economy.js';
 import { chooseJob, bestDest, claimOf } from './sim/jobs.js';
 import { Stack } from './items3d.js';
@@ -44,8 +45,7 @@ function makeHat(kind, color) {
     add(cyl(0.38, 0.42, 0.3, color, 12, { roughness: 0.45 }), 0, 0.63, 0);
     add(cyl(0.5, 0.5, 0.08, color, 12, { roughness: 0.45 }), 0, 0.51, 0.1);
     if (kind === 'miner') {
-      const lamp = add(box(0.16, 0.13, 0.08, 0xfff3b0, { map: null, emissive: 0xffe08a, emissiveIntensity: 0.4 }), 0, 0.66, 0.42);
-      lamp.castShadow = false; lamp.material.userData.byDay = 0.4; GLOW.push(lamp.material);   // brighter after dark
+      add(lit(box(0.16, 0.13, 0.08, 0xfff3b0, { map: null }), 0xffe08a, 0.4), 0, 0.66, 0.42);   // brighter after dark
     }
   }
   return g;
@@ -82,7 +82,7 @@ export class Character {
     if (vest != null) {   // two bright strips over the shoulders; not every trade wears them
       const vest1 = box(0.2, 0.7, 0.54, vest); vest1.position.set(-0.22, 0.43, 0); this.torso.add(vest1);
       const vest2 = vest1.clone(); vest2.position.x = 0.22; this.torso.add(vest2);
-      this.paint.vest.push(vest1);   // the two strips share one material
+      this.paint.vest.push(vest1, vest2);
     }
     if (apron != null) {  // a baker, a smith, a carpenter: an apron down the front with a bib
       const skirt = box(0.74, 0.5, 0.06, apron, { round: 0.03 }); skirt.position.set(0, 0.22, 0.27); this.torso.add(skirt);
@@ -117,6 +117,10 @@ export class Character {
     this.ring.rotation.x = -Math.PI / 2; this.ring.position.y = 0.03; this.group.add(this.ring);
     this.group.add(softShadow(1.9, 1.9, { round: true, opacity: 0.32 }));   // dark right under the feet, whatever the sun does
 
+    // Every piece that moves as one (the body, the head, each arm and each leg) is joined into a mesh or two: about ten
+    // draws for a whole person, shadows included, instead of some thirty.
+    moving(this.head, this.armL, this.armR);
+    for (const piece of [this.torso, this.head, this.armL, this.armR, this.legL, this.legR]) bake(piece);
     this.stackRoot = new THREE.Group(); this.stackRoot.position.set(0, 2.45, 0); this.rig.add(this.stackRoot);
     this.stack = new Stack(this.stackRoot, { maxVisible: 16, from: { x: 0, y: -1.9, z: 0.9 } });   // picked up from the ground in front
     scene.add(this.group);
@@ -204,7 +208,12 @@ export class Character {
    * @param colors  { shirt, pants, helmet, vest } as numbers; a part left out keeps its colour
    */
   dress(colors) {
-    for (const [part, meshes] of Object.entries(this.paint)) if (colors?.[part] != null) for (const m of meshes) m.material.color.setHex(colors[part]);
+    // The clothes were joined into the body's few meshes (see the constructor): their colour is changed there. A part
+    // that was not joined shares its material with everyone in that colour, so it gets one of its own first.
+    for (const meshes of Object.values(this.paint)) for (const m of meshes) {
+      if (!m.userData.bakedInto && m.material.userData.shared) { m.material = m.material.clone(); m.material.userData = {}; }
+    }
+    for (const [part, meshes] of Object.entries(this.paint)) if (colors?.[part] != null) for (const m of meshes) paint(m, colors[part]);
   }
 
   get headPos() { return new THREE.Vector3(this.pos.x, 2.9 + this.stack.height, this.pos.z); }

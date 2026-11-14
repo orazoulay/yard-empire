@@ -4,98 +4,121 @@
 // cached copy as the fallback when it is not (or when the network hangs for more than 4 seconds).
 // Nothing comes from another host: three.js and the font are packed with the game (vendor/, fonts/).
 //
-// PRECACHE must list every file the game loads; tests/pwa.test.mjs fails if one is missing.
-const VERSION = 'v29';
+// VERSION and PRECACHE are written by tools/make_precache.py: run it after adding, removing or changing a file
+// (tests/pwa.test.mjs fails when they are out of date). tools/make_site.py runs it on the folder it publishes.
+const VERSION = 'v169896946187';
 const SHELL = 'lumber-shell-' + VERSION;
 
 const PRECACHE = [
   './',
-  'index.html',
-  'manifest.webmanifest',
-  'css/style.css',
   'css/fonts.css',
-  'fonts/inter-latin.woff2',
-  'fonts/inter-latin-ext.woff2',
-  'vendor/three.module.js',
   'css/platform.css',
-  'js/main.js',
-  'js/errors.js',
-  'js/fences.js',
-  'js/notice.js',
-  'js/account.js',
-  'js/account-ui.js',
-  'js/area.js',
-  'js/audio.js',
-  'js/characters.js',
-  'js/cloud.js',
-  'js/config.js',
-  'js/format.js',
-  'js/fx.js',
-  'js/guide.js',
-  'js/hq.js',
-  'js/hud.js',
-  'js/input.js',
-  'js/items3d.js',
-  'js/labels.js',
-  'js/loading.js',
-  'js/particles.js',
-  'js/pwa.js',
-  'js/pwa-detect.js',
-  'js/files.js',
-  'js/native.js',
-  'js/settings.js',
-  'js/settings-logic.js',
-  'js/sky.js',
-  'js/stations.js',
-  'js/textures.js',
-  'js/trucks.js',
-  'js/tutorial.js',
-  'js/ui-logic.js',
-  'js/world.js',
-  'js/yard-ui.js',
-  'js/data/areas.js',
-  'js/data/balance.js',
-  'js/data/company.js',
-  'js/data/help.js',
-  'js/data/builds.js',
-  'js/site.js',
-  'js/builders.js',
-  'js/credits.js',
-  'js/credits-ui.js',
-  'js/pets.js',
-  'js/data/credits.js',
-  'js/sim/helpers.js',
-  'js/sim/site.js',
-  'js/data/stories.js',
-  'js/sim/stories.js',
-  'js/data/looks.js',
-  'js/icons.js',
-  'js/data/tuning.js',
-  'js/sim/advice.js',
-  'js/sim/backup.js',
-  'js/sim/company.js',
-  'js/sim/economy.js',
-  'js/sim/hqview.js',
-  'js/sim/jobs.js',
-  'js/sim/market.js',
-  'js/sim/offline.js',
-  'js/sim/processor.js',
-  'js/sim/series.js',
-  'js/sim/sync.js',
-  // the yard itself, in 3D (list C of the hundred)
-  'js/customers.js',
-  'js/models.js',
-  'js/scenery.js',
-  'js/view.js',
-  'js/yardlife.js',
-  'js/zoom.js',
-  'js/sim/yard.js',
+  'css/style.css',
+  'fonts/inter-latin-ext.woff2',
+  'fonts/inter-latin.woff2',
   'icons/apple-touch-icon.png',
   'icons/favicon-32.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/maskable-192.png',
   'icons/maskable-512.png',
+  'index.html',
+  'js/account-ui.js',
+  'js/account.js',
+  'js/area.js',
+  'js/audio.js',
+  'js/builders.js',
+  'js/characters.js',
+  'js/cloud.js',
+  'js/config.js',
+  'js/credits-ui.js',
+  'js/credits.js',
+  'js/customers.js',
+  'js/data/areas.js',
+  'js/data/balance.js',
+  'js/data/builds.js',
+  'js/data/company.js',
+  'js/data/credits.js',
+  'js/data/help.js',
+  'js/data/looks.js',
+  'js/data/stories.js',
+  'js/data/tuning.js',
+  'js/engine/bake.js',
+  'js/engine/materials.js',
+  'js/engine/perf.js',
+  'js/engine/quality.js',
+  'js/engine/renderer.js',
+  'js/errors.js',
+  'js/fences.js',
+  'js/files.js',
+  'js/format.js',
+  'js/fx.js',
+  'js/gfx/kit.js',
+  'js/gfx/machines.js',
+  'js/gfx/products.js',
+  'js/guide.js',
+  'js/hq.js',
+  'js/hq/advisor.js',
+  'js/hq/build.js',
+  'js/hq/businesses.js',
+  'js/hq/contracts.js',
+  'js/hq/finance.js',
+  'js/hq/goals.js',
+  'js/hq/help.js',
+  'js/hq/kit.js',
+  'js/hq/logistics.js',
+  'js/hq/market.js',
+  'js/hq/overview.js',
+  'js/hq/patch.js',
+  'js/hq/people.js',
+  'js/hq/records.js',
+  'js/hq/research.js',
+  'js/hud.js',
+  'js/icons.js',
+  'js/input.js',
+  'js/items3d.js',
+  'js/labels.js',
+  'js/loading.js',
+  'js/main.js',
+  'js/models.js',
+  'js/native.js',
+  'js/notice.js',
+  'js/particles.js',
+  'js/pets.js',
+  'js/pwa-detect.js',
+  'js/pwa.js',
+  'js/scenery.js',
+  'js/settings-logic.js',
+  'js/settings.js',
+  'js/sim/advice.js',
+  'js/sim/backup.js',
+  'js/sim/company.js',
+  'js/sim/economy.js',
+  'js/sim/helpers.js',
+  'js/sim/hqview.js',
+  'js/sim/jobs.js',
+  'js/sim/market.js',
+  'js/sim/offline.js',
+  'js/sim/processor.js',
+  'js/sim/series.js',
+  'js/sim/site.js',
+  'js/sim/stories.js',
+  'js/sim/sync.js',
+  'js/sim/yard.js',
+  'js/site.js',
+  'js/sky.js',
+  'js/stations.js',
+  'js/textures.js',
+  'js/trucks.js',
+  'js/tutorial.js',
+  'js/ui-logic.js',
+  'js/view.js',
+  'js/world.js',
+  'js/yard-ui.js',
+  'js/yardlife.js',
+  'js/zoom.js',
+  'manifest.webmanifest',
+  'vendor/three.module.min.js',
 ];
 
 self.addEventListener('install', event => {
@@ -117,11 +140,15 @@ self.addEventListener('activate', event => {
 
 const timeout = ms => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
 
-async function networkFirst(request) {
+async function networkFirst(event, request) {
   const cache = await caches.open(SHELL);
   try {
     const res = await Promise.race([fetch(request), timeout(4000)]);
-    if (res.ok) cache.put(request, res.clone());
+    // Only whole, plain answers are kept: not a 206 (cache.put rejects it), not a redirect or an error page, and
+    // not anything the server marked private or no-store.
+    if (res.status === 200 && res.type === 'basic' && !/no-store|private/i.test(res.headers.get('cache-control') || '')) {
+      event.waitUntil(cache.put(request, res.clone()).catch(() => {}));
+    }
     return res;
   } catch {
     const hit = await cache.match(request, { ignoreSearch: true });
@@ -137,8 +164,11 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin === self.location.origin) {
     // Accounts and the admin portal are live data: never answered from the cache.
+    // Also when the game sits below a path (scope /yard-empire/) and the address is the host's own /api/...
     const path = url.pathname.slice(new URL(self.registration.scope).pathname.length);
-    if (path.startsWith('api/') || path.startsWith('admin')) return;
-    event.respondWith(networkFirst(request));
+    if (/^(?:api|admin)(?:\/|$)/.test(path) || /^\/(?:api|admin)(?:\/|$)/.test(url.pathname)) return;
+    // A request that carries credentials of its own is never kept, and a range request is the media element's business.
+    if (request.headers.has('authorization') || request.headers.has('range')) return;
+    event.respondWith(networkFirst(event, request));
   }
 });

@@ -3,6 +3,10 @@ import './errors.js';   // platform: first, so the "Something went wrong" sheet 
 import * as THREE from 'three';
 import { createWorld, skyLight } from './world.js';
 import { setAnisotropy } from './textures.js';
+import { createRenderer } from './engine/renderer.js';
+import { AutoQuality, PROFILES, pixelRatioFor } from './engine/quality.js';
+import { FrameStats, DebugPanel, debugWanted } from './engine/perf.js';
+import { setSmallShadows } from './items3d.js';
 import { Input } from './input.js';
 import { Labels } from './labels.js';
 import { Fx } from './fx.js';
@@ -50,6 +54,11 @@ import { YardUi } from './yard-ui.js';
 import { loading } from './loading.js';
 import { YardWatch } from './sim/advice.js';   // more to do: the Advisor's minute of machine readings
 
+/** Seconds between frames, read once a frame (THREE.Clock is deprecated since r183; this is all the game used of it). */
+class FrameClock {
+  constructor() { this.last = performance.now(); }
+  getDelta() { const now = performance.now(), d = (now - this.last) / 1000; this.last = now; return d; }
+}
 const inRect = (p, r) => p.x >= r.minX && p.x <= r.maxX && p.z >= r.minZ && p.z <= r.maxZ;
 /** The player's local day number (days since 1970): daily and weekly goals follow it. */
 const today = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
@@ -68,6 +77,8 @@ function crosses(a, b, r) {
   }
   return t1 - t0 > 0.001;
 }
+const SHOCK_RING = new THREE.RingGeometry(0.86, 1, 48);   // the shape of every ring that spreads over the ground (shock)
+const STEP = 0.05, CATCH_UP = 0.25;   // the longest step of the rules, and the most time caught up in one frame (seconds)
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 class Game {
@@ -76,13 +87,9 @@ class Game {
     this.account = account;
     this.saveKey = account.saveKey;
     this.canvas = document.getElementById('game');
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
+    // the renderer (js/engine/renderer.js): a phone that drops the graphics context gets the sky's reflections made again
+    this.renderer = createRenderer(this.canvas, { remake: () => { this.scene.environment?.dispose(); this.scene.environment = skyLight(this.renderer); } });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    // Bright sunlight is squeezed into what a screen can show the way a camera does it, instead of clipping to flat colour.
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
     setAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
 
     // the Metropolis is built-up land too; the building site's plot is kept free of trees and of the city's buildings
@@ -157,7 +164,10 @@ class Game {
 
     this.camFocus = new THREE.Vector3();
     this.camZoom = 1; this.stillFor = 0; this.punch = 0;   // the camera moves with the player (see frame)
-    this.perf = { time: 0, frames: 0, slow: false };       // how fast this device draws, for the automatic graphics level
+    // how fast this device draws (js/engine/perf.js), and the automatic graphics level that follows it (js/engine/quality.js)
+    this.stats = new FrameStats();
+    this.autoQuality = new AutoQuality({ start: 'high' });
+    this.debug = debugWanted() ? new DebugPanel(this) : null;
     this.applyGraphics();
     this.reveal = null;
     this.settingsOpen = false;
@@ -191,10 +201,10 @@ class Game {
     this.watch = new YardWatch(); this.hq.showName();   // more to do: what the Advisor reads, and the company's name in the header
     this.hud.setCash(this.econ.cash, true);
 
-    this.clock = new THREE.Clock();
+    this.clock = new FrameClock();
     this.resize();
     addEventListener('resize', () => this.resize());
-    addEventListener('visibilitychange', () => { if (document.hidden) this.save(); });
+    addEventListener('visibilitychange', () => { if (document.hidden) this.save(); this.autoQuality.rest(); });
     this.checkOffline();   // before the first save overwrites the last-seen time
     this.renderer.setAnimationLoop(() => this.frame());
 
@@ -210,31 +220,34 @@ class Game {
 
   resize() { this.renderer.setSize(innerWidth, innerHeight, false); }
   /**
-   * The graphics level from the settings: high, low, or auto, which starts high and drops to low once
-   * if this device turns out to draw slowly. Low draws fewer pixels and a smaller shadow map; the game
-   * plays the same.
+   * The graphics level (js/engine/quality.js): the one chosen in the settings, or for 'auto' the one the measured
+   * frames ask for. What each level changes is in PROFILES there; the game plays the same on every level.
    */
   applyGraphics() {
-    const want = this.settings.graphics, low = want === 'low' || (want === 'auto' && this.perf.slow);
-    if (low === this.lowGraphics) return;
-    this.lowGraphics = low;
-    this.life.setLow(low);   // fewer bushes, less rain, smaller bursts, no customers: at once, without a reload
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, low ? 1.25 : 2));
+    const auto = this.settings.graphics === 'auto';
+    const level = auto ? this.autoQuality.level : this.settings.graphics, scale = auto ? this.autoQuality.scale : 1;
+    const q = PROFILES[level] || PROFILES.high;
+    const key = q.name + '|' + scale;
+    if (key === this.qualityKey) return;
+    this.qualityKey = key; this.quality = q;
+    const low = !q.detail;
+    if (low !== this.lowGraphics) { this.lowGraphics = low; this.life.setLow(low); }   // fewer bushes, less rain, no customers: at once, without a reload
+    this.particles.scale = q.particles;
+    setSmallShadows(q.smallShadows);   // goods in stacks cast shadows on the richer levels only
+    this.renderer.setPixelRatio(pixelRatioFor(q, devicePixelRatio, scale));
     this.resize();
-    const shadow = this.sun.shadow, size = low ? 1024 : 2048;
-    shadow.mapSize.set(size, size);
-    if (shadow.map) { shadow.map.dispose(); shadow.map = null; }   // made again at the new size
+    const shadow = this.sun.shadow;
+    if (shadow.mapSize.x !== q.shadowMap) {
+      shadow.mapSize.set(q.shadowMap, q.shadowMap);
+      if (shadow.map) { shadow.map.dispose(); shadow.map = null; }   // made again at the new size
+    }
   }
-  /** Time the first seconds of play; a device that cannot hold about 40 frames a second gets the low level. */
-  measure(raw) {
-    const p = this.perf;
-    if (p.done || raw > 0.25 || document.hidden) return;   // a pause is not slowness
-    p.age = (p.age || 0) + raw;
-    if (p.age < 2) return;                                 // the first moments compile and load
-    p.time += raw; p.frames++;
-    if (p.time < 4) return;
-    p.done = true;
-    if (p.time / p.frames > 1 / 40) { p.slow = true; this.applyGraphics(); }
+  /** Count one frame for the diagnostics and, on 'auto', for the graphics level. */
+  measure(gapMs, workMs) {
+    this.stats.add(gapMs, workMs);
+    if (this.settings.graphics !== 'auto') return;
+    if (document.hidden || this.paused) { this.autoQuality.rest(); return; }   // a pause, or a sheet over a still yard, is no measure
+    if (this.autoQuality.frame(gapMs, workMs)) this.applyGraphics();
   }
   get paused() { return this.settingsOpen || this.offlineOpen || this.account.open; }
 
@@ -362,12 +375,17 @@ class Game {
   }
   /** A ring that spreads over the ground from a point: something big just happened here. */
   shock(x, z, color = 0xffffff, size = 7) {
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.86, 1, 48),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
-    ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.07, z); this.scene.add(ring);
+    // A few rings are made once and used again: a burst of purchases makes no garbage and uploads nothing.
+    this.rings ||= [];
+    let ring = this.rings.find(r => !r.visible);
+    if (!ring) {
+      ring = new THREE.Mesh(SHOCK_RING, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
+      ring.rotation.x = -Math.PI / 2; this.scene.add(ring); this.rings.push(ring);
+    }
+    ring.visible = true; ring.material.color.setHex(color); ring.position.set(x, 0.07, z); ring.updateMatrix();
     this.tweens.push({ t: 0, dur: 0.75, step: k => {
       ring.scale.setScalar(0.5 + (1 - Math.pow(1 - k, 3)) * size); ring.material.opacity = 0.9 * (1 - k);
-      if (k >= 1) { this.scene.remove(ring); ring.geometry.dispose(); ring.material.dispose(); }
+      if (k >= 1) ring.visible = false;
     } });
   }
   waypoint(pos, target) {
@@ -756,12 +774,27 @@ class Game {
     }
   }
 
+  /**
+   * One frame. The rules of the game run in even steps of at most 50 ms (step), however fast the device draws: a phone
+   * that draws 20 frames a second plays at the same speed as a screen that draws 120. Up to a quarter of a second is
+   * caught up at once; a longer gap is a pause (time away pays for anything past a minute). Then the picture is drawn
+   * once (present), with the animation timed by the real time between frames, so it moves at the same speed everywhere.
+   */
   frame() {
     const began = performance.now();
     const raw = this.clock.getDelta();
-    this.measure(raw);
     if (raw > OFFLINE_MIN_SECONDS) this.checkOffline();   // the tab slept: treat the gap as time away
-    const dt = Math.min(raw, 0.05);
+    const total = Math.min(raw, CATCH_UP), steps = Math.max(1, Math.ceil(total / STEP - 1e-6)), dt = total / steps;
+    for (let i = 0; i < steps; i++) this.step(dt);
+    if (!this.paused && this.company.founded) this.hud.setCash(this.econ.cash);   // wages and upkeep drain it all the time
+    this.present(Math.min(raw, 0.1));
+    const work = performance.now() - began;
+    this.measure(raw * 1000, work);
+    this.loopMs = (this.loopMs || 0) * 0.98 + work * 0.02;   // what a frame's work costs, smoothed: game.loopMs in the console
+  }
+
+  /** The rules for dt seconds: the player and the workers move and work, the machines run, the company keeps its books. */
+  step(dt) {
     this._views = null;
     const frozen = this.paused || !!this.reveal || this.hqOpen;
     const v = frozen ? { x: 0, z: 0, len: 0 } : this.input.vector;
@@ -793,9 +826,12 @@ class Game {
       this.chores -= dt;
       if (this.chores <= 0) { this.chores = 1; this.companyChores(); }
       this.celebrate();
-      if (this.company.founded) this.hud.setCash(this.econ.cash);   // wages and upkeep drain it all the time
     }
+  }
 
+  /** Everything that is only looked at, for dt seconds of real time: dust, effects, sky, labels, the camera, and the picture. */
+  present(dt) {
+    const p = this.player;
     // footstep dust, pop-in tweens, particles
     if (p.moving > 0.8) {
       this.stepTimer -= dt;
@@ -857,14 +893,19 @@ class Game {
     this.updateCamera(this.camFocus, innerWidth / innerHeight, zoom);
     this.view.update();
     this.labels.update(innerWidth, innerHeight);
-    this.renderer.render(this.scene, this.camera);
+    // the shadow map is drawn again every frame on the richer levels, every other frame on the cheaper ones
+    const sm = this.renderer.shadowMap;
+    sm.autoUpdate = false; sm.needsUpdate ||= (this.shadowFrame = (this.shadowFrame || 0) + 1) % (this.quality.shadowEvery || 1) === 0;
+    if (!this.renderer.lost) this.renderer.render(this.scene, this.camera);   // while a phone has taken the graphics away, the rules still run
     this.hud.tick(dt);
     this.hq.tick(dt);
 
+    this.debug?.update(dt);
+
     this.saveTimer += dt;
     if (this.saveTimer > 2) { this.saveTimer = 0; this.save(); }
-    this.loopMs = (this.loopMs || 0) * 0.98 + (performance.now() - began) * 0.02;   // what a frame's work costs, smoothed: game.loopMs in the console
   }
+
 
   save() {
     if (this.noSave) return;   // set while resetting, so the unload save cannot bring the old game back

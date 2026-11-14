@@ -19,6 +19,7 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --pad: clamp(10px, 3vw, 18px);
   --top-h: 100px;   /* where the top bar ends; measured by the HUD, this is only the value before it has */
+  --bottom-h: calc(var(--pad) + var(--safe-b) + 88px);   /* where the objective card begins, from the bottom; measured by the HUD too */
 }
 * { box-sizing: border-box; }
 html { font-size: 16px; }
@@ -156,6 +157,7 @@ button { font-family: inherit; }
 .o-progress.hidden { display: none; }
 .bar { display: block; flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .14); overflow: hidden; }
 .bar .fill { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--green); transition: width .25s; }
+#obj-fill { width: 100%; border-radius: 0; transform: scaleX(0); transform-origin: left; transition: transform .25s ease-out; }   /* grows without a layout */
 .o-sub { font-size: .75rem; font-weight: 500; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 #skip-tutorial { display: none; margin-right: 6px; }
 #objective.tutorial { border-color: rgba(227, 179, 65, .6); }
@@ -188,7 +190,7 @@ button { font-family: inherit; }
 
 /* a line of help above the objective card */
 #hint {
-  position: fixed; left: 50%; bottom: calc(var(--pad) + var(--safe-b) + 96px); transform: translateX(-50%); z-index: 26;   /* clear of the tallest objective card */
+  position: fixed; left: 50%; bottom: calc(var(--bottom-h) + 8px); transform: translateX(-50%); z-index: 26;   /* just above the objective card, however tall it is */
   height: 32px; padding: 0 14px; font-size: .8125rem; white-space: nowrap; max-width: calc(100vw - 2 * var(--pad));
   pointer-events: none; animation: fade .2s;
 }
@@ -196,7 +198,7 @@ button { font-family: inherit; }
 /* How to walk on a touch screen: a touch point that presses and drags to and fro, above the line of help.
    Shown on a first visit until the first move (js/yard-ui.js). With less motion it stays still. */
 .drag-show {
-  position: fixed; left: 50%; bottom: calc(var(--pad) + var(--safe-b) + 150px); width: 44px; height: 44px; margin-left: -22px;
+  position: fixed; left: 50%; bottom: calc(var(--bottom-h) + 64px); width: 44px; height: 44px; margin-left: -22px;
   border-radius: 50%; background: rgba(255, 255, 255, .85); box-shadow: 0 0 0 8px rgba(255, 255, 255, .28), 0 6px 16px rgba(0, 0, 0, .3);
   pointer-events: none; z-index: 26; animation: drag-show 2.4s ease-in-out infinite;
 }
@@ -209,6 +211,7 @@ button { font-family: inherit; }
   90% { transform: translateX(0) scale(.82); }
 }
 html.calm .drag-show { animation: none; }
+body:has(> .ye-notice:not([hidden])) .drag-show { bottom: calc(var(--bottom-h) + 112px); }   /* above the status line too (css/platform.css) */
 body:has(> .sheet-backdrop:not([hidden])) .drag-show, html.bare .drag-show { display: none; }
 /* The hint is about the yard. While a sheet is open (settings, account, the Headquarters) it would lie on top of the sheet's buttons. */
 body:has(> .sheet-backdrop:not([hidden])) #hint { display: none; }
@@ -217,7 +220,7 @@ html.bare #hud, html.bare #labels { visibility: hidden; }
 
 /* ---------- world labels ---------- */
 .label {
-  position: absolute; transform: translate(-50%, -50%); white-space: nowrap; text-align: center; line-height: 1.1;
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; text-align: center; line-height: 1.1;   /* placed by a transform: js/labels.js */
   color: #fff; font-weight: 700; text-shadow: 0 2px 4px rgba(0, 0, 0, .5), 0 0 8px rgba(0, 0, 0, .25);
 }
 .label.zone { font-size: clamp(1rem, 4.2vw, 1.5rem); letter-spacing: .08em; }
@@ -230,6 +233,7 @@ html.bare #hud, html.bare #labels { visibility: hidden; }
   display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 150px; max-width: 230px; padding: 6px 11px 7px; border-radius: 10px;
   background: var(--glass); border: 1px solid var(--glass-border); text-shadow: none; text-align: center;
 }
+.label.site-sign .ss-title, .label.site-sign .ss-sub { white-space: normal; overflow-wrap: anywhere; }   /* "Start it in Headquarters, Construction" stays inside the sign */
 .ss-title { font-size: .8125rem; font-weight: 700; color: var(--yellow); letter-spacing: .02em; }
 .ss-sub { font-size: .75rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 .ss-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .16); overflow: hidden; }
@@ -310,11 +314,12 @@ html.calm .label.plot .ring { transition: none; transform: none; }
 }
 
 /* ---------- effects ---------- */
-.money { position: absolute; width: 28px; height: 18px; transform: translate(-50%, -50%); will-change: transform, left, top; }
+.money { position: absolute; left: 0; top: 0; width: 28px; height: 18px; transform: translate(-50%, -50%); will-change: transform; }   /* flown by a transform: js/fx.js */
 .money::before { content: ""; position: absolute; inset: 0; background: #3ec25e; border: 2px solid #1f8c3a; border-radius: 3px; }
 .money::after { content: ""; position: absolute; inset: 4px 9px; border: 2px solid #1f8c3a; border-radius: 50%; }
 .float-text {
-  position: absolute; font-weight: 700; font-size: 1.125rem; text-shadow: 0 2px 4px rgba(0, 0, 0, .45); font-variant-numeric: tabular-nums;
+  position: absolute; font-weight: 700; font-size: 1.125rem; font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 2px rgba(0, 0, 0, .9), 0 1px 2px rgba(0, 0, 0, .85), 0 2px 8px rgba(0, 0, 0, .4);   /* the plot names' outline: readable on sand, snow and cobbles */
   transform: translate(-50%, -50%); animation: rise 1s forwards; white-space: nowrap;
 }
 @keyframes rise {
@@ -331,7 +336,7 @@ html.calm .label.plot .ring { transition: none; transform: none; }
 @keyframes sum-leave { to { transform: translate(-50%, -175%); opacity: 0; } }
 @keyframes text-fade { 0% { opacity: 0; } 15%, 70% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes sum-fade { to { opacity: 0; } }
-.confetti { position: absolute; width: 10px; height: 14px; border-radius: 2px; will-change: transform; }
+.confetti { position: absolute; left: 0; top: 0; width: 10px; height: 14px; border-radius: 2px; will-change: transform; }
 
 /* ---------- sheets ---------- */
 .sheet-backdrop {
@@ -493,7 +498,7 @@ kbd {
 /* The bar is as far as the game has really got; its slow breathing only says that the page is alive. */
 .l-fill { height: 100%; width: 10%; border-radius: 2px; background: var(--yellow); transition: width .35s ease-out; animation: l-wait 1.4s ease-in-out infinite; }
 @keyframes l-wait { 50% { opacity: .55; } }
-.l-text { font-weight: 500; font-size: .8125rem; color: var(--muted); }
+.l-text { font-weight: 500; font-size: .8125rem; line-height: 1.4; color: var(--muted); text-align: center; }
 .l-tip { min-height: 2.8em; margin-top: 10px; font-size: .84375rem; font-weight: 400; line-height: 1.4; color: var(--text); text-align: center; }
 .l-start { gap: 18px; animation: fade .3s; }
 .l-pitch { margin: 0; font-size: .9375rem; font-weight: 400; line-height: 1.45; color: var(--muted); text-align: center; }

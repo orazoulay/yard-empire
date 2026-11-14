@@ -1,5 +1,6 @@
 // An area (yard): ground, fence, gate, its stations, plots and workers.
 import * as THREE from 'three';
+import { bake } from './engine/bake.js';
 import { box, mat, makeRoundTrees, makeTrees, randomTreesIn, soaks } from './world.js';
 import { ground, wornGround } from './textures.js';
 import { buildFence, gatePaint } from './fences.js';
@@ -155,7 +156,7 @@ export class Area {
     // rails, pickets, a wall, railings, mesh or glass: by the yard's look, or the player's Fence choice (bought with credits)
     this.fenceRuns = runs; this.fenceGroup = new THREE.Group(); this.group.add(this.fenceGroup);
     this.fenceKind = this.game.fenceKind?.() || this.look.fence;
-    buildFence(this.fenceGroup, runs, this.fenceKind);
+    buildFence(this.fenceGroup, runs, this.fenceKind); bake(this.fenceGroup);   // a fence never moves: its rails and walls are joined
 
     this.lampSpots = addFenceLamps(this.game.scene, b, drawn, [g, way].filter(Boolean), GATE_HALF + 2.4);   // clear of the gates and of their signposts
     if (way) {   // the signpost beside the opening says where it leads
@@ -173,7 +174,7 @@ export class Area {
         const plank2 = plank1.clone(); plank2.position.y = 0.9; leaf.add(plank2);
         const cross = box(H * 0.98, 0.18, 0.1, paint.frame, paint.extra); cross.position.set(-end * H / 2, 0.68, 0); cross.rotation.z = end * 0.2; leaf.add(cross);
         const stile = box(0.14, 1.0, 0.14, paint.frame, paint.extra); stile.position.set(-end * (H - 0.07), 0.6, 0); leaf.add(stile);
-        bar.add(leaf);
+        bake(leaf); bar.add(leaf);   // each leaf swings as one piece
         return leaf;
       });
       const sign = box(1.6, 0.9, 0.1, 0xffd23f); sign.position.y = 1.7; bar.add(sign);
@@ -195,9 +196,9 @@ export class Area {
   setFence(kind) {
     const want = kind || this.look.fence;
     if (!this.fenceGroup || want === this.fenceKind) return;
-    for (const o of [...this.fenceGroup.children]) { this.fenceGroup.remove(o); o.geometry?.dispose(); }
+    for (const o of [...this.fenceGroup.children]) { this.fenceGroup.remove(o); if (!o.geometry?.userData.shared) o.geometry?.dispose(); }   // shared shapes stay for the next fence
     this.fenceKind = want;
-    buildFence(this.fenceGroup, this.fenceRuns, want);
+    buildFence(this.fenceGroup, this.fenceRuns, want); bake(this.fenceGroup);
   }
 
   /**

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { bark, edge, grass, rings } from './textures.js';
 import { cityEdge, mulberry, offRects } from './sim/site.js';
 import { cameraFrame } from './sim/yard.js';
+import { sharedMaterial, boxShape, cylinderShape, glowing } from './engine/materials.js';
 export { mulberry };   // the run of numbers the scenery is drawn from; it lives with the plain layouts now (js/sim/site.js)
 
 /**
@@ -42,25 +43,40 @@ export function roundedBox(w, h, d, r, fine = 1) {
     const [ua, us, ul, va, vs, vl] = UV[Math.floor(i / perFace)];
     uv.setXY(i, 0.5 + us * p[ua] / ul, 0.5 + vs * p[va] / vl);
   }
+  geo.userData.shared = true;
   rounded.set(key, geo);
   return geo;
 }
 
 let edgeMap = null;
 /**
+ * The material for a part made by box() or cyl(): shared with every other part made of the same (js/engine/materials.js),
+ * unless `unique` is set because this one will be changed later (a colour that is repainted, a glow turned up).
+ */
+function part(color, { unique = false, ...extra } = {}) {
+  const params = { color, roughness: 0.82, metalness: 0, envMapIntensity: 0.42, ...extra };
+  return unique ? new THREE.MeshStandardMaterial(params) : sharedMaterial(params);
+}
+/**
  * A block. In `extra`, besides what a material takes: round = radius of its edges (0 or none for a
- * sharp block), fine = how finely they are rounded.
+ * sharp block), fine = how finely they are rounded, unique = a material of its own (see part()).
  */
 export function box(w, h, d, color, { round = 0, fine = 1, ...extra } = {}) {
   // Every face of a block is shaded a little toward its edges, unless it brings a surface of its own.
   const r = Math.min(round, w / 2, h / 2, d / 2);
-  const geo = r > 0.001 ? roundedBox(w, h, d, r, fine) : new THREE.BoxGeometry(w, h, d);
-  const m = new THREE.Mesh(geo, mat(color, { map: edgeMap || (edgeMap = edge()), ...extra }));
+  const geo = r > 0.001 ? roundedBox(w, h, d, r, fine) : boxShape(w, h, d);
+  const m = new THREE.Mesh(geo, part(color, { map: edgeMap || (edgeMap = edge()), ...extra }));
   m.castShadow = true; m.receiveShadow = true; return m;
 }
 export function cyl(rt, rb, h, color, seg = 10, extra) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat(color, extra));
+  const m = new THREE.Mesh(cylinderShape(rt, rb, h, seg), part(color, extra));
   m.castShadow = true; m.receiveShadow = true; return m;
+}
+/** Make a mesh glow after dark: windows, screens, lamps. byDay is how much of the glow shows in daylight. */
+export function lit(mesh, glow, byDay) {
+  mesh.material = glowing(mesh.material, glow, byDay, GLOW);
+  mesh.castShadow = false;
+  return mesh;
 }
 
 const SUN = [15, 26, 9];   // where the sun stands at the start, from whatever the camera looks at
@@ -338,16 +354,21 @@ export function createWorld(areaRects, clear = []) {
    * @param zoom    1 = normal, >1 = further away (used for the area reveal)
    */
   let shadowHalf = 32;
+  const _toSun = new THREE.Vector3(), _right = new THREE.Vector3(), _side = new THREE.Vector3(), _at = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
   function updateCamera(target, aspect, zoom = 1) {
     // A tall phone pulls back for its height, a wide screen for its depth (js/sim/yard.js, cameraFrame).
     const { vFov, dist } = cameraFrame(aspect, zoom);
+    // The fog starts and ends further away when the camera is pulled back (a new yard or the building site being shown,
+    // the player's own zoom): at a fixed distance it would wash a far view out to green. What lies past it is not drawn
+    // (js/view.js reads the same distance).
+    const back = Math.max(1, dist / cameraFrame(aspect, 1).dist);
+    scene.fog.near = 50 * back; scene.fog.far = 110 * back; camera.far = Math.max(250, 140 * back);
+    camera.userData.fogFar = scene.fog.far;
     camera.fov = vFov;
     camera.aspect = aspect; camera.updateProjectionMatrix();
     camera.position.set(target.x, 17 * dist, target.z + 11.5 * dist);
     camera.lookAt(target.x, 0, target.z - 1.5);
     camera.updateMatrixWorld();   // so labels projected this frame use the new camera, not last frame's
-    sun.position.set(target.x + sunAt.x, sunAt.y, target.z + sunAt.z);
-    sun.target.position.set(target.x, 0, target.z);
     // Zoomed out, more ground is in sight than the shadows cover: widen them (they get a little softer).
     // Not for the small zoom of the camera's own moves, or the shadows would shimmer with every step.
     const half = zoom > 1.12 ? 32 * zoom : 32;
@@ -356,6 +377,16 @@ export function createWorld(areaRects, clear = []) {
       const cam = sun.shadow.camera;
       cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half; cam.updateProjectionMatrix();
     }
+    // The shadows follow the camera, but only in whole texels of the shadow map, seen from the sun: moved by part of a
+    // texel, every shadow edge would be drawn over a slightly different set of texels and crawl as the player walks.
+    _toSun.copy(sunAt).normalize();
+    _right.crossVectors(_up, _toSun).normalize(); _side.crossVectors(_toSun, _right);
+    const texel = 2 * shadowHalf / sun.shadow.mapSize.x;
+    _at.set(target.x, 0, target.z);
+    const u = _at.dot(_right), v = _at.dot(_side);
+    _at.addScaledVector(_right, Math.round(u / texel) * texel - u).addScaledVector(_side, Math.round(v / texel) * texel - v);
+    sun.position.copy(_at).add(sunAt);
+    sun.target.position.copy(_at);
   }
   return { scene, camera, updateCamera, sun, hemi, setDetail };
 }
@@ -382,7 +413,7 @@ function makeCityEdge(rects, clear = []) {
     const roof = box(w + 0.3, 0.25, d + 0.3, ROOFS[top]); roof.position.set(x, hgt + 0.12, z); g.add(roof);
     const vent = box(0.9, 0.5, 0.9, 0xe3e7ea); vent.position.set(vx, hgt + 0.5, vz); g.add(vent);
     for (let y = 1.2; y < hgt - 0.6; y += 1.5) {   // rows of lit windows on the side facing the yards
-      const lights = box(w * 0.7, 0.45, 0.08, 0xffe9a8, { map: null, emissive: 0xffd27a, emissiveIntensity: 0.3 }); lights.material.userData.byDay = 0.3; GLOW.push(lights.material); lights.position.set(x, y, z - d / 2 - 0.03); g.add(lights);
+      const lights = lit(box(w * 0.7, 0.45, 0.08, 0xffe9a8, { map: null }), 0xffd27a, 0.3); lights.position.set(x, y, z - d / 2 - 0.03); g.add(lights);
     }
   }
   for (const [x, z] of layout.chimneys) {   // chimneys at the two far corners

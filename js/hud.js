@@ -4,6 +4,7 @@ import { fmt } from './format.js';
 import { icon } from './icons.js';
 import { loading } from './loading.js';
 import { Journal, ago, rateText, awayFacts, SHORTCUTS, logTarget } from './ui-logic.js';
+import { GRAPHICS_LABEL } from './settings-logic.js';
 
 // The icon of a card, by the small heading above its title, when the card does not name one itself.
 const KICKER_ICON = { Unlocked: 'upgrade', 'New area': 'expansion', New: 'hq', Milestone: 'award', Promoted: 'star', Contract: 'contracts',
@@ -51,12 +52,24 @@ export class Hud {
     this.watchTopBar();
   }
 
-  /** The unlock card sits just under the top bar, whatever its height is on this screen and at this text size. */
+  /**
+   * The unlock card sits just under the top bar, and the line of help and the status line just above the objective
+   * card, whatever their heights are on this screen and at this text size (--top-h and --bottom-h in the stylesheet).
+   */
   watchTopBar() {
-    const bar = $('topbar'), root = document.documentElement;
-    const measure = () => root.style.setProperty('--top-h', Math.ceil(bar.getBoundingClientRect().bottom) + 'px');
-    if (typeof ResizeObserver === 'function') new ResizeObserver(measure).observe(bar);
-    else addEventListener('resize', measure);
+    const bar = $('topbar'), card = $('objective'), root = document.documentElement;
+    let top = '', bottom = '';
+    const measure = () => {
+      const t = Math.ceil(bar.getBoundingClientRect().bottom) + 'px';
+      if (t !== top) root.style.setProperty('--top-h', top = t);
+      if (!card || typeof innerHeight !== 'number') return;
+      const r = card.getBoundingClientRect();
+      if (!r.height) return;   // hidden with the rest of the interface: keep where it was
+      const b = Math.ceil(innerHeight - r.top) + 'px';
+      if (b !== bottom) root.style.setProperty('--bottom-h', bottom = b);
+    };
+    if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(measure); ro.observe(bar); if (card) ro.observe(card); }
+    addEventListener('resize', measure);   // turning the phone moves the card without always resizing it
     measure();
   }
 
@@ -65,8 +78,16 @@ export class Hud {
     this.target = v;
     if (instant) { this.shown = v; this.renderCash(); }
   }
+  /**
+   * The cash answers a coin that lands on it. Many coins land in a row when workers sell: a bump that is still
+   * running is not started again (no jitter), and no layout is forced to restart it (the Web Animations API).
+   */
   bumpCash() {
-    this.cashEl.classList.remove('bump'); void this.cashEl.offsetWidth; this.cashEl.classList.add('bump');
+    const e = this.cashEl, root = document.documentElement;
+    if (root.classList.contains('calm')) return;
+    if (typeof e.animate !== 'function') { e.classList.remove('bump'); void e.offsetWidth; e.classList.add('bump'); return; }
+    if (this.bumpAnim?.playState === 'running') return;   // still bouncing: the next coin rides on it
+    this.bumpAnim = e.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
   }
   renderCash() {
     const t = fmt(this.shown);
@@ -139,7 +160,7 @@ export class Hud {
     const prog = document.querySelector('.o-progress');
     prog.classList.toggle('hidden', o.progress == null);
     if (o.progress != null) {
-      $('obj-fill').style.width = Math.round(Math.max(0, Math.min(1, o.progress)) * 100) + '%';
+      $('obj-fill').style.transform = `scaleX(${Math.round(Math.max(0, Math.min(1, o.progress)) * 200) / 200})`;   // a transform: the card is not laid out again
       $('obj-sub').textContent = o.sub || '';
     }
   }
@@ -234,7 +255,7 @@ export class Hud {
     motion.setAttribute('role', 'switch');
     motion.addEventListener('click', () => { settings.toggle('reduceMotion'); onToggle?.('reduceMotion'); });
     const gfx = $('btn-graphics');
-    renders.push(() => { gfx.textContent = 'Graphics: ' + { auto: 'Auto', high: 'High', low: 'Low' }[settings.graphics]; });
+    renders.push(() => { gfx.textContent = 'Graphics: ' + GRAPHICS_LABEL[settings.graphics]; });
     gfx.addEventListener('click', () => { settings.nextGraphics(); onToggle?.('graphics'); });
     const render = () => { for (const r of renders) r(); };
     settings.onChange(render);   // the mute key and the system's motion setting change these from outside the sheet

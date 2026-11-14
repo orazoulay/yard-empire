@@ -1,7 +1,11 @@
 // What the player's preferences mean, apart from where they are kept: reading a saved copy of any age,
 // the two volume sliders, and the mute key. No page needed; tested in tests/yard-interface.test.mjs.
 
-export const GRAPHICS = ['auto', 'high', 'low'];   // auto starts high and drops to low on a device that draws slowly
+// The graphics setting, in the order the button steps through it. 'auto' starts on high and follows how fast the device
+// really draws (js/engine/quality.js); the others hold one level. Saves from before the middle levels read as they did.
+export const GRAPHICS = ['auto', 'high', 'balanced', 'low', 'ultra'];
+/** The words on the settings button for each choice. */
+export const GRAPHICS_LABEL = { auto: 'Auto', high: 'High', balanced: 'Balanced', low: 'Low', ultra: 'Ultra' };
 const UNMUTED = 0.5;   // where a slider left at zero comes back to when its sound is switched on again
 
 const unit = (v, fallback) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : fallback);

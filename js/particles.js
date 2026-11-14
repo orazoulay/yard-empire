@@ -23,7 +23,8 @@ export class Particles {
     for (let i = 0; i < MAX; i++) this.mesh.setMatrixAt(i, _m);
     this.next = 0; this.live = 0;
     scene.add(this.mesh);
-    this.low = false;   // on the low graphics level every burst is half as large
+    this.low = false;   // the low graphics level is on
+    this.scale = 1;     // the share of every burst that is drawn, set by the graphics level
 
     // Smoke is lit like everything else (so it is grey at night, not glowing) and see-through.
     this.smoke = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1),
@@ -58,7 +59,7 @@ export class Particles {
    *            ring: particles fly outward along the ground instead of in a cone
    */
   emit(pos, { count = 6, color = 0xffffff, speed = 2.5, up = 3, spread = 0.3, life = 0.6, size = 0.12, gravity = 9, ring = false } = {}) {
-    if (this.low) count = Math.ceil(count / 2);
+    count = Math.max(1, Math.round(count * this.scale));   // the graphics level draws a share of every burst (js/engine/quality.js)
     for (let n = 0; n < count; n++) {
       const i = this.next; this.next = (this.next + 1) % MAX;
       const p = this.parts[i];

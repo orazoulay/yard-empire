@@ -13,11 +13,12 @@ const STEPS = [
   { text: 'Building the yard', at: 75 },
   { text: 'Ready', at: 100 },
 ];
+const SLOW_MS = 15000;   // a step that takes longer than this is said to be slow, so a long wait does not look like a frozen page
 const $ = id => document.getElementById(id);
 
 class Loading {
   constructor() {
-    this.at = -1; this.done = false;
+    this.at = -1; this.done = false; this.slowTimer = 0;
     this.gone = false;   // true once the screen has left and the yard can be used
     const keyboard = typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches;
     $('l-tip').textContent = pickTip(Math.random(), { keyboard });
@@ -31,6 +32,17 @@ class Loading {
     $('l-text').textContent = s.text;
     $('l-fill').style.width = s.at + '%';
     $('l-bar').setAttribute('aria-valuenow', String(s.at));
+    this.waitFor(s.text);
+  }
+  /** Each step gets a while; past it, the line says the game is still at it (a slow connection), not that it broke. */
+  waitFor(text) {
+    clearTimeout(this.slowTimer);
+    if (this.done) return;
+    this.slowTimer = setTimeout(() => {
+      if (this.done) return;
+      $('l-text').textContent = `${text}. Still working: a slow connection can take a minute`;
+    }, SLOW_MS);
+    this.slowTimer?.unref?.();   // in tests (Node) the timer must not keep the run alive
   }
   /** True when nobody has played in this browser: no save in the slot the game is about to use, and Start never pressed. */
   firstVisit(saveKey) {
@@ -44,6 +56,7 @@ class Loading {
   finish({ first = false, yards = 0, onStart, onSignIn } = {}) {
     if (this.done) return;
     this.done = true;
+    clearTimeout(this.slowTimer);
     this.step(STEPS.length - 1);
     const el = $('loading');
     const leave = () => { this.gone = true; el.classList.add('done'); try { localStorage.setItem(STARTED_KEY, '1'); } catch { /* private mode */ } };

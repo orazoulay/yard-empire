@@ -16,7 +16,9 @@ function rng(a) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
-const images = new Map();
+const images = new Map(), sources = new Map(), textures = new Map(), ids = new WeakMap();
+let lastId = 0;
+const idOf = img => { if (!ids.has(img)) ids.set(img, ++lastId); return ids.get(img); };
 function image(name, size, draw) {
   if (!images.has(name)) {
     const c = document.createElement('canvas'); c.width = c.height = size;
@@ -25,13 +27,24 @@ function image(name, size, draw) {
   }
   return images.get(name);
 }
-function texture(img, { rx = 1, ry = 1, color = true, rotate = 0 } = {}) {
+/**
+ * A texture of one picture, repeated rx by ry. The same picture with the same options is the same texture, and every
+ * texture of one picture shares one copy of it (its Source), so the graphics chip holds each picture once per colour
+ * space instead of once per surface. Pass shared: false for a texture that will be moved or changed later.
+ */
+function texture(img, { rx = 1, ry = 1, color = true, rotate = 0, shared = true } = {}) {
+  const key = shared ? [idOf(img), rx, ry, color, rotate].join('|') : '';
+  if (shared && textures.has(key)) return textures.get(key);
   const t = new THREE.CanvasTexture(img);
+  if (!sources.has(img)) sources.set(img, t.source); else t.source = sources.get(img);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = anisotropy;
   if (color) t.colorSpace = THREE.SRGBColorSpace;
   if (rotate) { t.center.set(0.5, 0.5); t.rotation = rotate; }
+  if (shared) { t.userData.shared = true; textures.set(key, t); }
   return t;
 }
+/** How many distinct textures and pictures the surfaces made so far use (for the graphics diagnostics). */
+export const textureStats = () => ({ textures: textures.size, pictures: sources.size });
 
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 /** Smooth noise that repeats: a function of (u, v) in 0..1 giving 0..1, with cx by cy cells. */
@@ -204,18 +217,38 @@ export const rings = () => ({ map: texture(ringsImage()), roughness: 0.85 });
 export const edge = () => texture(edgeImage());
 export const panel = () => ({ map: texture(panelImage()), bumpMap: texture(panelImage(), { color: false }), bumpScale: 0.5, roughness: 0.55, metalness: 0.3 });
 
+/** Safety paint on a floor: yellow and near-black diagonal stripes, worn a little, along the width of the picture. */
+const stripesImage = () => image('stripes', 128, (g, N, rnd) => {
+  g.fillStyle = '#f2c230'; g.fillRect(0, 0, N, N);
+  g.fillStyle = '#23262b';
+  for (let x = -N; x < N * 2; x += 32) { g.beginPath(); g.moveTo(x, N); g.lineTo(x + 16, N); g.lineTo(x + 16 + N * 0.5, 0); g.lineTo(x + N * 0.5, 0); g.closePath(); g.fill(); }
+  for (let i = 0; i < 260; i++) {   // scuffs where boots and pallets pass
+    g.fillStyle = `rgba(${rnd() < 0.5 ? '255,255,255' : '60,50,40'},${0.06 + rnd() * 0.1})`;
+    g.fillRect(rnd() * N, rnd() * N, 1 + rnd() * 6, 1 + rnd() * 2);
+  }
+});
+/** Safety stripes repeated rx times along a strip of floor paint. */
+export const stripes = rx => ({ map: texture(stripesImage(), { rx, ry: 1 }), roughness: 0.7 });
+
 /** The shadows of clouds as an opacity map: mostly clear, with soft dark islands. */
 const cloudImage = () => image('clouds', 256, (g, N, rnd) => {
   const big = clouds(rnd);
   pixels(g, N, (u, v) => 255 * smooth(0.5, 0.72, big(u, v)));
 });
-export const cloudShadow = repeat => texture(cloudImage(), { rx: repeat, ry: repeat, color: false });
+export const cloudShadow = repeat => texture(cloudImage(), { rx: repeat, ry: repeat, color: false, shared: false });   // js/sky.js moves it
 
 /** A soft shadow lying on the ground, w by d, round or with rounded corners. */
+const PLANE = new THREE.PlaneGeometry(1, 1); PLANE.userData.shared = true;
+const shadowMats = new Map();
 export function softShadow(w, d, { round = false, opacity = 0.34 } = {}) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d),
-    new THREE.MeshBasicMaterial({ alphaMap: texture(shadowImage(round), { color: false }), color: 0x1c2410, transparent: true, opacity, depthWrite: false }));
-  m.rotation.x = -Math.PI / 2; m.position.y = 0.016; m.renderOrder = 1;
+  // one square for every patch, stretched to size, and one material for each look: they are never changed afterwards
+  const key = round + '|' + opacity;
+  if (!shadowMats.has(key)) {
+    const m = new THREE.MeshBasicMaterial({ alphaMap: texture(shadowImage(round), { color: false }), color: 0x1c2410, transparent: true, opacity, depthWrite: false });
+    m.userData.shared = true; shadowMats.set(key, m);
+  }
+  const m = new THREE.Mesh(PLANE, shadowMats.get(key));
+  m.rotation.x = -Math.PI / 2; m.scale.set(w, d, 1); m.position.y = 0.016; m.renderOrder = 1;
   return m;
 }
 
