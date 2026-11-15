@@ -138,8 +138,9 @@ export function modRows(mods, { capacity, slots }) {
   if (off(mods.storage)) rows.push(['Warehouse', `${capacity} of each item`]);
   if (mods.contractSlots > 0) rows.push(['Contracts at once', String(slots)]);
   if (mods.routes) rows.push(['Truck routes', off(mods.routeRate) ? `open, loads ${signed(mods.routeRate)}` : 'open']);
-  if (mods.offlineShare || mods.offlineCap) {
-    const share = mods.offlineShare || OFFLINE_EFFICIENCY, cap = mods.offlineCap || OFFLINE_CAP_SECONDS;
+  if (mods.offlineShare || mods.offlineCap || mods.awayPay > 1) {
+    // the Accountant of the credits store multiplies the share, as the absence is paid (js/sim/company.js, offlineTerms)
+    const share = (mods.offlineShare || OFFLINE_EFFICIENCY) * (mods.awayPay > 1 ? mods.awayPay : 1), cap = mods.offlineCap || OFFLINE_CAP_SECONDS;
     rows.push(['Time away', `${Math.round(share * 100)}% for up to ${Math.round(cap / 360) / 10} h a day`]);
   }
   return rows.map(([name, value]) => ({ name, value }));

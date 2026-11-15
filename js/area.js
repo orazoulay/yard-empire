@@ -1,7 +1,8 @@
 // An area (yard): ground, fence, gate, its stations, plots and workers.
 import * as THREE from 'three';
 import { bake } from './engine/bake.js';
-import { box, mat, makeRoundTrees, makeTrees, randomTreesIn, soaks } from './world.js';
+import { box, mat, makeRoundTrees, makeTrees, randomTreesIn, soaks, dries } from './world.js';
+import { release } from './engine/materials.js';
 import { ground, wornGround } from './textures.js';
 import { buildFence, gatePaint } from './fences.js';
 import { GROUNDS, lookOf } from './data/looks.js';
@@ -13,6 +14,9 @@ import { wayAround, wearPaths } from './sim/yard.js';
 import { SITE } from './data/builds.js';
 import { fenceRuns } from './sim/site.js';
 import { roleFor } from './sim/jobs.js';
+import { flagSpot, decorSpots } from './sim/decor.js';
+import { makeFlag } from './gfx/emblem.js';
+import { buildDecor, DECORS } from './gfx/decor.js';
 
 export const GATE_HALF = 2.2;
 const SIDES = ['n', 's', 'w', 'e'];
@@ -33,9 +37,16 @@ export class Area {
   constructor(game, cfg, earlier) {
     this.game = game; this.cfg = cfg; this.id = cfg.id; this.bounds = cfg.bounds; this.earlier = earlier;
     this.stations = []; this.workers = []; this.plot = null; this.open = false;
+    this.crew = [];   // workers beyond the hired ones: the Bigger crew of the credits store (setCrew). Kept apart, so the hired keep their order and roles
+    this.runner = null;   // the Runner of the credits store, while the player stands in this yard (setRunner)
     this.group = new THREE.Group(); game.scene.add(this.group);
     this.forest = null; this.barrier = null;
     this.look = lookOf(cfg);   // what sets this yard apart to the eye: ground, fence, and what its workers wear
+    // The looks of the credits store that reach a yard (setLooks): nothing bought until the game says so.
+    this.bought = { uniform: null, skin: '', floor: '', shop: '', decor: '', emblem: false };
+    this.floor = null; this.floorKind = ''; this.floorTint = 0;   // the ground's mesh, and the kind of floor that lies on it, in which colour
+    this.flag = null;                         // the flag with the company's emblem, while the company has one
+    this.decor = null; this.decorKind = '';   // the decoration, and which it is
   }
 
   get walkRect() {
@@ -65,6 +76,7 @@ export class Area {
       soaks(mat(this.cfg.ground || 0xc9d16a, { ...ground(this.look.ground, (b.maxX - b.minX) / this.look.scale, (b.maxZ - b.minZ) / this.look.scale), roughness: 0.95 })));
     yard.rotation.x = -Math.PI / 2; yard.position.set((b.minX + b.maxX) / 2, 0.01, (b.minZ + b.maxZ) / 2);
     yard.receiveShadow = true; this.group.add(yard);
+    this.floor = yard; this.floorKind = this.look.ground; this.floorTint = this.cfg.ground || 0xc9d16a;
     this.buildFence();
     for (const s of this.cfg.stations) this.stations.push(createStation(this.game, this.id, s));
     const econ = this.game.econ;
@@ -116,7 +128,7 @@ export class Area {
     }
     game._blocks = null;
     if (this.worn) { this.group.remove(this.worn); this.worn.geometry.dispose(); this.worn.material.alphaMap.dispose(); this.worn.material.dispose(); }
-    this.worn = wornGround(b.maxX - b.minX, b.maxZ - b.minZ, legs, [...spots.feeds, ...spots.goods, ...spots.shops].map(local), !!GROUNDS[this.look.ground]?.laid);
+    this.worn = wornGround(b.maxX - b.minX, b.maxZ - b.minZ, legs, [...spots.feeds, ...spots.goods, ...spots.shops].map(local), !!GROUNDS[this.floorKind]?.laid);
     this.worn.position.x = (b.minX + b.maxX) / 2; this.worn.position.z = (b.minZ + b.maxZ) / 2;
     this.group.add(this.worn);
   }
@@ -194,6 +206,73 @@ export class Area {
     buildFence(this.fenceGroup, this.fenceRuns, want); bake(this.fenceGroup);
   }
 
+  // ---------------------------------------------------------------------------------- the looks of the credits store
+  /**
+   * The looks of the credits store that reach a yard (js/game/looks.js): the workers' uniform, the machines' skin, the
+   * floor, the shop's body, the decoration and the flag. They are remembered, so that a worker hired, a machine built
+   * or a Runner sent later looks the same. Every part does nothing when it is as asked already, so this may be called
+   * as often as the server's answer changes.
+   * @param looks  { uniform: a choice of the catalog or null, skin, floor, shop, decor: a choice's id or '' for the
+   *               yard's own, emblem: true while the company has an emblem to fly }
+   */
+  setLooks(looks) {
+    this.bought = looks;
+    if (!this.open) return;
+    for (const w of [...this.workers, ...this.crew, ...(this.runner ? [this.runner] : [])]) w.wear(looks.uniform);
+    for (const s of this.stations) this.lookOn(s);
+    this.setFloor(looks.floor); this.setDecor(looks.decor); this.setFlag(looks.emblem);
+  }
+  /** A machine gets the skin, a shop the body, that the company bought (or its own back). */
+  lookOn(s) {
+    if (s.type === 'processor') s.setSkin(this.bought.skin);
+    else if (s.type === 'shop') s.setBody(this.bought.shop);
+  }
+  /**
+   * Lay another floor (one of GROUNDS in js/data/looks.js; '' or one that is not there for the yard's own). A floor
+   * that is bought is laid in its own colour in every yard, also in a yard whose own floor is of that kind (tiles in
+   * Jewelry, flagstones in Carpentry): what lies there is the kind and the colour together (floorKind, floorTint). The
+   * ground keeps its mesh and gets another surface: the old one is freed, the pictures it used are shared with every
+   * yard of that floor and stay. The worn paths are drawn again to fit: a track on soft ground, a scuff on a laid
+   * floor. Pads, floor paint, shadows and paths lie over the ground as before.
+   */
+  setFloor(kind) {
+    const own = !Object.hasOwn(GROUNDS, kind), want = own ? this.look.ground : kind, g = GROUNDS[want];
+    const tint = own ? this.cfg.ground || 0xc9d16a : g.tint ?? this.cfg.ground;
+    if (!this.floor || (want === this.floorKind && tint === this.floorTint)) return;
+    this.floorKind = want; this.floorTint = tint;
+    const b = this.bounds, old = this.floor.material;
+    dries(old); old.dispose();
+    this.floor.material = soaks(mat(tint, { ...ground(want, (b.maxX - b.minX) / g.scale, (b.maxZ - b.minZ) / g.scale), roughness: 0.95 }));
+    this.wear();
+  }
+  /**
+   * Fly the company's flag from the yard's lamp post (js/sim/decor.js, flagSpot), or take it down. The flag's shape
+   * and its picture are shared by every yard (js/gfx/emblem.js): a flag is one draw, and nothing of it needs freeing.
+   */
+  setFlag(on) {
+    if (!this.open || !!on === !!this.flag) return;
+    if (!on) { release(this.flag); this.flag = null; return; }
+    const at = flagSpot(this.cfg);
+    if (!at) return;
+    this.flag = makeFlag();
+    this.flag.position.set(at.x, 0, at.z);
+    if (at.away) this.flag.rotation.y = Math.PI;   // on the east fence the cloth flies west, over its own yard
+    this.group.add(this.flag);
+  }
+  /**
+   * Stand the decoration of the credits store at the yard's spots for it (js/sim/decor.js, decorSpots: one or two to
+   * a yard), or take it away (''). What the ones before were made of alone is freed (their joined shapes); shared
+   * shapes and materials stay.
+   */
+  setDecor(kind) {
+    const want = DECORS.includes(kind) ? kind : '';
+    if (!this.open || want === this.decorKind) return;
+    if (this.decor) { release(this.decor); this.decor = null; }
+    this.decorKind = want;
+    this.decor = want ? buildDecor(want, (this.decorAt ||= decorSpots(this.cfg))) : null;
+    if (this.decor) this.group.add(this.decor);
+  }
+
   /**
    * Open the gate: the two leaves swing away into the next yard and come to rest against its fence,
    * out of everybody's way, and the yellow board comes down.
@@ -210,6 +289,45 @@ export class Area {
     };
     if (swing && !this.game.calm) this.game.tweens.push({ t: 0, dur: 1.4, step: pose });   // players who asked for less motion find it open
     else pose(1);
+  }
+
+  /**
+   * The Bigger crew of the credits store (js/sim/store.js): `n` workers beyond the hired ones. They are added when the
+   * server says the item is owned and sent home when it does not. They haul, cost no wage and are not in the save.
+   */
+  setCrew(n) {
+    if (!this.open || this.crew.length === n) return;
+    const [sx, sz] = this.cfg.workerSpawn;
+    while (this.crew.length < n) {
+      const w = new Worker(this.game.scene, this.id, this.cfg.workerJob, 100 + this.crew.length + this.id.length);   // the number picks the look
+      w.role = roleFor(1, this.cfg.workerJob);   // a hauler, where the yard has roles
+      w.pos.set(sx + this.crew.length * 1.5, 0, sz + 1.5);
+      w.wear(this.bought.uniform);
+      this.crew.push(w);
+    }
+    while (this.crew.length > n) this.crew.pop().dispose();   // what only it was made of is freed (js/characters.js)
+  }
+
+  /**
+   * The Runner of the credits store (js/game/store.js, syncRunner): one more worker here while the player stands in
+   * this yard, who carries `load` goods; 0 sends it home. It hauls, costs no wage and is not in the save. What it
+   * carries when it leaves is put back by the game before this is called.
+   */
+  setRunner(load) {
+    if (!this.open) return;
+    if (!(load > 0)) {
+      if (this.runner) { this.runner.dispose(); this.runner = null; }   // sent home at every crossing: what only it was made of is freed
+      return;
+    }
+    if (!this.runner) {
+      const w = new Worker(this.game.scene, this.id, this.cfg.workerJob, 200 + this.id.length);   // the number picks the look
+      w.role = roleFor(1, this.cfg.workerJob);   // a hauler, where the yard has roles
+      const [sx, sz] = this.cfg.workerSpawn;
+      w.pos.set(sx - 1.5, 0, sz + 1.5);
+      w.wear(this.bought.uniform);
+      this.runner = w;
+    }
+    this.runner.capacity = load;
   }
 
   spawnNextPlot() {
@@ -234,10 +352,12 @@ export class Area {
       w.role = roleFor(this.workers.length, this.cfg.workerJob);
       const [sx, sz] = this.cfg.workerSpawn;
       w.pos.set(sx + this.workers.length * 1.5, 0, sz);
+      w.wear(this.bought.uniform);
       this.workers.push(w);
       if (!silent) this.game.onHired(w);
     } else if (e.type === 'station') {
       const s = createStation(this.game, this.id, e.station);
+      this.lookOn(s);
       this.stations.push(s);
       if (!silent) { this.game.onBuilt(s); this.wear(); }   // a new machine, new ways to walk
     } else if (e.type === 'area') {

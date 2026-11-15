@@ -7,6 +7,7 @@ import { chooseJob, bestDest, claimOf } from './sim/jobs.js';
 import { Stack } from './items3d.js';
 import { TUNING } from './data/tuning.js';
 import { softShadow } from './textures.js';
+import { release } from './engine/materials.js';
 import { AREAS, reachOf } from './data/areas.js';
 import { outfitFor } from './data/looks.js';
 
@@ -23,15 +24,35 @@ const SKIN = [0xf1c8a0, 0xe0ac7e, 0xc68a5c, 0x9c6a43, 0xf6d7b8];
 const HAIR = [0x3b2a1e, 0x6b4a2b, 0x1f1a17, 0xb5803f, 0x8a8f96];
 const HELMET = [0xffd23f, 0xf2f2f2, 0xff8a1f, 0x4fc3f7];
 const SHIRT = [0x5bd36b, 0x4fbf7f, 0x6fcf5a, 0x58c9a0];
+const GOLD = { metalness: 0.5, roughness: 0.3, envMapIntensity: 0.9 };   // not fully metallic: it would mirror the green ground and turn olive
 /**
  * A hat, to sit on a head (the head's own space: its top is at 0.55).
  * hard: a safety helmet. straw: a wide brim against the sun. chef: a baker's tall white hat.
  * miner: a helmet with a lamp that glows at night. cap: a flat cap with a peak.
+ * The hats of the credits store, for the player: crown, cowboy, tophat. None is taller than the baker's hat, so a
+ * stack is carried over it as over any other; the band of the cowboy hat and of the top hat is in the helmet's colour.
  */
 function makeHat(kind, color) {
   const g = new THREE.Group();
   const add = (mesh, x, y, z) => { mesh.position.set(x, y, z); g.add(mesh); return mesh; };
-  if (kind === 'straw') {
+  if (kind === 'crown') {
+    add(cyl(0.39, 0.4, 0.19, 0xffc933, 12, GOLD), 0, 0.61, 0);
+    add(cyl(0.3, 0.33, 0.2, 0xc8322f, 12, { roughness: 0.9 }), 0, 0.72, 0);   // the velvet inside it
+    for (let i = 0; i < 6; i++) {   // six points, a jewel under each
+      const a = (i + 0.5) / 6 * Math.PI * 2, sin = Math.sin(a), cos = Math.cos(a);
+      add(cyl(0.01, 0.11, 0.26, 0xffc933, 4, GOLD), sin * 0.33, 0.82, cos * 0.33);
+      add(box(0.09, 0.09, 0.05, i % 2 ? 0x35c46a : 0x2f7fd6, { map: null, roughness: 0.2 }), sin * 0.39, 0.61, cos * 0.39).rotation.y = a;
+    }
+  } else if (kind === 'cowboy') {
+    add(cyl(0.7, 0.72, 0.05, 0x9a6233, 16, { roughness: 0.9 }), 0, 0.535, 0);
+    add(cyl(0.29, 0.37, 0.32, 0x9a6233, 14, { roughness: 0.9 }), 0, 0.72, 0);
+    add(cyl(0.385, 0.385, 0.07, color, 14), 0, 0.6, 0);   // the band
+    for (const x of [-0.66, 0.66]) add(box(0.12, 0.05, 1.0, 0x9a6233, { round: 0.02, roughness: 0.9 }), x, 0.59, 0).rotation.z = x > 0 ? 0.6 : -0.6;   // the brim turned up at the sides
+  } else if (kind === 'tophat') {
+    add(cyl(0.54, 0.54, 0.05, 0x1d1f24, 16, { roughness: 0.45 }), 0, 0.535, 0);
+    add(cyl(0.36, 0.33, 0.42, 0x1d1f24, 14, { roughness: 0.45 }), 0, 0.77, 0);
+    add(cyl(0.348, 0.348, 0.09, color, 14), 0, 0.61, 0);   // the band
+  } else if (kind === 'straw') {
     add(cyl(0.66, 0.7, 0.05, color, 16, { roughness: 0.95 }), 0, 0.53, 0);
     add(cyl(0.3, 0.36, 0.26, color, 14, { roughness: 0.95 }), 0, 0.68, 0);
     add(cyl(0.365, 0.365, 0.07, 0x8b4a24, 14), 0, 0.59, 0);   // the band
@@ -56,8 +77,51 @@ export function workerLook(n) {
   return { skin: SKIN[n % SKIN.length], hair: HAIR[(n * 3 + 1) % HAIR.length], helmet: HELMET[(n * 2 + n % 3) % HELMET.length], shirt: SHIRT[n % SHIRT.length] };
 }
 
+/**
+ * The other bodies the credits store sells (Characters): the same figure, in the same clothes and with the same walk,
+ * with another head, skin and hands. A hat sits on each as on the player's own head: nothing of a head stands above its top.
+ */
+const BODIES = { robot: { skin: 0xaeb6bf }, bear: { skin: 0x9c6a3c }, alien: { skin: 0x7fd65a } };
+const STYLE = ['shirt', 'pants', 'helmet', 'skin', 'hair', 'vest', 'hat', 'apron', 'pack', 'body'];
+
+/** The face of a body, built into `head`: the player's and the workers' own, or one of BODIES. */
+function makeFace(head, body, skin, hair) {
+  const add = (mesh, x, y, z, shadow = true) => { mesh.position.set(x, y, z); mesh.castShadow = shadow; head.add(mesh); return mesh; };
+  if (body === 'robot') {   // every part of the figure's one plain surface, so that the head stays a mesh or two; only its eyes glow
+    add(box(0.6, 0.55, 0.6, skin, { round: 0.05 }), 0, 0.28, 0);
+    add(box(0.52, 0.18, 0.05, 0x1d2127), 0, 0.34, 0.3, false);                                   // the visor
+    add(lit(box(0.36, 0.07, 0.04, 0x9ff2ff, { map: null }), 0x7fe8ff, 0.7), 0, 0.34, 0.32, false);   // and the light in it
+    add(box(0.28, 0.05, 0.05, 0x4a4f57), 0, 0.13, 0.31, false);                                  // the speaker
+    for (const x of [-0.34, 0.34]) add(box(0.1, 0.18, 0.18, 0x6b7480, { round: 0.04 }), x, 0.3, 0);   // a bolt at each ear
+    return;
+  }
+  if (body === 'bear') {
+    add(box(0.6, 0.55, 0.6, skin, { round: 0.16 }), 0, 0.28, 0);
+    for (const x of [-0.36, 0.36]) add(box(0.16, 0.2, 0.2, 0x6f4526, { round: 0.07 }), x, 0.4, -0.02);       // round ears, at the sides: under any hat
+    add(box(0.32, 0.22, 0.14, 0xe0c39a, { round: 0.06 }), 0, 0.19, 0.32, false);                           // the muzzle
+    add(box(0.12, 0.08, 0.06, 0x2b1d14), 0, 0.26, 0.4, false);
+    for (const x of [-0.15, 0.15]) add(box(0.08, 0.1, 0.05, 0x222222), x, 0.38, 0.31, false);
+    return;
+  }
+  if (body === 'alien') {
+    add(box(0.6, 0.55, 0.6, skin, { round: 0.18 }), 0, 0.28, 0);
+    for (const x of [-0.15, 0.15]) add(box(0.17, 0.22, 0.05, 0x14161a), x, 0.33, 0.31, false).rotation.z = x > 0 ? 0.35 : -0.35;   // large dark eyes
+    add(box(0.12, 0.03, 0.05, 0x3f7a2c), 0, 0.12, 0.31, false);
+    for (const x of [-1, 1]) {   // a stalk at each side, with a bright tip
+      add(box(0.05, 0.26, 0.05, 0x5fae42), x * 0.39, 0.4, 0, false).rotation.z = -x * 0.9;
+      add(box(0.11, 0.11, 0.11, 0xe6ff9a, { round: 0.03 }), x * 0.5, 0.47, 0, false);
+    }
+    return;
+  }
+  add(box(0.6, 0.55, 0.6, skin, { round: 0.14 }), 0, 0.28, 0);
+  add(box(0.62, 0.34, 0.3, hair, { round: 0.1, map: null }), 0, 0.36, -0.18);
+  add(box(0.18, 0.04, 0.05, 0x8a4a3a, { map: null }), 0, 0.14, 0.31, false);
+  for (const x of [-0.14, 0.14]) add(box(0.14, 0.035, 0.05, hair, { map: null }), x, 0.42, 0.31, false);
+  for (const x of [-0.14, 0.14]) add(box(0.08, 0.1, 0.05, 0x222222), x, 0.33, 0.31);
+}
+
 export class Character {
-  constructor(scene, { shirt = 0xffd23f, pants = 0x2f6fd6, helmet = 0xff7a1a, skin = 0xf1c8a0, hair = 0x6b4a2b, vest = 0xff7a1a, hat = 'hard', apron = null, pack = false, speed = TUNING.playerSpeed, ring: ringOpacity = 0.4 }) {
+  constructor(scene, { shirt = 0xffd23f, pants = 0x2f6fd6, helmet = 0xff7a1a, skin = 0xf1c8a0, hair = 0x6b4a2b, vest = 0xff7a1a, hat = 'hard', apron = null, pack = false, body = '', speed = TUNING.playerSpeed, ring: ringOpacity = 0.4 }) {
     this.scene = scene;
     this.speed = speed;
     this.pos = new THREE.Vector3(0, 0, 0);
@@ -76,13 +140,31 @@ export class Character {
     this.carry = new Carry();
     this.actionTimer = 0;
     this.seen = true; this.back = false;   // in the camera's sight; just come back into it
+    // What the figure is built from (build), and the colours last put on its clothes (dress): a figure that is built
+    // again, in another hat or body (restyle), is the same character in the same clothes.
+    this.style = { shirt, pants, helmet, skin, hair, vest, hat, apron, pack, body };
+    this.colors = null;
     // group: where the character stands and which way it faces. rig: everything that bobs and squashes.
     this.group = new THREE.Group();
+    this.ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: ringOpacity, depthWrite: false, toneMapped: false }));
+    this.ring.rotation.x = -Math.PI / 2; this.ring.position.y = 0.03; this.group.add(this.ring);
+    this.group.add(softShadow(1.9, 1.9, { round: true, opacity: 0.32 }));   // dark right under the feet, whatever the sun does
+    this.stackRoot = new THREE.Group(); this.stackRoot.position.set(0, 2.45, 0);
+    this.stack = new Stack(this.stackRoot, { maxVisible: 16, from: { x: 0, y: -1.9, z: 0.9 } });   // picked up from the ground in front
+    this.build();
+    scene.add(this.group);
+  }
+
+  /** Build the figure from this.style: the body, the head with its hat, the arms and the legs, under a rig of their own. */
+  build() {
+    const { shirt, pants, helmet, hair, vest, hat, apron, pack, body } = this.style;
+    const skin = BODIES[body] ? BODIES[body].skin : this.style.skin;
     this.rig = new THREE.Group(); this.group.add(this.rig);
 
     this.torso = new THREE.Group(); this.torso.position.y = 0.75; this.rig.add(this.torso);   // from the hips up
-    const body = box(0.8, 0.8, 0.5, shirt, { round: 0.12 }); body.position.y = 0.4; this.torso.add(body);
-    this.paint = { shirt: [body], pants: [], helmet: [], vest: [] };   // the meshes of each colour of the clothes, for dress()
+    const chest = box(0.8, 0.8, 0.5, shirt, { round: 0.12 }); chest.position.y = 0.4; this.torso.add(chest);
+    this.paint = { shirt: [chest], pants: [], helmet: [], vest: [] };   // the meshes of each colour of the clothes, for dress()
     const belt = box(0.82, 0.12, 0.52, 0x8b4a24); belt.position.y = 0.03; this.torso.add(belt);
     if (vest != null) {   // two bright strips over the shoulders; not every trade wears them
       const vest1 = box(0.2, 0.7, 0.54, vest); vest1.position.set(-0.22, 0.43, 0); this.torso.add(vest1);
@@ -94,12 +176,7 @@ export class Character {
       const bib = box(0.44, 0.34, 0.06, apron, { round: 0.03 }); bib.position.set(0, 0.6, 0.27); this.torso.add(bib);
     }
     this.head = new THREE.Group(); this.head.position.y = 0.82; this.torso.add(this.head);   // turns at the neck
-    const face = box(0.6, 0.55, 0.6, skin, { round: 0.14 }); face.position.y = 0.28; this.head.add(face);
-    const hairBack = box(0.62, 0.34, 0.3, hair, { round: 0.1, map: null }); hairBack.position.set(0, 0.36, -0.18); this.head.add(hairBack);
-    const mouth = box(0.18, 0.04, 0.05, 0x8a4a3a, { map: null }); mouth.position.set(0, 0.14, 0.31); mouth.castShadow = false; this.head.add(mouth);
-    for (const x of [-0.14, 0.14]) { const brow = box(0.14, 0.035, 0.05, hair, { map: null }); brow.position.set(x, 0.42, 0.31); brow.castShadow = false; this.head.add(brow); }
-    const eyeL = box(0.08, 0.1, 0.05, 0x222222); eyeL.position.set(-0.14, 0.33, 0.31); this.head.add(eyeL);
-    const eyeR = eyeL.clone(); eyeR.position.x = 0.14; this.head.add(eyeR);
+    makeFace(this.head, body, skin, hair);
     const hatGroup = makeHat(hat, helmet); this.head.add(hatGroup);
     hatGroup.traverse(o => { if (o.isMesh && o.material?.color?.getHex() === helmet) this.paint.helmet.push(o); });
     const hand = () => box(0.2, 0.16, 0.2, skin, { round: 0.06 });
@@ -117,21 +194,34 @@ export class Character {
     this.paint.shirt.push(this.armL.children[0], this.armR.children[0]);   // a limb is its pivot with the sleeve or the trouser leg first
     this.paint.pants.push(this.legL.children[0], this.legR.children[0]);
 
-    this.ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 32),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: ringOpacity, depthWrite: false, toneMapped: false }));
-    this.ring.rotation.x = -Math.PI / 2; this.ring.position.y = 0.03; this.group.add(this.ring);
-    this.group.add(softShadow(1.9, 1.9, { round: true, opacity: 0.32 }));   // dark right under the feet, whatever the sun does
-
     // Every piece that moves as one (the body, the head, each arm and each leg) is joined into a mesh or two: about ten
     // draws for a whole person, shadows included, instead of some thirty.
     moving(this.head, this.armL, this.armR);
     for (const piece of [this.torso, this.head, this.armL, this.armR, this.legL, this.legR]) bake(piece);
-    this.stackRoot = new THREE.Group(); this.stackRoot.position.set(0, 2.45, 0); this.rig.add(this.stackRoot);
-    this.stack = new Stack(this.stackRoot, { maxVisible: 16, from: { x: 0, y: -1.9, z: 0.9 } });   // picked up from the ground in front
-    scene.add(this.group);
+    this.rig.add(this.stackRoot);
+  }
+
+  /**
+   * Build the figure again with something changed: the hat or the body the credits store sells. What the old figure
+   * alone was made of is freed, the shapes and materials every figure shares stay (js/engine/materials.js, release). It
+   * is the same character: where it stands, what it carries, its stack and the colours of its clothes are kept.
+   * @param change  the parts of the style that change, as the constructor takes them: { hat, body }
+   * @returns true when something was built
+   */
+  restyle(change) {
+    const next = { ...this.style, ...change };
+    if (STYLE.every(k => next[k] === this.style[k])) return false;
+    this.style = next;
+    this.rig.remove(this.stackRoot);   // the stack is not part of the figure: it stays as it is
+    release(this.rig);
+    this.build();
+    if (this.colors) this.dress(this.colors);
+    return true;
   }
 
   capacityIn(econ) { return this.capacity ?? econ.capacity; }
+  /** Take this character out of the scene for good: what only it was made of (its ring, its joined meshes, its stack's instances) is freed; the shapes and materials every character shares stay. */
+  dispose() { this.stack.dispose(); release(this.group); }
   bounce() { this.squash = 1; }
   /**
    * Out of the camera's sight a character is not drawn, and its limbs and its stack are left alone:
@@ -242,6 +332,7 @@ export class Character {
    * @param colors  { shirt, pants, helmet, vest } as numbers; a part left out keeps its colour
    */
   dress(colors) {
+    this.colors = colors || null;
     // The clothes were joined into the body's few meshes (see the constructor): their colour is changed there. A part
     // that was not joined shares its material with everyone in that colour, so it gets one of its own first.
     for (const meshes of Object.values(this.paint)) for (const m of meshes) {
@@ -270,6 +361,21 @@ export class Worker extends Character {
     this.role = undefined;          // 'feeder' or 'hauler', set by the yard from the order of hiring (js/area.js)
     this.age = 0;                   // seconds of work, for how long a dry source is left alone
     this.avoidUntil = new Map();    // source id -> age until which it is left alone: this worker found it empty
+    this.uniform = '';              // the uniform of the credits store it wears: a choice's id, or '' for its trade's own clothes
+  }
+  /**
+   * Put the company's uniform on (Worker uniforms of the credits store), or the trade's own clothes back (null).
+   * Only colours change: the hat's shape, the apron, the skin and the hair are the worker's own, so a baker is still a
+   * baker. Asked again for what is worn already, it does nothing.
+   * @param uniform  a choice of the catalog, { id, shirt, pants, helmet, vest } as numbers, or null
+   */
+  wear(uniform) {
+    const id = uniform?.id || '';
+    if (id === this.uniform) return false;
+    this.uniform = id;
+    const own = this.style;
+    this.dress(uniform ? { shirt: uniform.shirt, pants: uniform.pants, helmet: uniform.helmet, vest: uniform.vest } : { shirt: own.shirt, pants: own.pants, helmet: own.helmet, vest: own.vest ?? undefined });
+    return true;
   }
   /** What this worker is, for the job choice: its yard, where it stands, what it carries, its role. */
   who() {

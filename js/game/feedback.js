@@ -85,9 +85,7 @@ export class FeedbackMethods {
       this.meter.add(normal);   // only worker sales count toward offline earnings
       if (this.near(ch.pos.x, ch.pos.z)) this.fx.money(head, () => this.hud.bumpCash());
     }
-    if (this.near(ch.pos.x, ch.pos.z)) {
-      this.particles.emit({ x: ch.pos.x, y: 1.6, z: ch.pos.z + 1.2 }, { count: mine ? 4 : 2, color: 0xffe066, speed: 1.8, up: 4, life: 0.5, size: 0.11 });
-    }
+    if (this.near(ch.pos.x, ch.pos.z)) this.saleBurst(ch.pos, shop.tillAt, mine);   // a few sparks, or the Sale effect of the credits store (js/game/looks.js)
     this.refreshPlots();
   }
   onPay(plot, r) {

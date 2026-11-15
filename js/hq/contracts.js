@@ -8,6 +8,7 @@ import { icon } from '../icons.js';
 import { fillTime, fillText, orderOffers } from '../sim/hqview.js';
 import { storyFor } from '../sim/stories.js';
 import { kindWhat } from '../data/help.js';
+import { flagValue } from '../sim/store.js';
 
 export class HqContracts {
   // --- Contracts -------------------------------------------------------------------
@@ -64,6 +65,8 @@ export class HqContracts {
   contracts() {
     const c = this.company, bonus = Math.min(c.rep, CONTRACTS.repCap) * CONTRACTS.repBonus * 100;
     const wait = Math.ceil(c.refreshIn);
+    // a Contract bonus of the credits store: only the next delivery gets it, so it is one line here, not on every card
+    const times = flagValue(c, 'contractBonus'), extra = times > 1 ? note(`Your next delivery pays ${Math.round((times - 1) * 100)}% more.`) : null;
     // The offers in the order the player chose: by what they pay, by what they pay for each minute of waiting, or by how soon they are full.
     // Times are compared in whole minutes, as they are shown, so two offers do not swap places with every small change of pace.
     const offers = orderOffers(c.offers.map(x => ({ x, cash: c.reward(x).cash, seconds: Math.ceil(this.fill(x, false).seconds / 60) * 60 })), this.prefs.offers);
@@ -76,6 +79,7 @@ export class HqContracts {
       note('While an order runs, the goods it needs go to the warehouse instead of the shops. Delivered, they pay more than the shops would.'));
     // What runs comes first; with nothing running the offers move up, within reach, and the empty place is not drawn.
     return [
+      extra,
       c.active.length ? section('Running', ...c.active.map(x => this.contractCard(x, true))) : null,
       picture,
       section('Offers',

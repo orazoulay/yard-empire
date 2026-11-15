@@ -1,17 +1,50 @@
 // Sound effects synthesized with Web Audio: no audio files to download.
 // Browsers only allow sound after a user gesture, so the context is created on the first touch or key.
 
-// The music: four chords, each a bar long, played as a slow bass note and a soft broken chord above it.
-const CHORDS = [[261.63, 329.63, 392.0, 523.25], [220.0, 261.63, 329.63, 440.0], [174.61, 220.0, 261.63, 349.23], [196.0, 246.94, 293.66, 392.0]];
-const BEAT = 0.42;   // seconds
+// The music: four chords, each a bar long, played as a slow bass note and a soft broken chord above it (exported for
+// the tests: what is heard when no tune of the store is chosen).
+export const CHORDS = [[261.63, 329.63, 392.0, 523.25], [220.0, 261.63, 329.63, 440.0], [174.61, 220.0, 261.63, 349.23], [196.0, 246.94, 293.66, 392.0]];
+export const BEAT = 0.42;   // seconds
 
 const NOTE = { C5: 523.25, E5: 659.25, G5: 783.99, C6: 1046.5, E6: 1318.5, G6: 1568, C7: 2093 };
+
+// The tunes of the credits store (Music), made the way the game's own is: chords in a table, played note by note by
+// oscillators, no file to download. A tune is its chords (the lowest note first), how long a beat is, how many beats a
+// chord lasts, and for each beat of that bar what sounds: `bass` (the chord's lowest note, an octave down) and `lead`
+// (which note of the chord, counted from the lowest; null for a rest), with how long each rings and how loud it is.
+// Every note fades in and out by itself, so a tune that starts again after its last chord has no seam to click at,
+// and nothing in a tune is left to chance: it is the same every time round.
+const E3 = 164.81, F3 = 174.61, G3 = 196, A3 = 220, B3 = 246.94, C4 = 261.63, D4 = 293.66, E4 = 329.63, F4 = 349.23, G4 = 392, A4 = 440, C5 = 523.25, D5 = 587.33;
+export const TUNES = {
+  // bright and quick: C, G, A minor, F, a note on every beat running up and down the chord
+  sunny: { id: 'sunny', beat: 0.3, bar: 8, chords: [[C4, E4, G4, C5], [G3, B3, D4, G4], [A3, C4, E4, A4], [F3, A3, C4, F4]],
+    bass: [1, 0, 0, 0, 1, 0, 0, 0], lead: [0, 1, 2, 3, 2, 1, 2, 3], bassNote: { dur: 1.9, gain: 0.036, type: 'sine' }, leadNote: { dur: 0.7, gain: 0.018, type: 'triangle', octave: 2 } },
+  // slow and low: A minor, F, C, E minor, one soft note every other beat
+  night: { id: 'night', beat: 0.56, bar: 8, chords: [[A3, C4, E4, A4], [F3, A3, C4, F4], [C4, E4, G4, C5], [E3, G3, B3, E4]],
+    bass: [1, 0, 0, 0, 0, 0, 0, 0], lead: [null, 2, null, 1, null, 3, null, 2], bassNote: { dur: 4.2, gain: 0.045, type: 'sine' }, leadNote: { dur: 2.4, gain: 0.02, type: 'sine', octave: 1 } },
+  // three to the bar: C, A minor, D minor, G, the bass on one and the chord on two and three
+  waltz: { id: 'waltz', beat: 0.38, bar: 6, chords: [[C4, E4, G4, C5], [A3, C4, E4, A4], [D4, F4, A4, D5], [G3, B3, D4, G4]],
+    bass: [1, 0, 0, 1, 0, 0], lead: [3, 1, 2, null, 2, 1], bassNote: { dur: 1.1, gain: 0.045, type: 'sine' }, leadNote: { dur: 0.9, gain: 0.02, type: 'triangle', octave: 1 } },
+};
+/**
+ * The notes of a tune at one beat, counted from its start: [{ freq, dur, gain, type }]. The tune goes round after its
+ * last chord, so a beat and the same beat one round later give the same notes.
+ */
+export function notesAt(tune, step) {
+  const i = step % tune.bar, chord = tune.chords[Math.floor(step / tune.bar) % tune.chords.length], out = [];
+  if (tune.bass[i]) out.push({ freq: chord[0] / 2, dur: tune.bassNote.dur, gain: tune.bassNote.gain, type: tune.bassNote.type });
+  if (tune.lead[i] != null) out.push({ freq: chord[tune.lead[i] % chord.length] * tune.leadNote.octave, dur: tune.leadNote.dur, gain: tune.leadNote.gain, type: tune.leadNote.type });
+  return out;
+}
+/** How long a tune is before it starts again, in seconds. */
+export const tuneLength = tune => tune.beat * tune.bar * tune.chords.length;
 
 export class Sfx {
   constructor(settings) {
     this.settings = settings;
     this.ctx = null; this.master = null; this.noiseBuf = null;
     this.last = {};
+    this.tune = null;   // the tune of the credits store that plays (one of TUNES), or null for the game's own
     const unlock = () => this.unlock();
     addEventListener('pointerdown', unlock, { passive: true });
     addEventListener('keydown', unlock);
@@ -139,13 +172,31 @@ export class Sfx {
     s.start(t); s.stop(t + dur + 0.05);
     this.tone(52, 1.6, { gain: 0.16, slide: 0.6 });
   }
+  /**
+   * Which tune plays: one of TUNES by its id (Music of the credits store), or anything else for the game's own. The
+   * tune changes at the next beat and starts from its first chord; the notes already sounding ring out under it, so
+   * nothing is cut off. Asked for the tune that plays already, it does nothing: a tune does not start again because
+   * the player walked into another yard or the store answered once more.
+   */
+  setTune(id) {
+    const tune = Object.hasOwn(TUNES, id) ? TUNES[id] : null;
+    if (tune === this.tune) return false;
+    this.tune = tune; this.beat = 0;
+    return true;
+  }
   /** Quiet background music. Call every frame: notes are booked a quarter of a second ahead, so it stops by itself when the game does. */
   music() {
     if (!this.musicOn) { this.nextNote = null; return; }
-    const c = this.ctx;
+    const c = this.ctx, tune = this.tune;
     if (this.nextNote == null || this.nextNote < c.currentTime - 1) { this.nextNote = c.currentTime + 0.4; this.beat = this.beat || 0; }
     while (this.nextNote < c.currentTime + 0.25) {
-      const step = this.beat++, chord = CHORDS[Math.floor(step / 8) % CHORDS.length];
+      const step = this.beat++;
+      if (tune) {
+        for (const n of notesAt(tune, step)) this.voice(n.freq, n.dur, n.gain, this.nextNote, n.type);
+        this.nextNote += tune.beat;
+        continue;
+      }
+      const chord = CHORDS[Math.floor(step / 8) % CHORDS.length];
       if (step % 8 === 0) this.voice(chord[0] / 2, 3.2, 0.045, this.nextNote, 'sine');
       if (step % 2 === 0 || Math.random() < 0.3) this.voice(chord[(step * 3 + (step >> 3)) % chord.length] * (step % 4 === 3 ? 2 : 1), 1.5, 0.022, this.nextNote, 'triangle');
       this.nextNote += BEAT;

@@ -3,6 +3,8 @@
 // One style throughout: a 24 by 24 grid, 1.75 stroke, round ends, no fill, the colour of the text.
 // Built with createElementNS from the shapes below; nothing here is parsed as HTML.
 
+import { EMBLEMS } from './data/looks.js';
+
 const NS = 'http://www.w3.org/2000/svg';
 const p = d => ['path', { d }];
 const c = (cx, cy, r) => ['circle', { cx, cy, r }];
@@ -76,3 +78,20 @@ export function icon(name, cls = '') {
   return svg;
 }
 export const ICON_NAMES = Object.keys(SHAPES);
+
+/**
+ * The company's emblem as an SVG element: one filled shape (js/data/looks.js, EMBLEMS), in the colour of the text it
+ * stands in. An emblem the game does not know gives an empty picture of the same size.
+ */
+export function emblemIcon(id, cls = '') {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', ('emblem ' + cls).trim());
+  svg.setAttribute('aria-hidden', 'true');
+  if (Object.hasOwn(EMBLEMS, id)) {
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', EMBLEMS[id]); path.setAttribute('fill-rule', 'evenodd');
+    svg.append(path);
+  }
+  return svg;
+}

@@ -51,11 +51,12 @@ export function awayText(seconds) {
  *   away: seconds really gone; seconds: how many of them were paid; share: 0 to 1 of the workers' rate;
  *   left and allowance: seconds of today's allowance still unused, and its full length
  */
-export function awayFacts({ away, seconds, capped, share, afterCosts, left, allowance }) {
+export function awayFacts({ away, seconds, capped, share, afterCosts, left, allowance, times = 1, accountant = false }) {
   return {
     away: awayText(Math.max(away, seconds)),
     paid: awayText(seconds) + (capped ? ", today's limit" : ''),
-    rate: `${Math.round(share * 100)}% of what your workers earn` + (afterCosts ? ', after wages and upkeep' : ''),
+    rate: `${Math.round(share * 100)}% of what your workers earn` + (accountant ? ' with your Accountant' : '') + (afterCosts ? ', after wages and upkeep' : '')
+      + (times > 1 ? `, times ${times} with your Double welcome-back` : ''),
     left: left >= 60 ? `${awayText(left)} of ${awayText(allowance)}` : `Nothing: the ${awayText(allowance)} are used up`,
   };
 }

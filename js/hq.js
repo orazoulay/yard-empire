@@ -80,7 +80,8 @@ export class Headquarters {
   sync() {
     const c = this.company;
     this.button.hidden = !c.founded;
-    $('hq-dot').hidden = !(c.active.some(x => c.ready(x)) || c.goalsWaiting() > 0 || c.siteFlag());   // an order to deliver, a reward to collect, or a build to start
+    const o = c.offersWaiting();
+    $('hq-dot').hidden = !(c.active.some(x => c.ready(x)) || c.goalsWaiting() > 0 || o.season > 0 || o.tickets > 0 || c.siteFlag());   // an order to deliver, a reward or a season's step to collect, a ticket to choose for, or a build to start
   }
   open(tab) {
     if (!this.company.founded) return;
@@ -240,7 +241,8 @@ export class Headquarters {
     // A wide screen has room for every tab in a rail at the side. A phone gets a bar at the bottom with
     // the four most used and More, which lists the rest.
     const compact = matchMedia('(max-width: 759px)').matches;
-    const badge = t => (t.id === 'contracts' && c.active.some(x => c.ready(x))) || (t.id === 'goals' && c.goalsWaiting() > 0) || (t.id === 'construction' && c.siteFlag());
+    const o = c.offersWaiting();
+    const badge = t => (t.id === 'contracts' && c.active.some(x => c.ready(x))) || (t.id === 'goals' && (c.goalsWaiting() > 0 || o.season > 0 || o.tickets > 0)) || (t.id === 'construction' && c.siteFlag());
     const tab = t => {
       const locked = !!c.tabLock(t.id), on = t.id === this.tab && !(compact && this.more);
       const digit = TABS.indexOf(t) < 10 ? String((TABS.indexOf(t) + 1) % 10) : null;   // the key that opens it: 1 to 9, then 0

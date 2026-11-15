@@ -1,13 +1,14 @@
 // 3D stations built from data: Source, ProcessorStation, Shop, Plot.
 import * as THREE from 'three';
-import { box, cyl } from './world.js';
+import { box, cyl, paintOf, GLOW } from './world.js';
+import { glowing, release } from './engine/materials.js';
 import { softShadow, stripes } from './textures.js';
 import { addPallet, makeItem, Stack, stackBase } from './items3d.js';
 import { Processor } from './sim/processor.js';
 import { RECIPES, ITEMS, AREAS } from './data/areas.js';
 import { fmt } from './format.js';
 import { plotTag } from './ui-logic.js';
-import { lookOf } from './data/looks.js';
+import { lookOf, SKINS, SHOP_BODY } from './data/looks.js';
 import { icon, EFFECT_ICON } from './icons.js';
 import { TUNING } from './data/tuning.js';
 import { machineTraits } from './sim/yard.js';
@@ -37,7 +38,8 @@ export function dashedPad(w, d, fill = 'rgba(0,0,0,0.18)') {
 
 /** The moving surface of a conveyor: chevrons pointing the way the goods travel, in the colours of the yard's location. */
 const beltImages = new Map();
-function beltTexture({ surface, chevron }) {
+/** The picture of a belt's surface in these colours, drawn once for each pair. */
+function beltImage({ surface, chevron }) {
   const key = surface + chevron;
   if (!beltImages.has(key)) {
     const c = document.createElement('canvas'); c.width = 64; c.height = 64;
@@ -47,9 +49,21 @@ function beltTexture({ surface, chevron }) {
     for (const x of [-32, 0, 32, 64]) { g.beginPath(); g.moveTo(x, 4); g.lineTo(x + 22, 32); g.lineTo(x, 60); g.stroke(); }
     beltImages.set(key, c);
   }
-  const tex = new THREE.CanvasTexture(beltImages.get(key));
+  return beltImages.get(key);
+}
+function beltTexture(paint) {
+  const tex = new THREE.CanvasTexture(beltImage(paint));
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(6, 1); tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+/**
+ * The surface of a conveyor's frame: the yard's own paint, or a skin of the credits store (SKINS in js/data/looks.js)
+ * with its metal and, for neon, its glow: seen by day too, brighter after dark. Shared by every machine of that paint,
+ * and never changed.
+ */
+function beltFrame(paint) {
+  const m = paintOf(paint.frame, { roughness: paint.roughness ?? 0.45, metalness: paint.metalness ?? 0.45, ...(paint.shine ? { envMapIntensity: paint.shine } : {}) });
+  return paint.glow ? glowing(m, paint.glow, 0.55, GLOW) : m;
 }
 /** Shrinks back to rest after a knock: 1 right after it, 0 when it is over. */
 const settle = (kick, dt, rate = 5) => Math.max(0, kick - dt * rate);
@@ -150,7 +164,7 @@ export class Source extends Station {
     ch.actionTimer -= dt;
     if (ch.actionTimer > 0) return;
     if (ch.carry.take(this.item, ch.capacityIn(game.econ))) {
-      ch.actionTimer = PICK_RATE; ch.bounce(); game.onPickup(ch);
+      ch.actionTimer = game.padWait(ch, PICK_RATE); ch.bounce(); game.onPickup(ch);
       this.kick = 1;
       if (game.near(this.x, this.z)) {   // a few chips fly off, between the pile and whoever took from it
         game.particles.emit({ x: (this.x + ch.pos.x) / 2, y: 0.5, z: (this.z + ch.pos.z) / 2 },
@@ -165,6 +179,7 @@ const LAMP = { run: 0x39e36a, wait: 0xffc233, full: 0xff5a52 };   // working, wa
 const PALLET_Y = 0.555;                            // the top of the belt: where the pallets stand
 const PAD_FROM = { x: 0, y: 1.9, z: FRONT };       // onto the input pad: from the hands of whoever stands in front of it
 const OUT_FROM = { x: -1.4, y: 0.7, z: -1.5 };   // onto the output pad: out of the machine
+const OUT_PAD = { w: 2.4, d: 2.0, pallet: 1.5 };   // the output pad as it is marked, and the pallet under its pile: more than a full pile stands beside it
 
 export class ProcessorStation extends Station {
   constructor(game, area, cfg) {
@@ -191,6 +206,7 @@ export class ProcessorStation extends Station {
     }
     const paint = lookOf(AREAS.find(a => a.id === area)).belt;   // the belt in the colours of the yard's location
     const belt = box(6.4, 0.5, 1.8, paint.frame, { roughness: 0.45, metalness: 0.45, round: 0.1 }); belt.position.set(0, 0.25, 2.1); this.group.add(belt);
+    this.belt = belt; this.ownBelt = paint; this.skin = '';   // the frame of the conveyor, its own paint, and the skin of the credits store on it ('' for none)
     this.beltTex = beltTexture(paint);
     const beltTop = box(6.2, 0.06, 1.6, 0xffffff, { map: this.beltTex }); beltTop.position.set(0, 0.52, 2.1); this.group.add(beltTop);
     const pole = cyl(0.06, 0.08, 2.3, 0x4a4f57, 6); pole.position.set(3.3, 1.15, -0.7); this.group.add(pole);
@@ -201,21 +217,35 @@ export class ProcessorStation extends Station {
     this.output = new Zone(x + PZ.dx, z + PZ.dz, PZ.radius, 'take', this, REACH);
     this.zones = [this.input, this.output];
     const inPad = dashedPad(2.4, 2.0); inPad.position.set(-2.4, 0.56, 2.1); this.group.add(inPad);
-    const outPad = dashedPad(2.4, 2.0); outPad.position.set(2.4, 0.56, 2.1); this.group.add(outPad);
+    const outPad = dashedPad(OUT_PAD.w, OUT_PAD.d); outPad.position.set(2.4, 0.56, 2.1); this.group.add(outPad);
     // A machine with two materials shows two smaller piles on its input pad.
     // Every stack stands on a pallet, on the belt.
     const two = !!this.recipe.input2;
     const onPallet = (stack, px, wide) => { stack.group.position.set(px, PALLET_Y + addPallet(game.scene, x + px, PALLET_Y, z + 2.1, wide, wide < 1.2 ? 1.3 : 1.5) + 0.005, 2.1); return stack; };
     this.inStack = onPallet(new Stack(this.group, { spread: two ? 0.5 : 0.95, from: PAD_FROM }), two ? -2.95 : -2.4, two ? 1.04 : 1.5);
     this.inStack2 = two ? onPallet(new Stack(this.group, { spread: 0.5, from: PAD_FROM }), -1.85, 1.04) : null;
-    this.outStack = onPallet(new Stack(this.group, { spread: 0.95, from: OUT_FROM }), 2.4, 1.5);
+    this.outStack = onPallet(new Stack(this.group, { spread: 0.95, from: OUT_FROM, pad: OUT_PAD }), 2.4, OUT_PAD.pallet);
+    this.outStack.lift = this.outStack.group.position.y - PALLET_Y;   // how high the pallet holds the pile above the belt
     addLightPool(game.scene, x, z + 2.6, 9);   // after dark every machine stands in light of its own, so one can be told from the next
-    moving(this.machine, this.lamp, this.inStack.group, this.inStack2?.group, this.outStack.group);
+    moving(this.machine, this.lamp, this.belt, this.inStack.group, this.inStack2?.group, this.outStack.group);   // the belt's frame stays a part of its own: its surface is swapped by a skin
     bake(this.machine); bake(this.group);   // the machine shakes as one, apart from its belt, pads and lamp
     this.statusLabel = game.labels.add('machine', '', () => ({ x: x - 2.4, y: 1.5, z: z + 2.2 }));
     // the name floats just over the machine's highest part (models differ in height), toward its back, clear of the belt
     const top = Math.max(2.6, new THREE.Box3().setFromObject(this.machine).max.y + 0.45), at = { x, y: top, z: z - 0.6 };
     this.nameLabel = game.labels.add('station-name', this.recipe.name, () => at);
+  }
+  /**
+   * Put a skin of the credits store on the conveyor (gold, chrome, neon: SKINS in js/data/looks.js), or its own paint
+   * back (''). The frame is handed another shared surface, and the belt's own picture is painted over: nothing is
+   * made anew for a switch, so nothing has to be freed. The machine itself is not touched.
+   */
+  setSkin(id) {
+    const skin = SKINS[id] ? id : '';
+    if (skin === this.skin) return;
+    this.skin = skin;
+    const paint = SKINS[skin] || this.ownBelt;
+    this.belt.material = beltFrame(paint);
+    this.beltTex.image = beltImage(paint); this.beltTex.needsUpdate = true;
   }
   provides(item) { return item === this.recipe.output ? this.sim.outputs : 0; }
   accepts(item) { return this.sim.roomFor(item); }
@@ -231,14 +261,16 @@ export class ProcessorStation extends Station {
     const force = !ch.isWorker;
     const item = ch.carry.type;
     if (zone.kind === 'give' && this.sim.uses(item) && (force || this.sim.roomFor(item) > 0)) {
-      if (ch.carry.drop(item)) { this.sim.put(item, force); ch.actionTimer = DROP_RATE; game.onDrop(ch); }
+      if (ch.carry.drop(item)) { this.sim.put(item, force); ch.actionTimer = game.padWait(ch, DROP_RATE); game.onDrop(ch); }
     } else if (zone.kind === 'take' && this.sim.outputs > 0 && ch.carry.canTake(this.recipe.output, cap)) {
-      if (this.sim.takeOutput()) { ch.carry.take(this.recipe.output, cap); ch.actionTimer = PICK_RATE; ch.bounce(); game.onPickup(ch); }
+      if (this.sim.takeOutput()) { ch.carry.take(this.recipe.output, cap); ch.actionTimer = game.padWait(ch, PICK_RATE); ch.bounce(); game.onPickup(ch); }
     }
   }
   update(dt, game) {
-    const batches = this.sim.step(dt, game.econ.speed(this.recipeId));
+    const gifted = this.sim.gifted;
+    const batches = this.sim.step(dt, game.econ.speed(this.recipeId), game.company.mods.nightWatch);   // the Night Watch of the credits store, when it is owned
     if (batches > 0) { game.onBatch(this, batches); this.kick = 1; }
+    else if (this.sim.gifted > gifted) this.kick = 1;   // a batch made out of nothing: it used no material, so the books are told nothing
     this.power += ((this.sim.busy ? 1 : 0) - this.power) * Math.min(1, dt * 4);   // kept up even out of sight: the hum of the yard follows it
     this.idle = this.sim.busy ? 0 : this.idle + dt;
     // Out of the camera's sight only the rules above run. The belt, the blades, the dust, the stacks and
@@ -248,7 +280,7 @@ export class ProcessorStation extends Station {
     this.work(dt, game);
     this.inStack.set(this.recipe.input, this.sim.inputs, back); this.inStack.animate(dt);
     if (this.inStack2) { this.inStack2.set(this.recipe.input2, this.sim.inputs2, back); this.inStack2.animate(dt); }
-    this.outStack.set(this.recipe.output, this.sim.outputs, back); this.outStack.animate(dt);
+    this.outStack.room(Math.max(this.sim.outputCap, this.sim.outputs)); this.outStack.set(this.recipe.output, this.sim.outputs, back); this.outStack.animate(dt);   // the Mechanic's bigger pad shows, and so does all that stands on it
     // City machines get their materials from far away, so they say which one they are waiting for:
     // at once when they already hold the other one, otherwise after standing still for a while.
     const holdsOne = this.inStack2 && this.sim.inputs + this.sim.inputs2 > 0;
@@ -304,15 +336,44 @@ export class Shop extends Station {
     const under = softShadow(7, 3.8); under.position.set(0, 0.016, 2.5); g.add(under);
     // the counter itself (js/gfx/shops.js): every yard's shop has a body for its trade, in the yard's own colours
     const look = lookOf(AREAS.find(a => a.id === area));
-    this.till = buildShop(g, look.shopBody, look.shop, this.items[0]).till;   // on the counter: it jumps on every sale
+    this.ownBody = look.shopBody; this.paint = look.shop; this.bodyKind = '';
+    this.body = null; this.till = null;
     this.kick = 0;
     // a sample of what this shop buys, on the counter
     this.sample = makeItem(this.items[0]); this.sample.position.set(SAMPLE_AT.x, SAMPLE_AT.y, SAMPLE_AT.z); g.add(this.sample);
     g.add(dashedPad(3.2, 2.6));
     addLightPool(game.scene, cfg.x, cfg.z + 1.4, 7.5);   // with the body's lantern, a pool of light at the counter: the shop is found after dark
-    moving(this.till, this.sample); bake(g);   // the till jumps and the sample bounces on a sale
+    // The sample bounces on a sale. The shop's own parts are joined before the body is raised, so that no part of a
+    // body is ever joined into them, to be left behind when another body takes its place (setBody).
+    moving(this.sample); bake(g);
+    this.raise(look.shopBody);   // the body and, on its counter, the till: it jumps on every sale; joined by itself
     this.slides = []; this.coins = []; this.selling = false;   // goods sliding over the counter and coins out of the till (see showSale)
+    this.tillAt = { x: cfg.x + TILL_AT.x, z: cfg.z + TILL_AT.z };   // where the till stands in the world: a Sale effect starts there
+    // (the station's group is never turned: a station stands at its place, facing the camera, so this is the till's place)
     this.label = game.labels.add('zone', cfg.name.toUpperCase(), () => ({ x: cfg.x, y: 0.3, z: cfg.z - 0.3 }));
+  }
+  /**
+   * Build the shop's body (js/gfx/shops.js) in a group of its own, in the yard's colours, and join its still parts. The
+   * till is left a part of its own: it jumps on a sale.
+   */
+  raise(kind) {
+    this.bodyKind = kind;
+    this.body = new THREE.Group(); this.group.add(this.body);
+    this.till = buildShop(this.body, kind, this.paint, this.items[0]).till;
+    moving(this.till); bake(this.body);
+  }
+  /**
+   * Give the shop another body (Shop choice of the credits store: one of SHOP_BODY in js/data/looks.js), or its own
+   * back (''). The old body goes and what only it was made of is freed (its joined shapes, the copies of the product
+   * it showed); the shapes and materials shared with other shops stay. Every body keeps the counter's top, the till,
+   * the sample and the pad where they are, so a sale is shown exactly as before.
+   */
+  setBody(kind) {
+    const want = SHOP_BODY.includes(kind) ? kind : this.ownBody;
+    if (want === this.bodyKind) return;
+    this.body.traverse(o => { if (o.isInstancedMesh) o.dispose(); });   // the product shown on the counter: its copies
+    release(this.body);
+    this.raise(want);
   }
   accepts(item) { return this.items.includes(item) ? 999 : 0; }
   wants(item) { return this.items.includes(item); }
@@ -321,7 +382,7 @@ export class Shop extends Station {
     if (ch.actionTimer > 0) return;
     const item = ch.carry.type;
     if (item && this.items.includes(item) && ch.carry.drop(item)) {
-      ch.actionTimer = DROP_RATE;
+      ch.actionTimer = game.padWait(ch, DROP_RATE);
       this.kick = 1;
       game.onSell(item, ch, this);
     }

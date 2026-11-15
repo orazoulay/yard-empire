@@ -58,6 +58,31 @@ export class YardWatch {
   }
 }
 
+/**
+ * The Advisor Pro of the credits store: of the purchases the company can make next, the one that pays back soonest.
+ * @param options  what Company.nextPurchases() gives: [{ id, yard, name, label, cost, gain, opens }], cost in dollars still
+ *                 to pay, gain in dollars a second
+ * @returns the best of them with `seconds`, how long its gain takes to earn its cost; null when nothing can be bought or nothing bought would earn
+ */
+export function bestPurchase(options) {
+  let best = null;
+  for (const o of Array.isArray(options) ? options : []) {
+    if (!o || !(o.cost > 0) || !(o.gain > 0)) continue;
+    const seconds = o.cost / o.gain;
+    if (!best || seconds < best.seconds) best = { ...o, seconds };
+  }
+  return best;
+}
+
+/** How long a purchase takes to pay back, in words: "about 12 min", "about 3 hours", "about 5 days". */
+export function paybackText(seconds) {
+  const m = Math.ceil(Math.max(0, Number(seconds) || 0) / 60);
+  if (m <= 1) return 'about a minute';
+  if (m < 90) return `about ${m} min`;
+  const hours = Math.round(m / 60);
+  return hours < 48 ? `about ${hours} hours` : `about ${Math.round(hours / 24)} days`;
+}
+
 const COST_NAME = { materials: 'materials', wages: 'wages', upkeep: 'machine upkeep' };
 
 /**

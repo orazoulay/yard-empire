@@ -65,6 +65,7 @@ export class SiteMethods {
     const a = this.area(id);
     if (!a || a.open) return;
     a.buildOpen();
+    this.applyLooks();   // the yard that has just opened gets the looks bought with credits: its floor, its flag, its shop
     this._views = null; this._blocks = null;
     this.reveal = { t: 0, dur: 3.4, target: a.center };
   }

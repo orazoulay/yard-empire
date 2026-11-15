@@ -11,7 +11,9 @@ export const CREDITS = {
       "price": 60,
       "active": true,
       "does": "send_to_site",
-      "sort": 1
+      "sort": 1,
+      "mode": "once",
+      "earning": false
     },
     {
       "id": "clerk",
@@ -21,7 +23,9 @@ export const CREDITS = {
       "price": 60,
       "active": true,
       "does": "claim_goals",
-      "sort": 2
+      "sort": 2,
+      "mode": "once",
+      "earning": false
     },
     {
       "id": "dog",
@@ -31,7 +35,9 @@ export const CREDITS = {
       "price": 40,
       "active": true,
       "does": "pet",
-      "sort": 3
+      "sort": 3,
+      "mode": "once",
+      "earning": false
     },
     {
       "id": "outfit",
@@ -42,6 +48,8 @@ export const CREDITS = {
       "active": true,
       "does": "outfit",
       "sort": 4,
+      "mode": "once",
+      "earning": false,
       "choices": [
         {
           "id": "classic",
@@ -94,6 +102,8 @@ export const CREDITS = {
       "active": true,
       "does": "fence",
       "sort": 5,
+      "mode": "once",
+      "earning": false,
       "choices": [
         {
           "id": "rail",
@@ -122,6 +132,1102 @@ export const CREDITS = {
         {
           "id": "glass",
           "name": "Glass panels"
+        }
+      ]
+    },
+    {
+      "id": "cash1",
+      "kind": "boost",
+      "name": "Cash pack, 1 hour",
+      "desc": "Cash worth one hour of what your company is built to earn.",
+      "price": 5,
+      "active": true,
+      "does": "cash_hours",
+      "sort": 6,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "hours": 1
+      },
+      "daily_limit": 3
+    },
+    {
+      "id": "cash4",
+      "kind": "boost",
+      "name": "Cash pack, 4 hours",
+      "desc": "Cash worth four hours of what your company is built to earn.",
+      "price": 15,
+      "active": true,
+      "does": "cash_hours",
+      "sort": 7,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "hours": 4
+      },
+      "daily_limit": 3
+    },
+    {
+      "id": "cash12",
+      "kind": "boost",
+      "name": "Cash pack, 12 hours",
+      "desc": "Cash worth twelve hours of what your company is built to earn.",
+      "price": 40,
+      "active": true,
+      "does": "cash_hours",
+      "sort": 8,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "hours": 12
+      },
+      "daily_limit": 3
+    },
+    {
+      "id": "x2hour",
+      "kind": "boost",
+      "name": "Double income, 1 hour",
+      "desc": "Everything sells for double for 60 minutes, by the clock, whether or not the game is open. Buying again adds an hour.",
+      "price": 10,
+      "active": true,
+      "does": "boost",
+      "sort": 9,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "stat": "price",
+        "value": 2,
+        "minutes": 60
+      }
+    },
+    {
+      "id": "x2forever",
+      "kind": "upgrade",
+      "name": "Double income, forever",
+      "desc": "Everything sells for twice as much, for good.",
+      "price": 400,
+      "active": true,
+      "does": "perm",
+      "sort": 10,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "price",
+        "value": 2,
+        "op": "mult"
+      }
+    },
+    {
+      "id": "skip2",
+      "kind": "skip",
+      "name": "Time skip, 2 hours",
+      "desc": "Pays what your workers bring in over 2 hours, at full speed, right now.",
+      "price": 8,
+      "active": true,
+      "does": "skip_hours",
+      "sort": 11,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "hours": 2
+      },
+      "daily_limit": 2
+    },
+    {
+      "id": "skip8",
+      "kind": "skip",
+      "name": "Time skip, 8 hours",
+      "desc": "Pays what your workers bring in over 8 hours, at full speed, right now.",
+      "price": 25,
+      "active": true,
+      "does": "skip_hours",
+      "sort": 12,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "hours": 8
+      },
+      "daily_limit": 2
+    },
+    {
+      "id": "skip24",
+      "kind": "skip",
+      "name": "Time skip, 24 hours",
+      "desc": "Pays what your workers bring in over 24 hours, at full speed, right now.",
+      "price": 60,
+      "active": true,
+      "does": "skip_hours",
+      "sort": 13,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "hours": 24
+      },
+      "daily_limit": 2
+    },
+    {
+      "id": "fullday",
+      "kind": "upgrade",
+      "name": "A full day away",
+      "desc": "Time away is paid for up to 24 hours a day.",
+      "price": 150,
+      "active": true,
+      "does": "perm",
+      "sort": 14,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "offlineCap",
+        "value": 86400,
+        "op": "set"
+      }
+    },
+    {
+      "id": "welcome2",
+      "kind": "boost",
+      "name": "Double welcome-back",
+      "desc": "The next pay for time away is doubled.",
+      "price": 10,
+      "active": true,
+      "does": "flag",
+      "sort": 15,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "name": "awayX2",
+        "value": 2
+      }
+    },
+    {
+      "id": "stage",
+      "kind": "skip",
+      "name": "Finish the stage",
+      "desc": "The running stage of your building site gets every good it still needs.",
+      "price": 30,
+      "active": true,
+      "does": "finish_stage",
+      "sort": 16,
+      "mode": "repeat",
+      "earning": true
+    },
+    {
+      "id": "bonus50",
+      "kind": "boost",
+      "name": "Contract bonus",
+      "desc": "The next contract you deliver pays half as much again.",
+      "price": 8,
+      "active": true,
+      "does": "flag",
+      "sort": 17,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "name": "contractBonus",
+        "value": 1.5
+      }
+    },
+    {
+      "id": "starter",
+      "kind": "offer",
+      "name": "Starter pack",
+      "desc": "A 4-hour cash pack, two hours of double income and the Yard Dog. Sold once.",
+      "price": 60,
+      "active": true,
+      "does": "bundle",
+      "sort": 18,
+      "mode": "once",
+      "earning": true,
+      "grants": [
+        "cash4",
+        "x2hour",
+        "x2hour",
+        "dog"
+      ]
+    },
+    {
+      "id": "rushm",
+      "kind": "boost",
+      "name": "Machine rush",
+      "desc": "Every machine works twice as fast for 30 minutes, by the clock, whether or not the game is open.",
+      "price": 6,
+      "active": true,
+      "does": "boost",
+      "sort": 19,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "stat": "speed",
+        "value": 2,
+        "minutes": 30
+      }
+    },
+    {
+      "id": "rushw",
+      "kind": "boost",
+      "name": "Worker rush",
+      "desc": "Every worker walks twice as fast for 30 minutes, by the clock, whether or not the game is open.",
+      "price": 6,
+      "active": true,
+      "does": "boost",
+      "sort": 20,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "stat": "workerSpeed",
+        "value": 2,
+        "minutes": 30
+      }
+    },
+    {
+      "id": "crew",
+      "kind": "upgrade",
+      "name": "Bigger crew",
+      "desc": "One more worker in every open yard.",
+      "price": 200,
+      "active": true,
+      "does": "perm",
+      "sort": 21,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "crew",
+        "value": 1,
+        "op": "set"
+      }
+    },
+    {
+      "id": "backpack",
+      "kind": "upgrade",
+      "name": "Bigger backpack",
+      "desc": "You carry half as much again.",
+      "price": 80,
+      "active": true,
+      "does": "perm",
+      "sort": 22,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "capacity",
+        "value": 1.5,
+        "op": "mult"
+      }
+    },
+    {
+      "id": "fill",
+      "kind": "skip",
+      "name": "Fill the machines",
+      "desc": "Every machine gets its input pads filled, once.",
+      "price": 5,
+      "active": true,
+      "does": "fill_machines",
+      "sort": 23,
+      "mode": "repeat",
+      "earning": true,
+      "daily_limit": 3
+    },
+    {
+      "id": "clearance",
+      "kind": "skip",
+      "name": "Clearance sale",
+      "desc": "Sells every warehouse good no contract needs, at 20% above the normal price.",
+      "price": 10,
+      "active": true,
+      "does": "clearance",
+      "sort": 24,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "value": 1.2
+      },
+      "daily_limit": 2
+    },
+    {
+      "id": "collector",
+      "kind": "helper",
+      "name": "Auto-collector",
+      "desc": "You pick up and put down without the wait between two goods.",
+      "price": 80,
+      "active": true,
+      "does": "helper",
+      "sort": 25,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "noWait",
+        "levels": [
+          1
+        ]
+      }
+    },
+    {
+      "id": "mechanic",
+      "kind": "helper",
+      "name": "Mechanic",
+      "desc": "The output pad of every machine holds twice as much.",
+      "price": 100,
+      "active": true,
+      "does": "helper",
+      "sort": 26,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "outputCap",
+        "levels": [
+          2
+        ]
+      }
+    },
+    {
+      "id": "runner",
+      "kind": "helper",
+      "name": "Runner",
+      "desc": "One more worker in the yard you stand in. Each of the three levels lets the Runner carry more.",
+      "price": 90,
+      "active": true,
+      "does": "helper",
+      "sort": 27,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "stat": "runner",
+        "levels": [
+          6,
+          9,
+          12
+        ]
+      },
+      "max_count": 3
+    },
+    {
+      "id": "watch",
+      "kind": "helper",
+      "name": "Night Watch",
+      "desc": "A machine with no material makes a batch by itself now and then. Each of the three levels makes it sooner.",
+      "price": 150,
+      "active": true,
+      "does": "helper",
+      "sort": 28,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "stat": "nightWatch",
+        "levels": [
+          30,
+          20,
+          12
+        ]
+      },
+      "max_count": 3
+    },
+    {
+      "id": "advisor",
+      "kind": "helper",
+      "name": "Advisor Pro",
+      "desc": "The Advisor names your best next purchase and how soon it pays back.",
+      "price": 50,
+      "active": true,
+      "does": "advisor_pro",
+      "sort": 29,
+      "mode": "once",
+      "earning": false
+    },
+    {
+      "id": "accountant",
+      "kind": "helper",
+      "name": "Accountant",
+      "desc": "Time away pays half as much again. Each of the three levels adds to it.",
+      "price": 120,
+      "active": true,
+      "does": "helper",
+      "sort": 30,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "stat": "awayPay",
+        "levels": [
+          1.5,
+          1.75,
+          2
+        ]
+      },
+      "max_count": 3
+    },
+    {
+      "id": "gate",
+      "kind": "skip",
+      "name": "Open the next yard",
+      "desc": "Pays what the gate to your next yard still costs, once every upgrade of the yard before it is bought.",
+      "price": 1,
+      "active": true,
+      "does": "open_gate",
+      "sort": 31,
+      "mode": "repeat",
+      "earning": true
+    },
+    {
+      "id": "warehouse",
+      "kind": "upgrade",
+      "name": "Bigger warehouse",
+      "desc": "Your warehouse holds half as much again of everything, for good.",
+      "price": 80,
+      "active": true,
+      "does": "perm",
+      "sort": 32,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "storage",
+        "value": 1.5,
+        "op": "mult"
+      }
+    },
+    {
+      "id": "contract3",
+      "kind": "upgrade",
+      "name": "Third contract",
+      "desc": "Run one more contract at the same time, for good.",
+      "price": 60,
+      "active": true,
+      "does": "perm",
+      "sort": 33,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "contractSlots",
+        "value": 1,
+        "op": "add"
+      }
+    },
+    {
+      "id": "goal4",
+      "kind": "upgrade",
+      "name": "Fourth daily goal",
+      "desc": "One more daily goal every day. The daily bonus still asks for three.",
+      "price": 30,
+      "active": true,
+      "does": "perm",
+      "sort": 34,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "dailyGoals",
+        "value": 1,
+        "op": "add"
+      }
+    },
+    {
+      "id": "offers",
+      "kind": "skip",
+      "name": "New offers",
+      "desc": "The contract board is drawn again now. A rush offer and your running contracts stay.",
+      "price": 1,
+      "active": true,
+      "does": "redraw_offers",
+      "sort": 35,
+      "mode": "repeat",
+      "earning": true
+    },
+    {
+      "id": "goals",
+      "kind": "skip",
+      "name": "New goals",
+      "desc": "The daily goals you have not finished today are drawn again. Finished goals stay. New goals start from nothing.",
+      "price": 1,
+      "active": true,
+      "does": "redraw_goals",
+      "sort": 36,
+      "mode": "repeat",
+      "earning": true,
+      "daily_limit": 1
+    },
+    {
+      "id": "starbonus",
+      "kind": "boost",
+      "name": "Star bonus",
+      "desc": "The next sale of your company pays a quarter more legacy stars.",
+      "price": 30,
+      "active": true,
+      "does": "flag",
+      "sort": 37,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "name": "starBonus",
+        "value": 1.25
+      }
+    },
+    {
+      "id": "family",
+      "kind": "upgrade",
+      "name": "Family yard",
+      "desc": "A sale of the company keeps your first yard's upgrades, workers and machines. Its gate and the other yards start over.",
+      "price": 20,
+      "active": true,
+      "does": "perm",
+      "sort": 38,
+      "mode": "once",
+      "earning": true,
+      "params": {
+        "stat": "familyYard",
+        "value": 1,
+        "op": "set"
+      }
+    },
+    {
+      "id": "season",
+      "kind": "offer",
+      "name": "Season pass",
+      "desc": "Until this month ends, every step of the season also gives you a boost. Steps you reached before count too.",
+      "price": 100,
+      "active": true,
+      "does": "season",
+      "sort": 39,
+      "mode": "pass",
+      "earning": true,
+      "params": {
+        "steps": 30,
+        "points": 3,
+        "daily": 1,
+        "weekly": 3,
+        "gift_minutes": 5,
+        "rewards": [
+          "rushw",
+          "rushm",
+          "x2hour"
+        ],
+        "last_minutes": 2
+      },
+      "pass_days": 31,
+      "pass_until": "month"
+    },
+    {
+      "id": "piggy",
+      "kind": "offer",
+      "name": "Piggy bank",
+      "desc": "It fills by itself as you sell. Buying breaks it open: all the cash in it is yours, and it starts again.",
+      "price": 15,
+      "active": true,
+      "does": "piggy",
+      "sort": 40,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "share": 0.05,
+        "hours": 8
+      }
+    },
+    {
+      "id": "weekly",
+      "kind": "offer",
+      "name": "Weekly bundle",
+      "desc": "A 4-hour cash pack, a Machine rush and a Worker rush for less than they cost. The rushes start at once. Once in 7 days.",
+      "price": 16,
+      "active": true,
+      "does": "bundle",
+      "sort": 41,
+      "mode": "pass",
+      "earning": true,
+      "pass_days": 7,
+      "grants": [
+        "cash4",
+        "rushm",
+        "rushw"
+      ]
+    },
+    {
+      "id": "card",
+      "kind": "offer",
+      "name": "Monthly card",
+      "desc": "For 30 days, once a day: a 1-hour cash pack and a Worker rush to collect here. A day you miss is gone.",
+      "price": 60,
+      "active": true,
+      "does": "card",
+      "sort": 42,
+      "mode": "pass",
+      "earning": true,
+      "params": {
+        "gives": [
+          "cash1",
+          "rushw"
+        ]
+      },
+      "pass_days": 30
+    },
+    {
+      "id": "ticket",
+      "kind": "offer",
+      "name": "Event ticket",
+      "desc": "Starts a company event of your choice for 24 hours, beside the event of the day.",
+      "price": 12,
+      "active": true,
+      "does": "event_ticket",
+      "sort": 43,
+      "mode": "repeat",
+      "earning": true,
+      "params": {
+        "hours": 24
+      },
+      "daily_limit": 1
+    },
+    {
+      "id": "emblem",
+      "kind": "look",
+      "name": "Company emblem",
+      "desc": "Your emblem in your colour: on your Headquarters, on your trucks and on a flag in every yard.",
+      "price": 50,
+      "active": true,
+      "does": "emblem",
+      "sort": 44,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "star",
+          "name": "Star"
+        },
+        {
+          "id": "gear",
+          "name": "Gear"
+        },
+        {
+          "id": "tree",
+          "name": "Pine"
+        },
+        {
+          "id": "hammer",
+          "name": "Hammer"
+        },
+        {
+          "id": "bolt",
+          "name": "Lightning"
+        },
+        {
+          "id": "gem",
+          "name": "Diamond"
+        },
+        {
+          "id": "red",
+          "name": "Red",
+          "set": "colour",
+          "colour": 14039599
+        },
+        {
+          "id": "blue",
+          "name": "Blue",
+          "set": "colour",
+          "colour": 3108822
+        },
+        {
+          "id": "green",
+          "name": "Green",
+          "set": "colour",
+          "colour": 3116885
+        },
+        {
+          "id": "gold",
+          "name": "Gold",
+          "set": "colour",
+          "colour": 14260764
+        },
+        {
+          "id": "violet",
+          "name": "Violet",
+          "set": "colour",
+          "colour": 8016583
+        },
+        {
+          "id": "black",
+          "name": "Black",
+          "set": "colour",
+          "colour": 2237996
+        }
+      ]
+    },
+    {
+      "id": "pets",
+      "kind": "look",
+      "name": "More pets",
+      "desc": "A cat, a robot dog or a parrot that follows you around your yards. Just for company.",
+      "price": 50,
+      "active": true,
+      "does": "pets",
+      "sort": 45,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "cat",
+          "name": "Cat"
+        },
+        {
+          "id": "robodog",
+          "name": "Robot dog"
+        },
+        {
+          "id": "parrot",
+          "name": "Parrot"
+        }
+      ]
+    },
+    {
+      "id": "hats",
+      "kind": "look",
+      "name": "Hats",
+      "desc": "A crown, a cowboy hat or a top hat for you, in place of your helmet.",
+      "price": 40,
+      "active": true,
+      "does": "hat",
+      "sort": 46,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "crown",
+          "name": "Crown"
+        },
+        {
+          "id": "cowboy",
+          "name": "Cowboy hat"
+        },
+        {
+          "id": "tophat",
+          "name": "Top hat"
+        }
+      ]
+    },
+    {
+      "id": "uniforms",
+      "kind": "look",
+      "name": "Worker uniforms",
+      "desc": "One set of colours for every worker in every yard. Each trade keeps its own hat and apron.",
+      "price": 40,
+      "active": true,
+      "does": "uniform",
+      "sort": 47,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "navy",
+          "name": "Navy",
+          "shirt": 3100575,
+          "pants": 2042436,
+          "helmet": 15909424,
+          "vest": 15262159
+        },
+        {
+          "id": "crimson",
+          "name": "Crimson",
+          "shirt": 12137530,
+          "pants": 3877418,
+          "helmet": 15790320,
+          "vest": 16765503
+        },
+        {
+          "id": "mint",
+          "name": "Mint",
+          "shirt": 5818784,
+          "pants": 3103317,
+          "helmet": 16777215,
+          "vest": 16183772
+        },
+        {
+          "id": "graphite",
+          "name": "Graphite",
+          "shirt": 4869975,
+          "pants": 2303790,
+          "helmet": 16747039,
+          "vest": 14155583
+        }
+      ]
+    },
+    {
+      "id": "paint",
+      "kind": "look",
+      "name": "Truck paint",
+      "desc": "One paint for every truck on your routes.",
+      "price": 30,
+      "active": true,
+      "does": "truck_paint",
+      "sort": 48,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "midnight",
+          "name": "Midnight",
+          "paint": 1909031
+        },
+        {
+          "id": "pearl",
+          "name": "Pearl",
+          "paint": 15922680
+        },
+        {
+          "id": "racing",
+          "name": "Racing green",
+          "paint": 2060095
+        },
+        {
+          "id": "flamingo",
+          "name": "Flamingo",
+          "paint": 16732058
+        }
+      ]
+    },
+    {
+      "id": "skins",
+      "kind": "look",
+      "name": "Machine skins",
+      "desc": "Gold, chrome or neon belts and frames for every machine.",
+      "price": 60,
+      "active": true,
+      "does": "skin",
+      "sort": 49,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "gold",
+          "name": "Gold"
+        },
+        {
+          "id": "chrome",
+          "name": "Chrome"
+        },
+        {
+          "id": "neon",
+          "name": "Neon"
+        }
+      ]
+    },
+    {
+      "id": "floors",
+      "kind": "look",
+      "name": "Floor styles",
+      "desc": "One floor for every yard.",
+      "price": 40,
+      "active": true,
+      "does": "floor",
+      "sort": 50,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "cobble",
+          "name": "Cobblestones"
+        },
+        {
+          "id": "flags",
+          "name": "Flagstones"
+        },
+        {
+          "id": "tile",
+          "name": "Tiles"
+        },
+        {
+          "id": "asphalt",
+          "name": "Asphalt"
+        },
+        {
+          "id": "concrete",
+          "name": "Concrete"
+        }
+      ]
+    },
+    {
+      "id": "shops",
+      "kind": "look",
+      "name": "Shop choice",
+      "desc": "One shop for every yard, each in its yard's own colours.",
+      "price": 40,
+      "active": true,
+      "does": "shop",
+      "sort": 51,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "post",
+          "name": "Trading post"
+        },
+        {
+          "id": "stall",
+          "name": "Market stall"
+        },
+        {
+          "id": "masonry",
+          "name": "Stone counter"
+        },
+        {
+          "id": "front",
+          "name": "Shop front"
+        },
+        {
+          "id": "weigh",
+          "name": "Weigh desk"
+        },
+        {
+          "id": "depot",
+          "name": "Fuel depot"
+        },
+        {
+          "id": "showcase",
+          "name": "Glass case"
+        },
+        {
+          "id": "dock",
+          "name": "Dispatch dock"
+        },
+        {
+          "id": "showroom",
+          "name": "Showroom"
+        }
+      ]
+    },
+    {
+      "id": "salefx",
+      "kind": "look",
+      "name": "Sale effects",
+      "desc": "Confetti, fireworks or a fountain of coins when goods are sold at a shop. With Reduce motion on, only the sparks.",
+      "price": 30,
+      "active": true,
+      "does": "sale_fx",
+      "sort": 52,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "confetti",
+          "name": "Confetti"
+        },
+        {
+          "id": "fireworks",
+          "name": "Fireworks"
+        },
+        {
+          "id": "coins",
+          "name": "Coin fountain"
+        }
+      ]
+    },
+    {
+      "id": "frame",
+      "kind": "look",
+      "name": "Ranking frame",
+      "desc": "A gold frame around your line on the ranking. Other players see it while your company is in the top twenty.",
+      "price": 60,
+      "active": true,
+      "does": "frame",
+      "sort": 53,
+      "mode": "once",
+      "earning": false
+    },
+    {
+      "id": "bodies",
+      "kind": "look",
+      "name": "Characters",
+      "desc": "Play as a robot, a bear or an alien, in your own work clothes.",
+      "price": 60,
+      "active": true,
+      "does": "body",
+      "sort": 54,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "robot",
+          "name": "Robot"
+        },
+        {
+          "id": "bear",
+          "name": "Bear"
+        },
+        {
+          "id": "alien",
+          "name": "Alien"
+        }
+      ]
+    },
+    {
+      "id": "sky",
+      "kind": "look",
+      "name": "Sky",
+      "desc": "Always day, always sunset, always night, or snow.",
+      "price": 40,
+      "active": true,
+      "does": "sky",
+      "sort": 55,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "day",
+          "name": "Always day"
+        },
+        {
+          "id": "sunset",
+          "name": "Always sunset"
+        },
+        {
+          "id": "night",
+          "name": "Always night"
+        },
+        {
+          "id": "snow",
+          "name": "Snow"
+        }
+      ]
+    },
+    {
+      "id": "decor",
+      "kind": "look",
+      "name": "Decorations",
+      "desc": "A fountain, a statue or flags at a fixed spot in every yard.",
+      "price": 50,
+      "active": true,
+      "does": "decor",
+      "sort": 56,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "fountain",
+          "name": "Fountain"
+        },
+        {
+          "id": "statue",
+          "name": "Statue"
+        },
+        {
+          "id": "flags",
+          "name": "Flags"
+        }
+      ]
+    },
+    {
+      "id": "music",
+      "kind": "look",
+      "name": "Music",
+      "desc": "Three more tunes to work to, while the music is on.",
+      "price": 30,
+      "active": true,
+      "does": "music",
+      "sort": 57,
+      "mode": "once",
+      "earning": false,
+      "choices": [
+        {
+          "id": "sunny",
+          "name": "Sunny ride"
+        },
+        {
+          "id": "night",
+          "name": "Night shift"
+        },
+        {
+          "id": "waltz",
+          "name": "Workshop waltz"
         }
       ]
     }
@@ -156,6 +1262,36 @@ export const CREDITS = {
       "credits": 40,
       "active": true,
       "sort": 3
+    },
+    {
+      "id": "days14",
+      "name": "Save on 14 days",
+      "desc": "Your game reached the server on 14 different days.",
+      "rule": "save_days",
+      "param": 14,
+      "credits": 60,
+      "active": true,
+      "sort": 4
+    },
+    {
+      "id": "days30",
+      "name": "Save on 30 days",
+      "desc": "Your game reached the server on 30 different days.",
+      "rule": "save_days",
+      "param": 30,
+      "credits": 120,
+      "active": true,
+      "sort": 5
+    },
+    {
+      "id": "gift",
+      "name": "Daily gift",
+      "desc": "Free credits, once a day.",
+      "rule": "daily",
+      "param": 1,
+      "credits": 5,
+      "active": true,
+      "sort": 6
     }
   ]
 };

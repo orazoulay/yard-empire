@@ -57,8 +57,8 @@ export class YardLife {
     setDressingDetail(this.low, game.calm);   // and no flags flying, vents turning or beacons blinking
     if (sky.rumble) game.sfx.thunder();
 
-    // rain lands: small splashes on the ground around what the camera looks at
-    if (sky.rain > 0.15 && !this.low) {
+    // rain lands: small splashes on the ground around what the camera looks at; none while it snows, or flakes still fall
+    if (sky.rain > 0.15 && !this.low && sky.mode !== 'snow' && !(sky.snow > 0.02)) {
       this.splash += dt * SPLASHES * sky.rain;
       while (this.splash >= 1) {
         this.splash -= 1;
@@ -80,7 +80,7 @@ export class YardLife {
   keepApart(dt) {
     const game = this.game, crowd = this.crowd, to = this.to;
     crowd.length = 0; crowd.push(game.player);
-    for (const a of game.areas) if (a.open) for (const w of a.workers) crowd.push(w);
+    for (const a of game.areas) if (a.open) { for (const w of a.workers) crowd.push(w); for (const w of a.crew) crowd.push(w); if (a.runner) crowd.push(a.runner); }
     if (crowd.length < 2) return;
     pushApart(crowd, PERSON, TUNING.workerSpeed * dt * SHOVE);
     const blocks = game.blocks();

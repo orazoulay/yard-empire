@@ -5,10 +5,12 @@
 /**
  * Ground kinds are drawn in js/textures.js (`ground`); `scale` is how many metres one tile of the picture covers.
  * `laid` marks a floor somebody laid (stone, tile, asphalt, concrete): feet scuff it, they do not tread a track into it.
+ * `tint` is the colour of such a floor when the company lays it in every yard (Floor styles of the credits store); a
+ * yard's own floor is in the yard's own colour (js/data/areas.js), as it always was.
  */
 export const GROUNDS = {
-  soil: { scale: 9 }, chips: { scale: 8 }, furrows: { scale: 7 }, gravel: { scale: 6 }, cobble: { scale: 5, laid: true }, flags: { scale: 6, laid: true },
-  sand: { scale: 9 }, rock: { scale: 9 }, tile: { scale: 4, laid: true }, asphalt: { scale: 8, laid: true }, concrete: { scale: 7, laid: true },
+  soil: { scale: 9 }, chips: { scale: 8 }, furrows: { scale: 7 }, gravel: { scale: 6 }, cobble: { scale: 5, laid: true, tint: 0xd9cdb8 }, flags: { scale: 6, laid: true, tint: 0xcfc8b6 },
+  sand: { scale: 9 }, rock: { scale: 9 }, tile: { scale: 4, laid: true, tint: 0xe4e6ea }, asphalt: { scale: 8, laid: true, tint: 0x8a9099 }, concrete: { scale: 7, laid: true, tint: 0xb4b8bc },
 };
 /** Fence kinds are built in js/area.js. */
 export const FENCES = ['rail', 'picket', 'stone', 'brick', 'iron', 'mesh', 'glass'];
@@ -156,3 +158,52 @@ export function outfitFor(area, n = 0) {
   const o = lookOf(area).outfit;
   return { hat: o.hat, helmet: o.helmet, shirt: o.shirt[n % o.shirt.length], pants: o.pants, vest: o.vest ?? null, apron: o.apron ?? null };
 }
+
+// ------------------------------------------------------------------------------------------ the store's looks
+/**
+ * The belts and frames the credits store sells (Machine skins): the conveyor of every machine in one finish. Like
+ * BELT above, with what makes a frame gold, chrome or neon: how metallic and how smooth it is, and for neon the colour
+ * it glows in, a little by day and brighter after dark. The machine itself is not touched: what it is stays plain to see.
+ */
+export const SKINS = {
+  gold:   { frame: 0xffc933, surface: '#d6a11e', chevron: 'rgba(255,247,205,0.95)', metalness: 0.5, roughness: 0.28, shine: 0.9 },
+  chrome: { frame: 0xe6ecf2, surface: '#c3ccd6', chevron: 'rgba(44,56,70,0.8)', metalness: 0.75, roughness: 0.12, shine: 1.2 },
+  neon:   { frame: 0x232838, surface: '#0d1017', chevron: 'rgba(70,255,222,1)', metalness: 0.4, roughness: 0.4, shine: 0.6, glow: 0x3cffd6 },
+};
+
+/**
+ * What the choices of the store's looks are, by what the item does (tools/credits/catalog.json, "does"). The catalog
+ * names and prices them; what each one looks or sounds like is in the game, under these ids. The catalog's check
+ * refuses a choice that is not listed here, so nothing can be sold that the game cannot show. `null`: any id, because
+ * the catalog itself carries what the choice is (its colours).
+ */
+export const STORE_LOOKS = {
+  emblem: { '': ['star', 'gear', 'tree', 'hammer', 'bolt', 'gem'], colour: null },   // drawn in js/gfx/emblem.js
+  pets: { '': ['cat', 'robodog', 'parrot'] },                                       // built in js/pets.js
+  hat: { '': ['crown', 'cowboy', 'tophat'] },                                       // built in js/characters.js
+  uniform: { '': null },                                                            // four colours a set, in the catalog
+  truck_paint: { '': null },                                                        // one colour a paint, in the catalog
+  skin: { '': Object.keys(SKINS) },
+  floor: { '': Object.keys(GROUNDS).filter(id => GROUNDS[id].laid && GROUNDS[id].tint > 0) },   // the floors that are laid, each in a colour of its own
+  shop: { '': SHOP_BODY },
+  sale_fx: { '': ['confetti', 'fireworks', 'coins'] },                              // js/game/looks.js
+  body: { '': ['robot', 'bear', 'alien'] },                                         // built in js/characters.js
+  sky: { '': ['day', 'sunset', 'night', 'snow'] },                                  // js/sky.js
+  decor: { '': ['fountain', 'statue', 'flags'] },                                   // built in js/gfx/decor.js
+  music: { '': ['sunny', 'night', 'waltz'] },                                       // js/audio.js
+};
+/** The colours a choice of the catalog must carry, by what the item does and the set the choice belongs to. */
+export const LOOK_COLOURS = { uniform: { '': ['shirt', 'pants', 'helmet', 'vest'] }, truck_paint: { '': ['paint'] }, emblem: { colour: ['colour'] } };
+
+/**
+ * The company's emblems, each one filled shape in a box of 24 by 24 (the path of an SVG): drawn white on the company's
+ * colour, on the flag in every yard and on the trucks (js/gfx/emblem.js) and in the header of the Headquarters.
+ */
+export const EMBLEMS = {
+  star: 'M12 2.6l2.85 6.05 6.55.85-4.8 4.6 1.2 6.6L12 17.45 6.2 20.7l1.2-6.6-4.8-4.6 6.55-.85z',
+  gear: 'M10.3 2.5h3.4l.5 2.6 1.7.7 2.2-1.5 2.4 2.4-1.5 2.2.7 1.7 2.6.5v3.4l-2.6.5-.7 1.7 1.5 2.2-2.4 2.4-2.2-1.5-1.7.7-.5 2.6h-3.4l-.5-2.6-1.7-.7-2.2 1.5-2.4-2.4 1.5-2.2-.7-1.7-2.6-.5v-3.4l2.6-.5.7-1.7-1.5-2.2 2.4-2.4 2.2 1.5 1.7-.7zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z',
+  tree: 'M12 2.2l4.6 6h-2.4l4.3 5.6h-2.7l4.2 5.4h-6.3v2.6h-3.4v-2.6H4l4.2-5.4H5.5l4.3-5.6H7.4z',
+  hammer: 'M4 4.2h11.2l4.3 2.9-4.3 2.9H13.6v11.6h-3.4V10H4z',
+  bolt: 'M13.8 2.2L5.2 13.4h5.3L9.2 21.8l9.6-12h-5.6z',
+  gem: 'M7.2 4h9.6l4.7 5.6L12 21 2.5 9.6z',
+};

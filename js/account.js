@@ -5,7 +5,7 @@
 // Changing who is playing always ends in a page reload, so the game never swaps saves mid-run.
 // On a plain file host with no server (or with no connection) the game simply plays as before.
 import { saveFile } from './files.js';
-import { GUEST_KEY, saveKey, logKey, pickSave } from './sim/sync.js';
+import { GUEST_KEY, saveKey, logKey, pickSave, keepStore, withoutStore } from './sim/sync.js';
 
 const ID_KEY = 'lumber-tycoon-account';        // last signed-in player, so they can start offline
 const revKey = id => `lumber-tycoon-rev:u${id}`;
@@ -57,6 +57,8 @@ export class Account {
     this.again = false;       // an upload was asked for while one was on its way
     this.flashGood = false;   // the message takeFlash() gave was good news
     this.reset = null;        // { email }: the player came by the "new password" link in an email; the form for it opens
+    this.pulled = false;      // the server's save was had in this visit, and the device copy was compared with it (pull)
+    this.holdStore = () => false;   // true while the game does not know the store block (js/game/store.js): an upload then carries none
   }
 
   get saveKey() { return saveKey(this.user?.id); }
@@ -89,12 +91,25 @@ export class Account {
     const localRev = seenRev(id);
     this.rev = localRev;
     const r = await this.call('GET', 'save');
-    if (!r.ok || !r.data) return;                   // keep playing from the device copy
+    if (!r.ok || !r.data) return;                   // keep playing from the device copy (the game then knows it was not pulled)
     const pick = pickSave({ local: read(saveKey(id)), localRev, server: r.data.save, serverRev: r.data.adminRev, guest: read(GUEST_KEY) });
-    if (pick.save) write(saveKey(id), pick.save); else remove(saveKey(id));
+    // a device copy from a game that did not know the credits store takes the server's store block (js/sim/sync.js, keepStore)
+    if (pick.save) write(saveKey(id), keepStore(pick.save, r.data.save)); else remove(saveKey(id));
     if (pick.from === 'guest') remove(GUEST_KEY);   // the guest game moved into this account; it is not copied to the next one
     this.rev = r.data.adminRev;
     write(revKey(id), this.rev);
+    this.pulled = true;
+  }
+
+  /**
+   * The server's copy of this player's save, asked for once more in the middle of a visit, for the game's store block
+   * when the save could not be pulled as the game started (js/game/store.js). Nothing on the device changes.
+   * @returns {Promise<{ save: object|null }|null>}  null when it could not be had
+   */
+  async serverSave() {
+    if (!this.user) return null;
+    const r = await this.call('GET', 'save');
+    return r.ok && r.data ? { save: r.data.save ?? null } : null;
   }
 
   /** Once the game is running: upload progress every so often, and when the player leaves. */
@@ -109,7 +124,7 @@ export class Account {
   async push(leaving = false) {
     if (!this.user || this.stopped) return;
     if (this.busy) { this.again = true; return; }
-    const save = read(this.saveKey);
+    const kept = read(this.saveKey), save = this.holdStore() ? withoutStore(kept) : kept;   // a block that is not known never replaces the server's
     if (!save) return;
     this.busy = true;
     const r = await this.call('PUT', 'save', { save, adminRev: this.rev }, { keepalive: leaving });
@@ -202,8 +217,15 @@ export class Account {
   }
 
   // --- leaderboard: null means the server could not be reached --------------------
-  /** The all-time list, or with 'week' the list of who gained the most company value since Monday 00:00 UTC. */
-  async leaderboard(period) { const r = await this.call('GET', period === 'week' ? 'leaderboard?period=week' : 'leaderboard'); return r.ok ? r.data : null; }
+  /**
+   * The all-time list, or with 'week' the list of who gained the most company value since Monday 00:00 UTC.
+   * @param board  'boosted' for the ranking of the companies that bought something that changes what they earn; otherwise the main one
+   */
+  async leaderboard(period, board) {
+    const query = [period === 'week' ? 'period=week' : '', board === 'boosted' ? 'board=boosted' : ''].filter(Boolean).join('&');
+    const r = await this.call('GET', query ? 'leaderboard?' + query : 'leaderboard');
+    return r.ok ? r.data : null;
+  }
   async setListed(listed) { const r = await this.call('POST', 'leaderboard', { listed }); return r.ok ? r.data : null; }
 
   // --- helpers -----------------------------------------------------------------

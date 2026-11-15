@@ -3,9 +3,10 @@
 import { MOMENTS } from '../ui-logic.js';
 import { fmt } from '../format.js';
 import { helperChores } from '../sim/helpers.js';
+import { localDay, receiptLine } from '../sim/store.js';
 
 /** The player's local day number (days since 1970): daily and weekly goals follow it. */
-export const today = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+export const today = () => localDay(Date.now());
 export const SOLD_KEY = 'lumber-tycoon-sold';   // stars of a sale, to celebrate after the reload
 
 /** The company chores of the Game. */
@@ -21,8 +22,15 @@ export class CompanyChoresMethods {
     return true;
   }
 
-  /** Sell the company (Headquarters, Expansion tab): the rules reset the yards, then the world is rebuilt by a reload. */
-  sellCompany() {
+  /**
+   * Sell the company (Headquarters, Expansion tab): the rules reset the yards, then the world is rebuilt by a reload.
+   * A sale cannot be undone, and the Family yard of the credits store counts only while the server says it is owned.
+   * @param shown  what the sale's card said about the Family yard when the player confirmed ('owned', 'unknown' or
+   *               'none', js/game/store.js, familyState). When that is no longer so (the store's answer came, or went,
+   *               in between), nothing is sold: the card is drawn again and says what is true now.
+   */
+  sellCompany(shown) {
+    if (shown !== undefined && shown !== this.familyState()) return false;
     const offer = this.company.sell();
     if (!offer) return false;
     this.save(); this.noSave = true;
@@ -64,6 +72,7 @@ export class CompanyChoresMethods {
     this.player.dress(this.credits.look('outfit'));
     const fence = this.credits.look('fence');
     for (const a of this.areas) if (a.open) a.setFence(fence);
+    this.applyStoreLooks();   // the looks of the store's fifth part: the hat, the sky, the floor and the rest (js/game/looks.js)
   }
   /** Once a second: the helpers bought with credits press the buttons they were bought for (js/sim/helpers.js). */
   helpers() {
@@ -76,6 +85,7 @@ export class CompanyChoresMethods {
     this.accountOffer();
     this.helpers();
     this.company.refreshGoals(today());
+    this.storeChores();   // the credits store: receipts applied once, and the extra workers (js/game/store.js)
     this.syncSite();   // cheap: it draws only when the picture changes: a stage finished, a build started, another twentieth of a stage arrived
     this.siteChores();
     const c = this.company, event = c.eventNow();
@@ -103,7 +113,7 @@ export class CompanyChoresMethods {
     if (!result) { this.sfx.click(); return; }
     this.celebrate();   // first, so the line about the action itself is the one that stays on screen
     // How the action feels comes from the one table (MOMENTS); the line of feedback says what happened.
-    const moment = kind === 'goal' && result.bonus ? 'bonus' : kind;
+    const moment = kind === 'goal' && result.bonus ? 'bonus' : kind === 'season' ? 'goal' : kind;   // a step of the season feels like a goal collected
     this.feel(MOMENTS[moment] ? moment : 'tap');
     if (kind === 'deliver') {
       this.hud.bumpCash(); this.hq.toast(`Delivered: +$${fmt(result.cash)}, +${result.xp} experience`);
@@ -115,6 +125,14 @@ export class CompanyChoresMethods {
     } else if (kind === 'sell') this.hq.toast(`Sold from the warehouse: +$${fmt(result)}`);
     else if (kind === 'build') this.hq.toast(`Building started: ${result.name}`);
     else if (kind === 'send') this.hq.toast(`Sent to the site: ${fmt(result)} goods`);
+    else if (kind === 'season') {
+      // A step of the season (js/game/store.js, collectSeason): its gift, then a pass holder's boost in the words of a
+      // purchase, each a line of its own, one after the other: the Headquarters' line is half a phone wide. A boost
+      // that has to wait says so in three words; why, and that it comes by itself, is on the store's page.
+      if (result.cash) { this.hud.bumpCash(); this.hq.toast(`Season, step ${result.step}: +$${fmt(result.cash)}`); }
+      if (result.pass) this.hq.toast(result.pass.done.kind === 'wait' ? `${result.pass.item.name}: kept for later` : receiptLine(result.pass.item, result.pass.done));
+      if (result.kept) this.hq.toast(`${result.kept.item.name}: not yet, no room`);   // it could neither start nor wait: it stays on the Goals tab, which says why
+    }
     this.save();
   }
 }

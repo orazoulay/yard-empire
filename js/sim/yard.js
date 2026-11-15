@@ -88,6 +88,50 @@ export function padSlot(i, step, spread) {
   return { x: across ? side : 0, y: layer * step, z: across ? 0 : side, turn: (across ? Math.PI / 2 : 0) + (i % 2) * 0.08 };
 }
 
+/** The goods of a full pile on a pad (padSlot): two to a layer, twelve layers. */
+export const PILE = 24;
+const TOP = Math.floor(PILE / 2 * 1.25);   // the highest a pad may hold anything: a full pile and a quarter, in layers (15)
+const GAP = 0.03;                          // between a column and the pile, so that neither pokes into the other
+
+/**
+ * Where a pad bigger than a full pile (the Mechanic of the credits store) puts the goods beyond the 24: in columns
+ * beside the pile, inside the marked pad, so that the pad does not stand taller than a full pile does today. The pile
+ * itself is a cross seen from above (padSlot: the layers along the pad hold two goods side by side across it, the layers
+ * across hold them side by side along it); the four corners around it are tried first, then the two ends of the pad.
+ * A good too big for either (a pane of glass) has no column: its pile goes up a quarter higher, and no more is drawn.
+ * @param foot  the good's size seen from above, { x, z }, unturned
+ * @param pad   the marked pad { w (along the belt), d (across) }, the side of the pallet under the pile, and padSlot's spread
+ * @returns {{ columns: { x, z, turn, low }[], max: number }}  low: off the pallet, standing on the belt; max: the most that are drawn
+ */
+export function padColumns(foot, { w, d, pallet, spread }) {
+  const W = w / 2, D = d / 2, P = pallet / 2, s = spread / 2, hx = foot.x / 2, hz = foot.z / 2;
+  // the pile's two arms: along the pad |x| <= hx and |z| up to s + hz; across it |x| up to s + hz and |z| <= hx
+  const clear = (x0, z0) => (x0 >= hx + GAP || z0 >= s + hz + GAP) && (x0 >= s + hz + GAP || z0 >= hx + GAP);
+  const column = (x, z, turn, a, b) => ({ x, z, turn, low: !(Math.abs(x) - a / 2 < P && Math.abs(z) - b / 2 < P) });
+  for (const turn of [0, Math.PI / 2]) {   // a corner, its inner edges at x0 and z0 from the middle
+    const a = turn ? foot.z : foot.x, b = turn ? foot.x : foot.z, x0 = W - a, z0 = D - b;
+    if (x0 >= 0 && z0 >= 0 && clear(x0, z0)) {
+      const columns = [[1, 1], [-1, 1], [1, -1], [-1, -1]].map(([sx, sz]) => column(sx * (W - a / 2), sz * (D - b / 2), turn, a, b));
+      return { columns, max: PILE + columns.length * TOP };
+    }
+  }
+  for (const turn of [0, Math.PI / 2]) {   // an end of the pad, in the middle across it
+    const a = turn ? foot.z : foot.x, b = turn ? foot.x : foot.z, x0 = W - a;
+    if (x0 >= 0 && b <= d && clear(x0, -Infinity)) {
+      const columns = [1, -1].map(sx => column(sx * (W - a / 2), 0, turn, a, b));
+      return { columns, max: PILE + columns.length * TOP };
+    }
+  }
+  return { columns: [], max: TOP * 2 };
+}
+
+/** Where item number `i` lies on a pad laid out by padColumns: the first 24 as padSlot has them, the next ones a layer at a time in each column. */
+export function padSlotOn(i, step, spread, lay) {
+  if (i < PILE || !lay.columns.length) return padSlot(i, step, spread);
+  const j = i - PILE, c = lay.columns[j % lay.columns.length], layer = Math.floor(j / lay.columns.length);
+  return { x: c.x, y: layer * step, z: c.z, turn: c.turn + (layer % 2) * 0.04, low: c.low };
+}
+
 // ------------------------------------------------------------------ machines of different trades
 const LOOSE = ['rock', 'gem'];   // shapes of things that are shovelled, not stacked
 const TRIM = { metal: 'chimney', gold: 'fine', gem: 'fine', glass: 'fine', barrel: 'drums', plastic: 'vent' };

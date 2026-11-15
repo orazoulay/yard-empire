@@ -4,6 +4,7 @@ import { OFFLINE_MIN_SECONDS } from '../sim/offline.js';
 import { SITE } from '../data/builds.js';
 import { TUNING } from '../data/tuning.js';
 import { groundAt } from '../sim/site.js';
+import { timedFactor, calmStep } from '../sim/store.js';
 
 /** Seconds between frames, read once a frame (THREE.Clock is deprecated since r183; this is all the game used of it). */
 export class FrameClock {
@@ -40,7 +41,7 @@ export class LoopMethods {
   frame() {
     const began = performance.now();
     const raw = this.clock.getDelta();
-    if (raw > OFFLINE_MIN_SECONDS) this.checkOffline();   // the tab slept: treat the gap as time away
+    if (raw > OFFLINE_MIN_SECONDS && !this.awayHeld) this.checkOffline();   // the tab slept: treat the gap as time away (not while the page load's absence is held: it is paid once)
     const total = Math.min(raw, CATCH_UP), steps = Math.max(1, Math.ceil(total / STEP - 1e-6)), dt = total / steps;
     for (let i = 0; i < steps; i++) this.step(dt);
     if (!this.paused && this.company.founded) this.hud.setCash(this.econ.cash);   // wages and upkeep drain it all the time
@@ -73,9 +74,13 @@ export class LoopMethods {
       for (const a of this.areas) {
         if (!a.open) continue;
         for (const w of a.workers) { w.speed = workerSpeed; w.update(dt, this); }
+        for (const w of a.crew) { w.speed = workerSpeed; w.update(dt, this); }   // the Bigger crew of the credits store
+        if (a.runner) { a.runner.speed = workerSpeed; a.runner.update(dt, this); }   // and its Runner, in the yard the player stands in
         for (const s of a.stations) s.update(dt, this);
       }
       this.meter.tick(dt);
+      this.carried.add(timedFactor(this.company.mods) * dt); this.carried.tick(dt);   // fed and ticked like the income meter, so it follows the price boosts' share of what it measured
+      calmStep(this.calmRate, this.company.mods, this.meter.rate, this.carried.rate, dt);   // the rate without boosts, frozen while a rush is in the meter's memory
       this.company.tick(dt);
       this.company.runRoutes(dt, route => this.truck(route));
       this.trucks.update(dt);

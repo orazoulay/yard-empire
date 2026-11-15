@@ -16,6 +16,10 @@ export class Processor {
     // a minute apart (js/sim/advice.js) to say whether a yard lacks material or has nowhere to put its goods.
     this.starved = 0;             // ... for want of material
     this.blocked = 0;             // ... with a full output pad
+    // The Night Watch of the credits store (js/sim/store.js): the seconds this machine has stood for want of material
+    // toward its next batch made out of nothing, and how many such batches it has made. Neither is saved.
+    this.watched = 0;
+    this.gifted = 0;
   }
 
   get inputFull() { return this.inputs >= this.inputCap; }
@@ -63,12 +67,25 @@ export class Processor {
     return true;
   }
 
-  /** Advance by dt seconds at the given speed multiplier. Returns batches finished. */
-  step(dt, speed = 1) {
+  /**
+   * Advance by dt seconds at the given speed multiplier. Returns the batches finished from material.
+   * @param watch  the Night Watch: a machine that stands for want of material makes one batch out of nothing for every
+   *               `watch` seconds it stands so (game time, whatever the speed); 0: never. Such a batch used no material,
+   *               so it is not among the batches returned: it is counted in `gifted`.
+   */
+  step(dt, speed = 1, watch = 0) {
     let finished = 0;
     if (!this.busy) {
       if (!this.canStart) {
-        if (this.outputFull) this.blocked += dt; else this.starved += dt;
+        if (this.outputFull) this.blocked += dt;
+        else {
+          this.starved += dt;
+          if (watch > 0) {
+            this.watched += dt;
+            while (this.watched >= watch && !this.outputFull) { this.watched -= watch; this.outputs += this.recipe.outCount; this.gifted++; }
+            if (this.outputFull) this.watched = 0;   // a full pad banks nothing: the count starts again when there is room
+          }
+        }
         return 0;
       }
       this.busy = true; this.consume(); this.progress = 0;

@@ -22,7 +22,8 @@ export class ObjectiveMethods {
   /** Jobs the workers are busy with, leaving out `except`: used so nobody doubles up on a job. */
   claims(except = null) {
     const out = [];
-    for (const a of this.areas) if (a.open) for (const w of a.workers) { if (w !== except && w.job) out.push(w.claim); }
+    for (const a of this.areas) if (a.open) for (const w of [...a.workers, ...a.crew]) { if (w !== except && w.job) out.push(w.claim); }
+    for (const a of this.areas) if (a.open && a.runner && a.runner !== except && a.runner.job) out.push(a.runner.claim);   // the Runner of the credits store
     return out;
   }
   /** True once some built station can take `item`; until then sources keep it on the ground. */

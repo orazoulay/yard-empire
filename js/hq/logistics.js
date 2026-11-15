@@ -21,8 +21,9 @@ export class HqLogistics {
     const c = this.company, econ = this.game.econ;
     const items = [...new Set([...Object.keys(c.stock), ...c.active.flatMap(x => x.needs.map(n => n[0]))])];
     const stock = items.map(item => {
-      const have = c.stock[item] || 0, reserved = Math.min(c.reserved(item), have), free = have - reserved;
-      return h('div', { class: 'hq-need' }, h('span', { text: label(item) }), bar(have / c.capacity), h('b', { text: `${have} / ${c.capacity}` }),
+      // the limit is what the warehouse takes of this good now: an order accepted with a bigger warehouse is larger than a resting one
+      const have = c.stock[item] || 0, reserved = Math.min(c.reserved(item), have), free = have - reserved, room = c.room(item);
+      return h('div', { class: 'hq-need' }, h('span', { text: label(item) }), bar(have / room), h('b', { text: `${have} / ${room}` }),
         free > 0 ? this.button_(`Sell ${free}`, 'sell-' + item, () => this.act('sell', () => c.sellStock(item)), { cls: 'small' }) : null);
     });
     // How long each running order still needs, from what the yards made in the last minute.

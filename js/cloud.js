@@ -161,7 +161,9 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     const r = await asPlayer('POST', '/functions/v1/credits', body);
     return r.ok || (r.status >= 400 && r.status < 500 && r.data?.code) || r.status === 0 ? r : fail(r);
   }
-  const board = period => (session ? asPlayer : (m, p, b) => send(m, p, b, { as: 'visitor' }))('POST', '/rest/v1/rpc/leaderboard', { period: period === 'week' ? 'week' : 'all' });
+  /** One of the two rankings: the main one, or with `which` 'boosted' the one of the companies that bought something that changes what they earn. */
+  const board = (period, which) => (session ? asPlayer : (m, p, b) => send(m, p, b, { as: 'visitor' }))('POST', '/rest/v1/rpc/leaderboard',
+    { period: period === 'week' ? 'week' : 'all', ...(which === 'boosted' ? { board: 'boosted' } : {}) });
 
   const routes = {
     /** Who is playing. Tells account.js that accounts exist here, and whether the pass on this device is still good. */
@@ -309,12 +311,27 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     },
     // Credits (supabase/migrations/20261113000000_credits.sql): read with the player's own pass, changed only through
     // the `credits` Edge Function. A refusal comes back as it is (409 short, 404 unknown...): the store shows its words.
-    async 'GET credits'() { const r = await asPlayer('POST', '/rest/v1/rpc/credits_state', {}); return r.ok ? r : fail(r); },
-    async 'POST credits/buy'({ item, key }) { return creditsCall({ action: 'buy', item, key }); },
+    // The day's deal is asked for (p_deals): this game shows it and sends the price it showed with a purchase, so the
+    // server never charges more (supabase/migrations/20261116000000_offers.sql). A server from before the offers has no
+    // such argument and answers 404: it is asked again as before, and names no deal.
+    async 'GET credits'() {
+      let r = await asPlayer('POST', '/rest/v1/rpc/credits_state', { p_deals: true });
+      if (r.status === 404) r = await asPlayer('POST', '/rest/v1/rpc/credits_state', {});
+      return r.ok ? r : fail(r);
+    },
+    async 'POST credits/buy'({ item, key, price }) { return creditsCall({ action: 'buy', item, key, ...(Number.isInteger(price) ? { price } : {}) }); },
     async 'POST credits/claim'({ task }) { return creditsCall({ action: 'claim', task }); },
     async 'POST credits/grant'({ username, amount, note, key }) { return creditsCall({ action: 'grant', username, amount, note, key }); },
+    async 'POST credits/gift'({ key }) { return creditsCall({ action: 'gift', key }); },
+    /** What the store sells, for a visitor: the catalog's table is open to read (ids and prices of what is on sale). */
+    async 'GET credits/offered'() {
+      const r = await send('GET', '/rest/v1/credit_items?select=id,price&active=eq.true', undefined, { as: 'visitor' });
+      return r.ok && Array.isArray(r.data) ? good({ items: r.data }) : fail(r);
+    },
     async 'GET leaderboard'() { const r = await board('all'); return r.ok ? r : fail(r); },
     async 'GET leaderboard?period=week'() { const r = await board('week'); return r.ok ? r : fail(r); },
+    async 'GET leaderboard?board=boosted'() { const r = await board('all', 'boosted'); return r.ok ? r : fail(r); },
+    async 'GET leaderboard?period=week&board=boosted'() { const r = await board('week', 'boosted'); return r.ok ? r : fail(r); },
     async 'POST leaderboard'({ listed }) {
       const r = await asPlayer('POST', '/rest/v1/rpc/set_listed', { p_listed: !!listed });
       if (!r.ok) return fail(r);

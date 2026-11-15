@@ -120,6 +120,13 @@ button { font-family: inherit; }
 @keyframes credits-bump { 30% { transform: scale(1.14); } 100% { transform: scale(1); } }
 /* On a small phone the top bar is full: the logo gives way before anything else does. */
 @media (max-width: 360px) { #topbar:has(#credits-pill:not([hidden])) #logo { display: none; } }
+/* the boosts of the credits store that are running: quiet chips in a row of their own under the top bar's two, each with its time left */
+.boosts { justify-content: flex-end; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+.boosts[hidden] { display: none; }
+.boost-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 12px; font-size: .75rem; color: #e4dcff;
+  border: 1px solid rgba(143, 107, 255, .55); background: linear-gradient(180deg, rgba(56, 40, 104, .82), rgba(34, 26, 64, .82)); }
+.boost-chip b { font-weight: 700; }
+.boost-time { font-variant-numeric: tabular-nums; color: #fff; }
 #cash.bump { animation: bump .25s; }
 @keyframes bump { 50% { transform: scale(1.12); } }
 /* saved or not: quieter than the chip beside it */
@@ -181,24 +188,29 @@ button { font-family: inherit; }
 .u-text { min-width: 0; }
 .u-kicker { font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--yellow); line-height: 1.3; }
 .u-title { font-size: clamp(1rem, 4.4vw, 1.125rem); font-weight: 600; line-height: 1.2; letter-spacing: -.01em; }
-.u-desc { font-size: .78125rem; font-weight: 400; color: var(--muted); line-height: 1.3; }
+.u-desc { font-size: .78125rem; font-weight: 400; color: var(--muted); line-height: 1.3; white-space: pre-line; }   /* a notice may say several things, a line each */
+#log-list .r-sub { white-space: pre-line; }   /* and so it is kept in the log behind the bell */
 .u-more {
   flex: none; align-self: flex-start; padding: 3px 8px; border-radius: 99px; background: var(--raised); border: 1px solid var(--glass-border);
   font-size: .75rem; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .u-more[hidden] { display: none; }
 
-/* a line of help above the objective card */
+/* a line of help above the objective card. A short one is one line 32px tall, as it always was; a longer one, or several
+   purchases said at once (one line each), wraps, centred, and the box grows upward. What stands above it is placed by
+   its measured height (--hint-h, js/hud.js): the touch point below and the status line (css/platform.css). */
 #hint {
   position: fixed; left: 50%; bottom: calc(var(--bottom-h) + 8px); transform: translateX(-50%); z-index: 26;   /* just above the objective card, however tall it is */
-  height: 32px; padding: 0 14px; font-size: .8125rem; white-space: nowrap; max-width: calc(100vw - 2 * var(--pad));
+  height: auto; min-height: 32px; padding: 6px 14px; font-size: .8125rem; line-height: 1.3;
+  width: max-content; max-width: calc(100vw - 2 * var(--pad));   /* max-content: a box at 50% would otherwise wrap at half the screen */
+  white-space: pre-line; text-align: center; justify-content: center;
   pointer-events: none; animation: fade .2s;
 }
 #hint[hidden] { display: none; }
 /* How to walk on a touch screen: a touch point that presses and drags to and fro, above the line of help.
    Shown on a first visit until the first move (js/yard-ui.js). With less motion it stays still. */
 .drag-show {
-  position: fixed; left: 50%; bottom: calc(var(--bottom-h) + 64px); width: 44px; height: 44px; margin-left: -22px;
+  position: fixed; left: 50%; bottom: calc(var(--bottom-h) + var(--hint-h, 32px) + 32px); width: 44px; height: 44px; margin-left: -22px;
   border-radius: 50%; background: rgba(255, 255, 255, .85); box-shadow: 0 0 0 8px rgba(255, 255, 255, .28), 0 6px 16px rgba(0, 0, 0, .3);
   pointer-events: none; z-index: 26; animation: drag-show 2.4s ease-in-out infinite;
 }
@@ -211,7 +223,7 @@ button { font-family: inherit; }
   90% { transform: translateX(0) scale(.82); }
 }
 html.calm .drag-show { animation: none; }
-body:has(> .ye-notice:not([hidden])) .drag-show { bottom: calc(var(--bottom-h) + 112px); }   /* above the status line too (css/platform.css) */
+body:has(> .ye-notice:not([hidden])) .drag-show { bottom: calc(var(--bottom-h) + var(--hint-h, 32px) + 80px); }   /* above the status line too (css/platform.css) */
 body:has(> .sheet-backdrop:not([hidden])) .drag-show, html.bare .drag-show { display: none; }
 /* The hint is about the yard. While a sheet is open (settings, account, the Headquarters) it would lie on top of the sheet's buttons. */
 body:has(> .sheet-backdrop:not([hidden])) #hint { display: none; }
@@ -446,6 +458,16 @@ button.row:hover { background: #243040; }
 .row.owned .r-price { color: var(--green); }
 .row.short .r-price { color: var(--muted); }
 .row.short .r-bar i { background: #8f6bff; }
+/* the store's engine: what an item is worth now or why it cannot be bought, how many are left today, the mark of what changes earnings, and a purchase that waits */
+.r-worth, .r-left { display: block; font-size: .75rem; font-weight: 500; line-height: 1.35; margin-top: 2px; color: var(--green); }
+.r-left { color: var(--text); }
+.r-worth.off, .r-left.off { color: var(--muted); font-weight: 400; }
+.r-deal { align-self: flex-start; margin-top: 3px; padding: 1px 6px; border-radius: 6px; font-size: .75rem; font-weight: 700; letter-spacing: .02em; color: #10151c; background: var(--yellow); }
+.r-was { font-size: .75rem; color: var(--muted); white-space: nowrap; }
+.r-fill i, .row.short .r-bar.r-fill i { background: var(--green); }   /* the piggy bank's fill: never the purple of the credits a short row still needs */
+.store-deal { font-size: .8125rem; line-height: 1.4; color: var(--text); border-left: 3px solid var(--yellow); padding: 2px 0 2px 8px; }
+.r-earns { align-self: flex-start; margin-top: 3px; padding: 1px 6px; border-radius: 6px; font-size: .75rem; font-weight: 700; letter-spacing: .02em; color: #e4dcff; border: 1px solid rgba(143, 107, 255, .55); }
+.store-held { text-align: left; color: var(--text); border-left: 3px solid #8f6bff; padding-left: 8px; }
 .store-btn {
   flex: none; pointer-events: auto; min-width: 64px; height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer;
   border: 1px solid rgba(143, 107, 255, .7); background: #6a4fd6; color: #fff; font: inherit; font-size: .8125rem; font-weight: 700;
@@ -455,11 +477,18 @@ button.row:hover { background: #243040; }
 .store-head { font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 2px 0; }
 .store-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .store-choice {
-  pointer-events: auto; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 99px;
+  pointer-events: auto; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; min-height: 44px; padding: 0 12px; border-radius: 99px;   /* as tall as the Event ticket's choices: a finger hits it */
   border: 1px solid var(--glass-border); background: rgba(0, 0, 0, .25); color: var(--text); font: inherit; font-size: .75rem; font-weight: 600;
 }
 .store-choice[aria-pressed="true"] { border-color: #c9b8ff; background: rgba(143, 107, 255, .3); }
 .store-choice i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .5); }
+/* the company's emblem (a look of the credits store): one filled shape, in its chooser and in the Headquarters' header */
+.emblem { flex: none; width: 14px; height: 14px; fill: currentColor; stroke: none; }
+/* the events an Event ticket can start: a name and what it does, on two lines, as wide as the row */
+.store-events { flex-direction: column; }
+.store-choice.store-event { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; height: auto; min-height: 44px; padding: 7px 12px; border-radius: 12px; text-align: left; white-space: normal; }
+.store-choice.store-event span { font-size: .75rem; font-weight: 400; line-height: 1.35; color: var(--muted); }
+.store-choice.store-event:disabled { opacity: .55; cursor: default; }
 .store-form { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; border: 1px dashed rgba(143, 107, 255, .55); }
 .store-form label { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; font-weight: 600; color: var(--muted); }
 .store-form input { height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--glass-border); background: rgba(0, 0, 0, .3); color: var(--text); font: inherit; font-size: .9375rem; }
@@ -639,6 +668,9 @@ svg.icon { display: block; flex: none; width: 1em; height: 1em; fill: none; stro
   font-size: var(--t-xl); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--p-gold);
   background: var(--p-raised); border: 1px solid rgba(227, 179, 65, .4);
 }
+.hq-emblem { flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #fff; border: 1px solid rgba(255, 255, 255, .35); }
+.hq-emblem[hidden] { display: none; }
+.hq-emblem .emblem { width: 26px; height: 26px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .35)); }
 .hq-head-text { flex: 1; min-width: 0; }
 .hq-kicker { font-size: var(--t-sm); font-weight: 500; color: var(--p-ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hq-title { font-size: var(--t-xl); font-weight: 600; letter-spacing: -.01em; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -944,6 +976,11 @@ button.hq-chip.travel:hover { background: #243040; }
 .hq-card.legacy h4 .icon { color: var(--p-gold); }
 .hq-card.legacy .hq-row { align-items: flex-start; }
 .hq-card.legacy .hq-row > b { white-space: normal; }
+/* what the credits store changes about a sale, said before the button: a Star bonus, the Family yard, or that the store has not answered */
+.hq-sale-line { display: flex; align-items: flex-start; gap: 8px; color: var(--p-ink); }
+.hq-sale-line .icon { flex: none; font-size: 15px; margin-top: 2px; color: var(--p-up); }
+.hq-sale-line.warn { padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(240, 112, 106, .5); }
+.hq-sale-line.warn .icon { color: var(--p-down); }
 
 /* ranking, locked tabs, the line of feedback */
 .hq-rank { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 10px; background: var(--p-surface); border: 1px solid var(--p-line); font-size: var(--t-md); }
@@ -952,6 +989,8 @@ button.hq-chip.travel:hover { background: #243040; }
 .hq-rank-place.top { color: var(--p-gold); }
 .hq-rank b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hq-rank .hq-goal-text { overflow-wrap: anywhere; }
+/* the Ranking frame of the credits store: a gold frame of two lines around the line of a company that owns it (the server says which) */
+.hq-rank.framed { padding: 9px 13px; border: 2px solid var(--p-gold); outline: 1px solid rgba(227, 179, 65, .5); outline-offset: -6px; }
 .hq-locked { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 30px 10px; }
 .hq-locked-icon { font-size: 34px; color: var(--p-ink3); }
 .hq-locked h3 { margin: 4px 0 0; font-size: var(--t-lg); font-weight: 600; }
@@ -1064,6 +1103,7 @@ button.hq-btn.armed { border-color: var(--p-gold); color: var(--p-gold); }
 .hq-day.on { color: var(--p-gold); border-color: rgba(227, 179, 65, .5); background: rgba(227, 179, 65, .08); }
 .hq-day.next { color: var(--p-ink); border-style: dashed; border-color: var(--p-line-strong); }
 .hq-card.streak h4 .icon { color: var(--p-gold); }
+.hq-card.season h4 .icon { color: var(--p-gold); }
 .hq-card.advice .hq-actions, .hq-card.backup .hq-actions { flex-wrap: wrap; }
 .hq-sub.good { color: var(--p-up); }
 .hq-sub.bad { color: var(--p-down); }

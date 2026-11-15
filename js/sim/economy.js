@@ -61,7 +61,8 @@ export class Economy {
   }
 
   get capacity() {
-    return this.unlockedEffects('capacity').reduce((m, e) => Math.max(m, e.value), this.baseCapacity);
+    const own = this.unlockedEffects('capacity').reduce((m, e) => Math.max(m, e.value), this.baseCapacity);
+    return Math.ceil(own * (this.boost.capacity || 1) - 1e-9);   // the Bigger backpack of the credits store (js/sim/store.js)
   }
   price(item) {
     const base = this.items[item]?.price || 0;

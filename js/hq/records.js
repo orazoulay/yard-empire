@@ -3,7 +3,7 @@
 import { h, amount, figure, label, cap, kpi, section, note, row } from './kit.js';
 import { saveFile } from '../files.js';
 import { fmt } from '../format.js';
-import { icon } from '../icons.js';
+import { icon, emblemIcon } from '../icons.js';
 import { CLIENTS } from '../data/company.js';
 import { cleanName, NAME_MAX } from '../sim/company.js';
 import { personOf } from '../sim/stories.js';
@@ -49,6 +49,20 @@ export class HqRecords {
   showName() {
     const el = this.el.querySelector?.('.hq-kicker');
     if (el) el.textContent = this.company.name || 'Business Headquarters';
+  }
+  /**
+   * The company's emblem (Company emblem of the credits store) at the head of the screen, before the rank: the emblem in
+   * white on the company's colour. Called when the looks are put on (js/game/looks.js); null takes it away.
+   * @param emblem  { id, colour } or null
+   */
+  showEmblem(emblem) {
+    const el = this.el.querySelector?.('#hq-emblem'), key = emblem ? `${emblem.id}:${emblem.colour}` : '';
+    if (!el || key === (this.emblemKey || '')) return;
+    this.emblemKey = key;
+    el.hidden = !emblem;
+    if (!emblem) { el.replaceChildren(); return; }
+    el.style.background = '#' + emblem.colour.toString(16).padStart(6, '0');
+    el.replaceChildren(emblemIcon(emblem.id));
   }
   nameCard() {
     const name = this.company.name;

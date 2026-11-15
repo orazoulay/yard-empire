@@ -69,6 +69,12 @@ export function box(w, h, d, color, { round = 0, fine = 1, ...extra } = {}) {
   const m = new THREE.Mesh(geo, part(color, { map: edgeMap || (edgeMap = edge()), ...extra }));
   m.castShadow = true; m.receiveShadow = true; return m;
 }
+/**
+ * The shared material a block of this colour and finish is made of (the one box() gives it): for something whose
+ * surface is swapped for another while the game runs, such as a truck's cab in another paint. A shared material is
+ * never changed; the part is handed a different one.
+ */
+export const paintOf = (color, extra = {}) => part(color, { map: edgeMap || (edgeMap = edge()), ...extra });
 export function cyl(rt, rb, h, color, seg = 10, extra) {
   const m = new THREE.Mesh(cylinderShape(rt, rb, h, seg), part(color, extra));
   m.castShadow = true; m.receiveShadow = true; return m;
@@ -96,6 +102,11 @@ export function soaks(material) {
   material.userData.dry = { roughness: material.roughness, color: material.color.clone(), shine: material.envMapIntensity };
   WET.push(material);
   return material;
+}
+/** Take a ground material off that list again: the floor it was on has been laid anew (js/area.js, setFloor). */
+export function dries(material) {
+  const i = WET.indexOf(material);
+  if (i >= 0) WET.splice(i, 1);
 }
 /** The tops of the chimneys around the city, in the world: smoke rises from them while the city works. */
 export const CITY_STACKS = [];

@@ -39,7 +39,7 @@ export const HELP = {
   goals: {
     title: 'How goals work',
     steps: [
-      ['Today.', `Three goals a day, new ones at midnight. Collect all three for a bonus of ${GOALS.daily.bonusXp} extra XP and cash.`],
+      ['Today.', `New goals every day at midnight. Collect three of the day's goals for a bonus of ${GOALS.daily.bonusXp} extra XP and cash.`],
       ['This week.', 'Three bigger goals, new ones every Monday. A goal you do not finish is simply replaced.'],
       ['Day streak.', `Collect a goal on days in a row: from the second day, the first goal of the day pays ${pct(STREAK.step)} more for each day, up to ${pct(STREAK.step * (STREAK.cap - 1))}.`],
     ],

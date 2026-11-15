@@ -1,14 +1,17 @@
 // The trucks of the truck routes, made visible. Each route the company owns has one truck that drives
 // from the machine that makes the goods to the machine that needs them, waits a moment and drives
 // back empty. They are for show: how much a route carries is decided by the rules in js/sim/company.js.
+// The credits store can paint every cab in one paint (Truck paint) and put the company's emblem on its roof and doors.
 import * as THREE from 'three';
-import { box, cyl, mat, GLOW, LIGHT, METAL } from './world.js';
+import { box, cyl, mat, paintOf, GLOW, LIGHT, METAL } from './world.js';
+import { makeBadge } from './gfx/emblem.js';
 import { beamMap, softShadow } from './textures.js';
 import { ITEMS } from './data/areas.js';
 import { bend, pace, wayAround } from './sim/yard.js';
 
 const SPEED = 6.5, WAIT = 1.4;
 const PAINT = [0xd63a2f, 0x2f7fd6, 0xe0a52f, 0x3aa35a, 0x8e5bd6];
+const CAB = { roughness: 0.35, metalness: 0.3 };   // the finish of a cab, in whatever paint
 const STOP = { x: 5.4, z: 2.6 };   // where a truck stops, from the middle of a machine: beside the end of its belt, a truck's nose away from it, clear of whoever works there
 
 // Every truck shares its lamps with the others: two materials that glow after dark, and the patch of
@@ -27,7 +30,7 @@ function model(paint, cargoColor) {
   const g = new THREE.Group(), L = lights();
   g.add(softShadow(2.6, 3.6, { opacity: 0.4 }));
   const bed = box(1.5, 0.22, 2.3, 0x4a4f57, { round: 0.05, metalness: 0.4, roughness: 0.5 }); bed.position.set(0, 0.62, -0.5); g.add(bed);
-  const cab = box(1.5, 1.05, 1.1, paint, { round: 0.16, fine: 2, roughness: 0.35, metalness: 0.3 }); cab.position.set(0, 1.0, 1.25); g.add(cab);
+  const cab = box(1.5, 1.05, 1.1, paint, { round: 0.16, fine: 2, ...CAB }); cab.position.set(0, 1.0, 1.25); g.add(cab);
   const glass = box(1.3, 0.42, 0.06, 0xbfe6ff, { map: null, roughness: 0.06, metalness: 0.4, envMapIntensity: 1 }); glass.position.set(0, 1.2, 1.81); g.add(glass);
   const bumper = box(1.56, 0.2, 0.16, 0xc9ced2, { ...METAL, map: null }); bumper.position.set(0, 0.5, 1.84); g.add(bumper);
   for (const x of [-0.5, 0.5]) {
@@ -44,11 +47,29 @@ function model(paint, cargoColor) {
   for (const [x, y, z] of [[-0.34, 0.25, 0.5], [0.34, 0.25, 0.5], [-0.34, 0.25, -0.45], [0.34, 0.25, -0.45], [0, 0.75, 0]]) {
     const crate = box(0.62, 0.5, 0.85, cargoColor, { round: 0.05 }); crate.position.set(x, y, z); cargo.add(crate);
   }
-  return { g, wheels, cargo };
+  return { g, wheels, cargo, cab };
 }
 
 export class Trucks {
-  constructor(game) { this.game = game; this.list = new Map(); this.blocks = null; }
+  constructor(game) { this.game = game; this.list = new Map(); this.blocks = null; this.paint = null; this.emblem = false; }
+
+  /**
+   * The looks of the credits store on the trucks: one paint for every cab (a colour as a number, or null for each
+   * truck's own), and the company's emblem on the roof and the doors (true while the company has one). A cab is handed
+   * another shared surface and the badge is one shared shape, so a change makes nothing that needs freeing. Trucks of
+   * routes bought later are made the same way.
+   */
+  setLook(paint, emblem) {
+    if (paint === this.paint && !!emblem === this.emblem) return;
+    this.paint = paint ?? null; this.emblem = !!emblem;
+    for (const t of this.list.values()) if (t) this.dress(t);
+  }
+  /** One truck in the company's paint and with its badge, or without. */
+  dress(t) {
+    t.cab.material = paintOf(this.paint ?? t.own, CAB);
+    if (this.emblem && !t.badge) { t.badge = makeBadge(); t.g.add(t.badge); }
+    else if (!this.emblem && t.badge) { t.g.remove(t.badge); t.badge = null; }   // its shape and its picture are shared: nothing to free
+  }
 
   /**
    * The points a truck drives through from one machine to the other: by way of the gates between the
@@ -90,9 +111,11 @@ export class Trucks {
   make(def, n) {
     const road = this.road(def);
     if (!road) return null;
-    const m = model(PAINT[n % PAINT.length], ITEMS[def.item].mesh?.color ?? 0xb5742f);
+    const own = PAINT[n % PAINT.length], m = model(own, ITEMS[def.item].mesh?.color ?? 0xb5742f);
     this.game.scene.add(m.g);
-    return { ...m, ...road, def, s: 0, dir: 1, wait: 0, heading: Math.atan2(road.legs[0].nx, road.legs[0].nz) };
+    const t = { ...m, ...road, def, own, badge: null, s: 0, dir: 1, wait: 0, heading: Math.atan2(road.legs[0].nx, road.legs[0].nz) };
+    if (this.paint != null || this.emblem) this.dress(t);
+    return t;
   }
 
   update(dt) {

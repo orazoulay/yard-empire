@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { ITEMS } from './data/areas.js';
 import { wood } from './textures.js';
 import { Batch, blockPart, merge, solid } from './models.js';
-import { padSlot } from './sim/yard.js';
+import { padSlot, padSlotOn, padColumns } from './sim/yard.js';
 import { productShape } from './gfx/products.js';
 
 /** Vertical distance between stacked items of a type. */
@@ -74,6 +74,16 @@ export function setSmallShadows(on) {
   for (const s of stacks) if (s.mesh) s.mesh.castShadow = on;
 }
 
+const feet = new Map();   // type -> its size seen from above, { x, z }: what padColumns lays out by
+/** How much ground a good covers, from the middle of its shape outward on each side (the shape is shared: only read). */
+function footOf(type) {
+  if (!feet.has(type)) {
+    const b = new THREE.Box3().setFromBufferAttribute(productShape(type).geo.attributes.position);
+    feet.set(type, { x: 2 * Math.max(-b.min.x, b.max.x), z: 2 * Math.max(-b.min.z, b.max.z) });
+  }
+  return feet.get(type);
+}
+
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
 
 /**
@@ -84,10 +94,15 @@ const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quatern
  * the item, so a tall stack sways like a tower of planks and not like one solid block.
  */
 export class Stack {
-  /** @param from  where a new item comes from, in the stack's own space ({ x, y, z }); without it items pop up in place */
-  constructor(parent, { spread = 0, maxVisible = 24, from = null } = {}) {
+  /**
+   * @param from  where a new item comes from, in the stack's own space ({ x, y, z }); without it items pop up in place
+   * @param pad   on a machine's output pad: its size and its pallet's ({ w, d, pallet }), so that goods beyond a full pile
+   *              stand beside it (js/sim/yard.js, padColumns); `lift` is then how high the pallet holds the pile
+   */
+  constructor(parent, { spread = 0, maxVisible = 24, from = null, pad = null } = {}) {
     this.group = new THREE.Group(); parent.add(this.group);
     this.mesh = null; this.slots = []; this.type = null; this.spread = spread; this.maxVisible = maxVisible;
+    this.pad = pad; this.lay = null; this.lift = 0;
     this.from = from; this.clock = 0;
     this.leanX = 0; this.leanZ = 0;
     this.settled = true;   // nothing is arriving: animate() has nothing to move unless the stack leans
@@ -95,13 +110,29 @@ export class Stack {
   }
   /** How many items show. */
   get count() { return this.slots.length; }
+  /** For good: the stack leaves its holder and the list of every stack; its instances are freed, the product's shape and material are shared and stay. */
+  dispose() { if (this.mesh) { this.group.remove(this.mesh); this.mesh.dispose(); this.mesh = null; } this.group.parent?.remove(this.group); stacks.delete(this); }
+  /**
+   * Let the stack show up to `n` items: a machine's output pad made bigger by the Mechanic of the credits store, or one
+   * that still holds more than its size. It only grows, and its instances are made again only when it does.
+   */
+  room(n) {
+    if (!(n > this.maxVisible)) return;
+    this.maxVisible = n;
+    const was = this.mesh;
+    if (!was) return;   // made at the new size with its first item
+    this.mesh = new THREE.InstancedMesh(was.geometry, was.material, n);
+    this.mesh.instanceMatrix.array.set(was.instanceMatrix.array);   // the goods already there keep their places
+    this.mesh.count = was.count; this.mesh.castShadow = was.castShadow; this.mesh.receiveShadow = true; this.mesh.frustumCulled = false;
+    this.group.remove(was); was.dispose(); this.group.add(this.mesh);
+  }
   /** @param instant  true to put new items straight in their place: for a stack that was out of sight and is caught up */
   set(type, count, instant = false) {
-    count = Math.min(count, this.maxVisible);
     if (instant) this.clock += 1;   // whatever was in the air when the stack went out of sight has landed by now
     if (this.type !== type) {
       if (this.mesh) { this.group.remove(this.mesh); this.mesh.dispose(); this.mesh = null; }
       this.slots = []; this.type = type;
+      this.lay = type && this.pad ? padColumns(footOf(type), { ...this.pad, spread: this.spread }) : null;   // once for each good, not on a frame
       if (type) {
         const p = productShape(type);
         this.mesh = new THREE.InstancedMesh(p.geo, p.mat, this.maxVisible);
@@ -111,6 +142,7 @@ export class Stack {
       }
     }
     if (!type) return;
+    count = Math.min(count, this.maxVisible, this.lay ? this.lay.max : Infinity);
     const step = stackStep(type);
     const base = this.spread ? stackBase(type) : 0;   // on a pad the goods stand on the pallet, not half in it
     let changed = false;
@@ -118,7 +150,8 @@ export class Stack {
       const i = this.slots.length;
       let slot;
       if (this.spread) {   // on a pad: two to a layer, every other layer turned a quarter
-        slot = padSlot(i, step, this.spread); slot.y += base;
+        slot = this.lay ? padSlotOn(i, step, this.spread, this.lay) : padSlot(i, step, this.spread);
+        slot.y += base - (slot.low ? this.lift : 0);   // a column off the pallet stands on the belt
       } else {             // in the hands: one tower
         slot = { x: 0, y: i * step, z: 0, turn: (i % 2) * 0.08 };
       }

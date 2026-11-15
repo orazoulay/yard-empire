@@ -5,7 +5,8 @@ import { MARKET, RUSH } from '../data/company.js';
 import { AREAS } from '../data/areas.js';
 import { icon } from '../icons.js';
 import { clockText } from '../sim/company.js';
-import { advise, ADVICE } from '../sim/advice.js';
+import { advise, ADVICE, bestPurchase, paybackText } from '../sim/advice.js';
+import { fmt } from '../format.js';
 
 export class HqAdvisor {
   // --- Advisor --------------------------------------------------------------------------------------------
@@ -29,11 +30,29 @@ export class HqAdvisor {
     });
     return [
       note('The Advisor reads the last minute of every yard and names what holds it back, when there is something you can do about it.'),
+      this.proCard(),
       section(`Yards · ${tips.length ? `${tips.length} to look at` : 'nothing to report'}`, ...cards,
         tips.length ? null : note(settling ? 'Still reading the books. The first advice comes after about a minute of play.' : 'Every open yard runs as well as it can with what is built. Nothing holds one back that you could change right now.')),
       this.rushCard(),
       c.market.open ? this.marketWatch() : null,
     ];
+  }
+  /**
+   * The Advisor Pro of the credits store, while it is owned: of the next purchase of every open yard, the one that pays
+   * back soonest (Company.nextPurchases, js/sim/advice.js), with a button that goes to its yard. It reckons by what a
+   * yard is built to earn, the figure the goals are sized by: an estimate, and the card says so.
+   */
+  proCard() {
+    const c = this.company;
+    if (!c.mods.advisorPro) return null;
+    const best = bestPurchase(c.nextPurchases());
+    if (!best) return section('Best next purchase', note('Every yard is fully built. Nothing is left to buy in the yards.'));
+    return section('Best next purchase', h('article', { class: 'hq-card advice' },
+      h('header', {}, h('h4', { text: best.name }), h('span', { class: 'hq-chip good', text: `Pays back in ${paybackText(best.seconds)}` })),
+      h('div', { class: 'hq-goal-text', text: best.opens ? `Open the ${best.opens} and build it up.` : `${best.label}.` }),
+      h('div', { class: 'hq-sub', text: `$${fmt(Math.ceil(best.cost))} still to pay${best.opens ? ', the gate and every purchase behind it' : ''}. It adds about $${fmt(Math.round(best.gain * 60))} a minute.` }),
+      h('div', { class: 'hq-actions' }, this.button_('Go there', 'pro-' + best.yard, () => { if (this.game.travel(best.yard)) this.close(); }, { cls: 'primary' }))),
+      note('Reckoned by what each yard is built to earn, the figure your goals are sized by. Of the next purchases of all your yards, this one earns its price back soonest.'));
   }
   /** Rush orders, offered and running: what is asked, how much time there is, and whether the yards will make it at their pace. */
   rushCard() {

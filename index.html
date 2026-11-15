@@ -56,6 +56,8 @@
           <button id="log-btn" class="icon-btn mini" aria-haspopup="dialog" aria-label="What happened"><span id="log-icon" class="s-icon"></span><span id="log-dot" class="badge" hidden></span></button>
         </div>
       </div>
+      <!-- The boosts of the credits store that are running, each with the time it has left. Empty and hidden most of the time. Not a live region: its time changes every second. -->
+      <div id="boosts" class="top-row boosts" aria-live="off" hidden></div>
     </header>
 
     <div id="unlock" class="card" role="status">
@@ -230,6 +232,7 @@
   <div id="hq" class="sheet-backdrop" hidden>
     <div class="hq card" role="dialog" aria-modal="true" aria-label="Business Headquarters">
       <header class="hq-head">
+        <div class="hq-emblem" id="hq-emblem" role="img" aria-label="Your company's emblem" hidden></div>
         <div class="hq-rank-icon" id="hq-rank-icon"></div>
         <div class="hq-head-text">
           <div class="hq-kicker">Business Headquarters</div>

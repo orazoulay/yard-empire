@@ -55,6 +55,9 @@ import { CompanyChoresMethods, today, SOLD_KEY } from './game/company-chores.js'
 import { SiteMethods } from './game/site.js';
 import { ObjectiveMethods } from './game/objective.js';
 import { SavingMethods } from './game/saving.js';
+import { StoreMethods } from './game/store.js';
+import { LooksMethods } from './game/looks.js';
+import { paintEmblem } from './gfx/emblem.js';
 
 class Game {
   /** @param account {Account} decides which save slot this game uses: the guest's or a signed-in player's */
@@ -117,7 +120,9 @@ class Game {
     this.syncSite();
 
     this.player = new Character(scene, { pack: true });
-    this.pet = new Pet(scene);   // the Yard Dog, when the server says it is owned
+    this.pet = new Pet(scene);   // the Yard Dog or a pet of More pets, when the server says it is owned
+    this.paintEmblem = paintEmblem;   // the company's emblem on its one picture (js/gfx/emblem.js), for js/game/looks.js
+    this.saleFx = ''; this.burstAt = 0; this.shopBurstAt = new WeakMap();   // the Sale effect that is chosen ('' for the game's own sparks), and when the player's last good, and the workers' last at each counter, was sold
     this.playerArea = this.areas[0];
     this.bubble = this.labels.add('bubble', '', () => this.player.headPos);
     this.guide = new Guide(scene);
@@ -134,6 +139,8 @@ class Game {
     this.view = new View(camera);
     this.lessMotion = matchMedia('(prefers-reduced-motion: reduce)');
     this.meter = new RateMeter(this.econ.workerRate);
+    this.carried = new RateMeter(1);   // how much of the credits store's timed price boosts the income meter has taken in; it starts at 1 because the saved rate is the rate without them
+    this.calmRate = { rate: this.econ.workerRate, rest: 0 };   // the rate without boosts, for saves and time skips (js/sim/store.js, calmStep); the saved rate is one. Not `calm`: that is the less-motion setting (js/game/camera.js)
     this.tweens = [];
     this.stepTimer = 0;
 
@@ -173,6 +180,7 @@ class Game {
     this.ui = new YardUi(this, new Pulse(scene));   // yard interface: needs the HUD, the settings, the sound and the Headquarters above
     this.store = bindStore(this);                      // the credit balance in the top bar, and the store behind it
     this.credits.onChange(() => this.applyLooks());
+    this.bindStoreRules();                             // the credits store's rules: what is owned folds into the company and the yards (js/game/store.js)
     this.watch = new YardWatch(); this.hq.showName();   // more to do: what the Advisor reads, and the company's name in the header
     this.hud.setCash(this.econ.cash, true);
 
@@ -180,7 +188,7 @@ class Game {
     this.resize();
     addEventListener('resize', () => this.resize());
     addEventListener('visibilitychange', () => { if (document.hidden) this.save(); this.autoQuality.rest(); });
-    this.checkOffline();   // before the first save overwrites the last-seen time
+    this.awayAtLoad();   // time away: paid now, or once the store has answered (js/game/saving.js); before the first save overwrites the last-seen time
     this.renderer.setAnimationLoop(() => this.frame());
 
     let sold = 0;
@@ -195,7 +203,7 @@ class Game {
 }
 
 // The Game is the sum of its parts: each file in js/game/ adds its methods, and `this` is the Game in all of them.
-mix(Game, LoopMethods, CameraMethods, GraphicsMethods, MovementMethods, FeedbackMethods, CompanyChoresMethods, SiteMethods, ObjectiveMethods, SavingMethods);
+mix(Game, LoopMethods, CameraMethods, GraphicsMethods, MovementMethods, FeedbackMethods, CompanyChoresMethods, SiteMethods, ObjectiveMethods, SavingMethods, LooksMethods, StoreMethods);
 
 // Find out who is playing before the game loads their save. Without a server this resolves at once as a guest.
 loading.step(1);   // yard interface: the loading bar follows the real steps: files here, then the save, then the yard
@@ -207,6 +215,8 @@ game.offerAccount = bindAccountUi(account, { onOpen: () => game.sfx.click() }).o
 account.start();
 game.credits.refresh();   // what this player has in credits: asked once the account is known, and again when the connection comes back
 addEventListener('online', () => game.credits.refresh());
+// shown again after a while (a tab in the background, a computer that slept): the server's day, prices and clock may have moved on
+document.addEventListener('visibilitychange', () => { if (!document.hidden) game.credits.wake(); });
 addEventListener('yard:sync', e => { if (e.detail?.ok && !game.credits.online) game.credits.refresh(); });
 initPwa();
 initNative(game);

@@ -36,7 +36,7 @@ export class HqMarket {
         row('Difference', !tone ? 'none' : `${r.diff > 0 ? '+' : '−'}${share}`, tone)),
       this.priceChart(r, log),
       r.made
-        ? h('div', { class: 'hq-need' }, h('span', { text: 'In the warehouse' }), bar(r.stock / c.capacity), h('b', { text: `${r.stock} / ${c.capacity}` }))
+        ? h('div', { class: 'hq-need' }, h('span', { text: 'In the warehouse' }), bar(r.stock / c.room(r.item)), h('b', { text: `${r.stock} / ${c.room(r.item)}` }))
         : h('div', { class: 'hq-sub', text: `You do not make ${label(r.item)} yet. They come from the ${yardName(r.yard)}.` }),
       r.made ? h('div', { class: 'hq-actions' },
         this.button_(r.free > 0 ? `Sell ${r.free} for ${money(r.free * r.price)}` : 'Nothing to sell', 'sell-' + r.item, () => this.act('sell', () => c.sellStock(r.item)), { cls: 'primary', disabled: r.free <= 0, exact: r.free * r.price }),

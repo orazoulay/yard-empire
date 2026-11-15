@@ -1,11 +1,12 @@
 // The Construction tab (the building site) and the Expansion tab (new yards and selling the company).
 // Added to the Headquarters class in js/hq.js (see mix() in js/hq/kit.js): `this` is the Headquarters.
-import { h, amount, bar, label, needText, cap, chip, section, note, row } from './kit.js';
+import { h, amount, withAmount, bar, label, needText, cap, chip, section, note, row } from './kit.js';
 import { fmt } from '../format.js';
 import { RANKS, MILESTONES, MEASURES, LOCATIONS, PRESTIGE } from '../data/company.js';
 import { AREAS } from '../data/areas.js';
 import { BUILDS } from '../data/builds.js';
 import { icon } from '../icons.js';
+import { saleLines, bankLines } from '../sim/store.js';
 
 export class HqBuild {
   // --- Construction: the building site (js/data/builds.js, and "the building site" in js/sim/company.js) --------
@@ -92,8 +93,12 @@ export class HqBuild {
   }
   /** Legacy stars, and the sale of the company: explained first, two presses to do it. */
   legacyCard() {
-    const c = this.company, o = c.sellOffer(), stars = c.legacy.stars, pct = n => Math.round(n * PRESTIGE.starBonus * 100);
-    const arm = this.confirm === 'sell';
+    const c = this.company, o = c.sellTerms(), stars = c.legacy.stars, pct = n => Math.round(n * PRESTIGE.starBonus * 100);
+    // The credits store: a Star bonus that waits and the Family yard change what a sale does, and a sale cannot be undone.
+    // What will count is said before the button; the second press sells only what the first press was shown.
+    // A purchase that waits for a full piggy bank opens the new company's small bank: whether one waits is in the key.
+    const family = this.game.familyState ? this.game.familyState() : 'none', bank = c.bankTerms(), lines = o.allowed ? [...saleLines(o, family, AREAS[0].name), ...bankLines(bank)] : [];
+    const key = `sell:${family}:${o.stars}:${o.keeps}` + (bank.waits ? ':bank' : ''), arm = this.confirm === key;
     return h('article', { class: 'hq-card legacy' },
       h('header', {}, h('h4', {}, icon('star'), h('span', { text: `${stars} legacy star${stars === 1 ? '' : 's'}` })),
         h('span', { class: 'hq-chip ' + (stars ? 'good' : 'dim'), text: stars ? `+${pct(stars)}% on every sale` : 'None yet' })),
@@ -106,7 +111,14 @@ export class HqBuild {
       o.allowed
         ? row(`A sale now, with ${o.yards} yards fully built, pays`, `${o.stars} stars (+${pct(o.stars)}% prices, +${Math.round(o.stars * PRESTIGE.costPerStar * 100)}% costs)`)
         : note(`A sale needs ${o.min} fully built yards. You have ${o.yards}.`),
-      o.allowed ? h('div', { class: 'hq-actions' }, this.button_(arm ? 'Tap again to sell everything' : 'Sell the company', 'sell',
-        () => { if (!arm) { this.confirm = 'sell'; this.render(); return; } this.game.sellCompany(); }, { cls: arm ? 'danger' : '' })) : null);
+      // a sum of money a line names carries its exact figure, like every other on the screen
+      ...lines.map(l => h('p', { class: 'hq-note hq-sale-line' + (l.warn ? ' warn' : '') }, icon(l.warn ? 'bell' : 'check'),
+        h('span', {}, ...(l.amounts || []).reduce((parts, n) => parts.flatMap(p => (typeof p === 'string' ? withAmount(p, n) : [p])), [l.text])))),
+      o.allowed ? h('div', { class: 'hq-actions' }, this.button_(arm ? (o.keeps ? 'Tap again to sell the other yards' : 'Tap again to sell everything') : 'Sell the company', 'sell',
+        () => {
+          if (!arm) { this.confirm = key; this.render(); return; }
+          // what the card said is no longer so (a purchase began to wait for the bank since it was drawn, or the store's answer came or went): said again, and asked again
+          if (!!c.bankTerms().waits !== !!bank.waits || !this.game.sellCompany(family)) { this.confirm = null; this.render(); }
+        }, { cls: arm ? 'danger' : '' })) : null);
   }
 }

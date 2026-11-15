@@ -6,8 +6,11 @@
 // through addCash / spend, and is saved inside the Economy's save as `company`.
 import { FINANCE, RANKS, MILESTONES, WAREHOUSE, CONTRACTS, ROUTES, RESEARCH, TABS, STAFF, STAFF_RULES, GOALS, ACHIEVEMENTS, PRESTIGE, EVENTS, EVENT_GOAL, LOCATIONS, RUSH, CLIENTS, STREAK, MARKET } from '../data/company.js';
 import { BUILDS, SITE } from '../data/builds.js';
-import { RateMeter, OFFLINE_CAP_SECONDS } from './offline.js';
+import { RateMeter, OFFLINE_CAP_SECONDS, OFFLINE_EFFICIENCY } from './offline.js';
 import { Market } from './market.js';
+import { CREDITS } from '../data/credits.js';
+import { UNCHECKED } from './sync.js';
+import { MAX_FLAGS, MAX_BOOSTS, seasonState, loadStore, storeJSON, storeMods, tickStore, useFlag, flagValue, itemDoing, bankAdd, bankCap, bankNow, seasonStep, seasonPoints, startEvent } from './store.js';
 import { fmt } from '../format.js';
 
 const num = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
@@ -170,6 +173,22 @@ export class Company {
     this.seen = { market: s?.seen ? !!s.seen.market : this.market.t > 300, sale: s?.seen ? !!s.seen.sale : this.legacy.sales > 0,
       rush: !!s?.seen?.rush, metropolis: !!s?.seen?.metropolis, site: !!s?.seen?.site };
     this.site = readSite(s?.site);                                                  // the building site (js/data/builds.js); absent in older saves
+    // The credits store (js/sim/store.js): the receipts already applied, the boosts that run and the flags that wait.
+    // Absent in older saves, and written only once something was bought. What is owned for good is not in the save:
+    // the server says so in each visit, and the game hands its answer over with setOwns().
+    this.store = loadStore(s?.store);
+    // Where the block came from: 'save' (the save had one), 'unchecked' (one a visit started without the server's word,
+    // js/sim/sync.js, UNCHECKED: the flag is the save's word, not one of the block's flags) or 'none'. The game decides
+    // from it whether the block is known (js/game/store.js); while it is not, `storeUnsure` is set and the flag written.
+    this.storeFrom = !s?.store || typeof s.store !== 'object' || Array.isArray(s.store) ? 'none' : this.store.flags[UNCHECKED] ? 'unchecked' : 'save';
+    delete this.store.flags[UNCHECKED];
+    this.storeUnsure = false;
+    this.owns = () => false;                                                        // (itemId) => boolean: nothing is owned until the server has said so
+    this.storeLevel = () => 1;                                                      // (itemId) => the level owned of a helper with levels, from 1 (not `level`: that is research)
+    this.catalog = CREDITS.items;                                                   // what the store's items do; a test may put its own list here
+    this.wall = () => Date.now();                                                   // the wall clock in milliseconds: a boost ends by it, game open or not
+    this.heldSeason = () => null;                                                   // (itemId, 'YYYY-MM') => was the Season pass held for that month: true, false, null when nobody can tell yet (until the game says, setSeason), or 'forgotten' when nobody can tell any more
+    this.seasonTime = () => ({ now: this.wall(), sure: false });                    // the season's clock: { now, sure } (sure: it is the server's), or null while its answer is on its way
     this.siteTurn = false;                                                          // a good a contract and the site both need: whose turn it was
     this.marketStep = null;                                                         // the price step the alerts were last checked at
     this.books = new Map();                        // yard id -> smoothed dollars per second, by BOOK_KEYS
@@ -209,7 +228,28 @@ export class Company {
       ...(this.name ? { name: this.name } : {}),
       // the building site, only once something was built or started: older saves, and those of players who never get there, stay as they were
       ...(this.site.at || this.site.done.length ? { site: { done: this.site.done, at: this.site.at, stage: this.site.stage, given: this.site.given, value: Math.round(this.site.value), on: this.site.on } } : {}),
+      // the credits store, only once something was bought: a save from before it is written back as it was
+      ...(storeJSON(this.store) ? { store: this.storeBlock() } : {}),
     };
+  }
+  /**
+   * The store block as it is saved: storeJSON(), and while the block was started without the server's word
+   * (`storeUnsure`) with the flag that says so (js/sim/sync.js, UNCHECKED), while there is room for it.
+   */
+  storeBlock() {
+    const block = storeJSON(this.store);
+    if (!block || !this.storeUnsure || Object.keys(block.flags).length >= MAX_FLAGS) return block;
+    return { ...block, flags: { ...block.flags, [UNCHECKED]: { left: 1, value: 1 } } };
+  }
+  /**
+   * The store block the server keeps, taken over in the middle of a visit whose save could not be pulled as it began
+   * (js/game/store.js): it replaces the block the visit started from nothing, and the rest of the progress stays.
+   */
+  adoptStore(block) {
+    this.store = loadStore(block, this.wall());
+    delete this.store.flags[UNCHECKED];
+    this.storeUnsure = false;
+    this.applyMods();   // its running boosts count from this moment
   }
   /** Something to tell the player once, as a card: the game shows it like its other announcements. symbol: an icon of js/icons.js. */
   notice(kicker, title, desc, symbol) { this.events.push({ type: 'notice', card: { kicker, title, desc, symbol } }); }
@@ -220,7 +260,12 @@ export class Company {
   /** Fold every researched effect into plain numbers, and hand price and speed to the Economy. */
   applyMods() {
     const m = { price: 1, speed: 1, workerSpeed: 1, wage: 1, upkeep: 1, storage: 1, routeRate: 1, contractPay: 1, contractSlots: 0, offlineShare: null, offlineCap: null, routes: false,
-      autoDeliver: false, autoAccept: false, autoBuy: false, researchCost: 1, truckFee: 1, clientBonus: 1, forecast: false };
+      autoDeliver: false, autoAccept: false, autoBuy: false, researchCost: 1, truckFee: 1, clientBonus: 1, forecast: false,
+      capacity: 1, crew: 0,     // these two are the store's: what the player carries, and extra workers in every yard
+      dailyGoals: 0, familyYard: 0,   // and these: daily goals beyond the usual three, and (above 0) the first yard kept through a sale
+      // the store's helpers (js/sim/store.js, EFFECTS.helper): no wait at a pad, how much an output pad holds, what the Runner
+      // carries (0: there is none), the seconds of a Night Watch batch (0: none), the factor on the pay for time away, the Advisor Pro
+      noWait: 0, outputCap: 1, runner: 0, nightWatch: 0, awayPay: 1, advisorPro: false };
     const apply = e => {
       if (e.type === 'mult') m[e.stat] *= e.value;
       else if (e.type === 'add') m[e.stat] += e.value;
@@ -235,10 +280,29 @@ export class Company {
       else if (e.type === 'set') Object.assign(m, e.values);
     }
     m.price *= 1 + PRESTIGE.starBonus * this.legacy.stars;   // legacy stars from companies sold
-    const event = this.eventNow();
-    if (event) apply(event.effect);
+    storeMods(m, this, this.owns, this.wall(), this.catalog, this.storeLevel);   // the credits store: what is owned for good, at its level, and the boosts that run
+    for (const event of this.eventsNow()) apply(event.effect);   // today's event, and those an Event ticket of the credits store started
     this.mods = m;
-    this.econ.boost = { price: m.price, speed: m.speed };
+    this.econ.boost = { price: m.price, speed: m.speed, capacity: m.capacity };
+  }
+  /**
+   * Who says what is owned in the credits store: (itemId) => boolean, the server's answer in this visit. Anything else: nothing is owned.
+   * @param levelFn  (itemId) => the level owned of an item with levels, from 1; left out, every helper is at its first level
+   */
+  setOwns(fn, levelFn) {
+    this.owns = typeof fn === 'function' ? fn : () => false;
+    this.storeLevel = typeof levelFn === 'function' ? levelFn : () => 1;
+    this.applyMods();
+  }
+
+  /**
+   * Who says what only the server knows about the season (js/sim/store.js): whether the Season pass was held for a
+   * month, and what time it is. @param heldFn  (itemId, 'YYYY-MM') => true | false | null (the store has not answered in this visit)
+   * @param timeFn  () => { now, sure, moved? } (sure: the server's clock; moved: the device's date moved since the server's last answer, so no month closes on it), or null while the server's answer is on its way
+   */
+  setSeason(heldFn, timeFn) {
+    this.heldSeason = typeof heldFn === 'function' ? heldFn : () => null;
+    this.seasonTime = typeof timeFn === 'function' ? timeFn : () => ({ now: this.wall(), sure: false });
   }
 
   // --- progress ---------------------------------------------------------------
@@ -409,6 +473,8 @@ export class Company {
     this.refreshCosts();
     this.rushClock(t);
     this.watchMarket();
+    if (tickStore(this, this.wall())) this.applyMods();   // a boost of the credits store ran out
+    seasonStep(this);                                     // the month turned: the season closes, and a new one begins
     this.manage();
     this.sync();
   }
@@ -449,7 +515,8 @@ export class Company {
     if (this.market.trades(item)) this.stats.marketSold++;
     return { price, cash: price, stocked: false };
   }
-  income(amount) { this.econ.addCash(amount); this.stats.income += amount; this.flow.income.add(amount); this.minute.sum += amount; }
+  /** Something was sold: a good at a shop, goods from the warehouse, a contract. The piggy bank of the credits store gets its share on top (js/sim/store.js, bankAdd). */
+  income(amount) { this.econ.addCash(amount); this.stats.income += amount; this.flow.income.add(amount); this.minute.sum += amount; bankAdd(this, amount); }
   /** Income that should not move the per-minute figures (pay for time away). */
   earn(amount) { this.econ.addCash(amount); this.stats.income += amount; }
   /** A machine finished `n` batches: book the inputs another yard made as its income and this yard's materials. */
@@ -474,11 +541,22 @@ export class Company {
     for (const c of this.active) for (const [i, qty] of c.needs) if (i === item) n += qty;
     return n;
   }
+  /**
+   * The most of `item` the warehouse takes for the running contracts: its limit, or what one running contract asks
+   * for where that is more. An order is never larger than the warehouse it was offered by, but the warehouse can be
+   * smaller later: the Bigger warehouse of the credits store rests when the server does not answer. The order
+   * accepted before is still filled; what stands in the warehouse above the limit stays there.
+   */
+  room(item) {
+    let most = this.capacity;
+    for (const c of this.active) for (const [i, qty] of c.needs) if (i === item && qty > most) most = qty;
+    return most;
+  }
   /** How many more of `item` the warehouse should take from the shops: for the running contracts, or up to its limit for a good held back from the market. */
   wanted(item) {
-    if (this.holding(item)) return this.capacity - (this.stock[item] || 0);
+    if (this.holding(item)) return this.room(item) - (this.stock[item] || 0);
     if (!this.active.length) return 0;
-    return Math.min(this.reserved(item), this.capacity) - (this.stock[item] || 0);
+    return Math.min(this.reserved(item), this.room(item)) - (this.stock[item] || 0);
   }
   /** Running contracts in the order they take from the warehouse: rush orders first, because their time runs, then by age. */
   fillOrder() { return this.active.some(c => c.limit) ? [...this.active].sort((a, b) => (b.limit ? 1 : 0) - (a.limit ? 1 : 0)) : this.active; }
@@ -640,7 +718,8 @@ export class Company {
   deliver(id, byManager = false) {
     const c = this.active.find(x => x.id === id);
     if (!c || !this.ready(c)) return null;
-    const reward = this.reward(c);
+    const reward = this.reward(c), bonus = useFlag(this, 'contractBonus');   // a Contract bonus of the credits store that waits is for this delivery only
+    if (bonus !== 1) reward.cash = Math.floor(reward.cash * bonus);           // what is paid, reported and logged is the real amount
     for (const [item, qty] of c.needs) { this.stock[item] -= qty; if (this.stock[item] <= 0) delete this.stock[item]; }
     this.active.splice(this.active.indexOf(c), 1); this.readyIds.delete(id);
     this.income(reward.cash);
@@ -658,6 +737,44 @@ export class Company {
     this.gainXp(reward.xp);
     this.sync();
     return reward;
+  }
+  /**
+   * "New offers" of the credits store: the contract board is drawn again now, whatever the wait of the free button,
+   * and that wait is left as it is. A rush offer stays where it is (it comes by its own clock, seldom, and pays best);
+   * running contracts are not touched. Only an offer that was not on the board before counts: the same kind of order
+   * for the same goods would be credits spent on nothing. The board is drawn four times and the draw that changes the
+   * most offers is kept (offersRedraw); when none changes any, nothing is touched.
+   * @param dry  true: only say what a redraw would do
+   * @returns how many offers on the board are new, 0 when the board could not be changed
+   */
+  redrawOffers(dry = false) {
+    if (!this.founded) return 0;
+    const best = this.offersRedraw();
+    if (!dry && best.changed) { this.offers = best.offers; this.seq = best.seq; }
+    return best.changed;
+  }
+  /**
+   * What redrawOffers() would put on the board now, without changing anything (the board and the offer counter are
+   * put back as they were, the same array). An offer is new when the old board has no offer of its kind for its goods,
+   * counted as a multiset: two alike on the new board are both old only if the old board had two alike. A draw follows
+   * the offer counter, so the same company draws the same boards: what this says before a purchase is what it does.
+   * @returns {{ offers: object[], seq: number, changed: number }} the best of four draws (the most new offers, the
+   *          first of equals): its board, the offer counter after it, and how many of its offers are new
+   */
+  offersRedraw() {
+    const before = this.offers, seq = this.seq, keep = before.filter(o => o.limit);
+    const key = o => o.kind + ':' + o.needs.map(n => n[0]).sort().join();
+    let best = { offers: before, seq, changed: 0 };
+    for (let tries = 0; tries < 4; tries++) {
+      this.offers = [...keep]; this.fillOffers();
+      const left = before.filter(o => !keep.includes(o)).map(key), drawn = this.offers.filter(o => !keep.includes(o));
+      let changed = 0;
+      for (const o of drawn) { const i = left.indexOf(key(o)); if (i < 0) changed++; else left.splice(i, 1); }
+      if (changed > best.changed) best = { offers: this.offers, seq: this.seq, changed };
+      if (changed === drawn.length && changed > 0) break;   // every drawn offer is new: no later draw can do better
+    }
+    this.offers = before; this.seq = seq;
+    return best;
   }
   canRefresh() { return this.refreshIn <= 0; }
   newOffers() {
@@ -840,6 +957,31 @@ export class Company {
     });
     return sum;
   }
+  /**
+   * The next purchase of every open yard, for the Advisor Pro of the credits store (js/sim/advice.js, bestPurchase):
+   * [{ id, yard, name, label, cost, gain, opens }]. `cost` is what is still to pay; `gain` is what it adds, in dollars a
+   * second, to the income the company is built for, by the same reckoning as companyRef(): every purchase of a yard is an
+   * equal share of that yard's reference income, at today's prices. A gate earns nothing by itself, so it stands for
+   * the whole yard behind it: `cost` is the gate and every purchase of that yard, `gain` that yard's reference income,
+   * and `opens` its name.
+   */
+  nextPurchases() {
+    const out = [], price = this.mods.price;
+    this.areas.forEach((a, i) => {
+      if (!this.econ.areaOpen(a.id)) return;
+      const u = this.econ.nextUpgrade(a.id);
+      if (!u) return;
+      if (u.effect.type !== 'area') {
+        out.push({ id: u.id, yard: a.id, name: a.name, label: u.label, cost: this.econ.remaining(u.id), gain: refIncome(i) / Math.max(1, a.upgrades.length) * price, opens: null });
+        return;
+      }
+      const j = this.index.get(u.effect.area), next = this.areas[j];
+      if (!next) return;
+      const cost = next.upgrades.reduce((sum, x) => sum + this.econ.remaining(x.id), this.econ.remaining(u.id));
+      out.push({ id: u.id, yard: a.id, name: a.name, label: u.label, cost, gain: refIncome(j) * price, opens: next.name });
+    });
+    return out;
+  }
   staffState(def) {
     const level = this.team[def.id] || 0, max = def.effects.length;
     const cost = Math.round(def.cost * Math.pow(STAFF_RULES.trainGrowth, level));
@@ -937,9 +1079,13 @@ export class Company {
     }
     this.goals.bonusCash = Math.round(ref * GOALS.daily.bonusSeconds);
   }
+  /** How many goals a day has: three, and one more with the Fourth daily goal of the credits store. Never more than there are kinds, or than a save keeps. */
+  dailyCount() { return Math.min(GOALS.kinds.length, GOALS.daily.count + Math.max(0, Math.floor(this.mods.dailyGoals || 0))); }
+  /** How many of today's goals must be collected for the daily bonus: all of them, but never more than three. A fourth goal is extra, and never makes the bonus harder. */
+  bonusNeeds() { return Math.min(this.goals.daily.length, GOALS.daily.count); }
   makeGoals(period, seed) {
-    const rule = GOALS[period], ref = this.goalRef(), pool = this.possibleKinds(period), out = [];
-    while (out.length < rule.count && pool.length) {
+    const rule = GOALS[period], ref = this.goalRef(), pool = this.possibleKinds(period), out = [], count = period === 'daily' ? this.dailyCount() : rule.count;
+    while (out.length < count && pool.length) {
       const kind = pool.splice(Math.floor(rand(seed * 5 + out.length) * pool.length), 1)[0];
       const target = kind.id === 'income' ? Math.round(ref * rule.earnSeconds) : kind[period];
       out.push({ kind: kind.id, target, base: this.counter(kind.id), cash: Math.round(ref * rule.paySeconds), xp: rule.xp, claimed: false, told: false });
@@ -958,6 +1104,7 @@ export class Company {
       this.goals.day = day; this.goals.daily = this.makeGoals('daily', day);
       this.goals.bonus = false; this.goals.bonusCash = Math.round(this.goalRef() * GOALS.daily.bonusSeconds);
     }
+    this.extraGoal();
     const week = Math.floor((day + 3) / 7);   // weeks start on Monday
     if (week > this.goals.week) { this.goals.week = week; this.goals.weekly = this.makeGoals('weekly', week + 100000); }
     // The event of the day: its boost joins the modifiers and its goal is offered; both end with it.
@@ -971,6 +1118,52 @@ export class Company {
         cash: Math.round(this.goalRef() * EVENT_GOAL.paySeconds), xp: EVENT_GOAL.xp, claimed: false, told: false }] : [];
       this.applyMods(); this.refreshCosts();
     }
+  }
+  /**
+   * The Fourth daily goal of the credits store, for a day whose goals were drawn before the server said it is owned
+   * (every visit starts that way), or when no fourth kind was possible then: one goal of a kind not on today's list is
+   * added, starting at nothing, at the size the day's goals are drawn at. Called once a second with refreshGoals(), and
+   * when the server's answer changes. A goal once listed stays for its day, owned or not: it is in the save.
+   * @returns whether a goal was added
+   */
+  extraGoal() {
+    const list = this.goals.daily;
+    if (!this.founded || !(this.goals.day > 0) || !(this.mods.dailyGoals > 0) || list.length >= this.dailyCount()) return false;
+    const have = new Set(list.map(g => g.kind)), pool = this.possibleKinds('daily').filter(k => !have.has(k.id));
+    if (!pool.length) return false;
+    const kind = pool[Math.floor(rand(this.goals.day * 5 + list.length) * pool.length)], ref = this.goalRef();
+    const target = kind.id === 'income' ? Math.round(ref * GOALS.daily.earnSeconds) : kind.daily;
+    list.push({ kind: kind.id, target, base: this.counter(kind.id), cash: Math.round(ref * GOALS.daily.paySeconds), xp: GOALS.daily.xp, claimed: false, told: false });
+    return true;
+  }
+  /**
+   * "New goals" of the credits store: today's unfinished daily goals are exchanged for kinds that are not on today's
+   * list, as far as there are such kinds, the goal furthest from done first. A goal that is done or collected stays as
+   * it is, so nothing is collected twice and no finished work is thrown away; a new goal starts at nothing and pays
+   * what the old one paid. The day's free swap is not used up.
+   * @param dry  true: only say how many would be drawn
+   * @returns how many goals were drawn again, 0 when nothing could be
+   */
+  redrawGoals(dry = false) {
+    const { goals: drawn, pool } = this.goalsToRedraw();
+    if (dry) return drawn.length;
+    for (const old of drawn) {
+      const kind = pool.splice(Math.floor(rand(this.goals.day * 13 + old.index) * pool.length), 1)[0];
+      const target = kind.id === 'income' ? Math.round(this.goalRef() * GOALS.daily.earnSeconds) : kind.daily;
+      this.goals.daily[old.index] = { kind: kind.id, target, base: this.counter(kind.id), cash: old.cash, xp: old.xp, claimed: false, told: false };
+    }
+    return drawn.length;
+  }
+  /**
+   * What redrawGoals() would exchange now, without changing anything: the unfinished daily goals furthest from done
+   * first (as goalList() gives them, with their progress in `value`), as many as there are kinds not on today's list;
+   * `open` is how many are unfinished, `pool` the kinds they would be drawn from.
+   */
+  goalsToRedraw() {
+    if (!this.founded || !(this.goals.day > 0)) return { goals: [], open: 0, pool: [] };
+    const open = this.goalList('daily').filter(g => !g.claimed && !g.done).sort((a, b) => a.value / Math.max(a.target, 1) - b.value / Math.max(b.target, 1) || a.index - b.index);
+    const have = new Set(this.goals.daily.map(g => g.kind)), pool = this.possibleKinds('daily').filter(k => !have.has(k.id));
+    return { goals: open.slice(0, Math.min(open.length, pool.length)), open: open.length, pool };
   }
   /**
    * Exchange one daily goal for another kind the company can finish, once a day. The new goal starts at
@@ -1003,8 +1196,80 @@ export class Company {
     const count = !s.day ? 1 : missed > 0 ? Math.max(1, s.count - missed) : Math.min(STREAK.cap, s.count + 1);
     return { count, claimed: false, bonus: share(count), paid: 0, best: s.best, missed };
   }
-  /** The event running today, or null. */
+  /** The event running today by the calendar, or null. */
   eventNow() { return (this.founded && EVENTS.find(e => e.id === this.goals.eventId)) || null; }
+  /** The events an Event ticket of the credits store started and that still run, by the wall clock: [{ event, until }]. In the save each is a boost under the event's name. */
+  ticketEvents() {
+    const now = this.wall();
+    return this.store.boosts.filter(b => b.until > now).map(b => ({ event: EVENTS.find(e => 'event' + e.id === b.stat), until: b.until })).filter(t => t.event);
+  }
+  /** Every event that runs now: today's, and those a ticket started. An event counts once, however it came to run. */
+  eventsNow() {
+    const today = this.eventNow(), out = today ? [today] : [];
+    if (this.founded) for (const t of this.ticketEvents()) if (!out.includes(t.event)) out.push(t.event);
+    return out;
+  }
+  /** The name of the event a boost of the store stands for, or null: for the chips beside the cash (js/sim/store.js, boostChips). */
+  boostName(stat) { return EVENTS.find(e => 'event' + e.id === stat)?.name || null; }
+  /**
+   * What an Event ticket can start, for the store's page: { tickets, hours, events: [{ id, name, desc, running, adds, why }] }.
+   * tickets: how many were bought and wait for a choice; hours: what a ticket runs for, by the wall clock (the hours it
+   * was bought for, in its flag; a ticket written before that was kept, the catalog's). An event counts once, however it
+   * came to run: one that runs already cannot be chosen, and `adds` is the whole hours a ticket would really add now,
+   * its hours less those in which the calendar runs the same event. `why`: why it cannot be chosen now (it would add
+   * less than an hour, or no more boosts can run), or null.
+   */
+  ticketChoices() {
+    const running = this.eventsNow(), flag = this.store.flags.eventTicket, fromCatalog = num(itemDoing(this, 'event_ticket')?.params?.hours);
+    const hours = flag && flag.value > 1 ? num(flag.value) : fromCatalog || num(flag?.value);
+    const full = this.store.boosts.length >= MAX_BOOSTS;
+    return { tickets: flag?.left || 0, hours, events: EVENTS.map(e => {
+      const adds = this.ticketAdds(e, hours), is = running.includes(e);
+      const why = is ? null : full ? `No event can start while ${MAX_BOOSTS} boosts run. Choose one once a boost has ended.`
+        : adds < 1 ? 'The calendar brings it within the ticket\'s hours: a ticket would add less than an hour.' : this.ticketUseless(e);
+      return { id: e.id, name: e.name, desc: e.desc, running: is, adds, why };
+    }) };
+  }
+  /**
+   * Why an event would be worth nothing to this company now, so that a ticket is not spent on it, or null. Truck Day
+   * waives the trucks' fees: without a truck route there is none. Lab Day takes some off research: with every research
+   * done there is nothing left to take it off (measured: tools/credits/measure.mjs --offers).
+   */
+  ticketUseless(event) {
+    if (event.effect?.stat === 'truckFee' && !Object.keys(this.routes).length) return `You have no truck routes yet: ${event.name} would save you nothing.`;
+    if (event.effect?.stat === 'researchCost' && RESEARCH.every(r => this.researchState(r).done)) return `Nothing is left to research: ${event.name} would give you nothing.`;
+    return null;
+  }
+  /**
+   * The whole hours a ticket for `event` would add from now: `hours` by the wall clock, less those in which the calendar
+   * runs the same event. The calendar's day is the one the goals were drawn for, and every next day starts at the
+   * player's midnight.
+   */
+  ticketAdds(event, hours) {
+    const now = this.wall(), end = now + hours * 3600000;
+    if (!Number.isFinite(end) || !(hours > 0)) return 0;
+    let day = this.goals.day || Math.floor((now - new Date(now).getTimezoneOffset() * 60000) / 86400000), at = now, own = 0;
+    for (let i = 0; at < end && i < 400; i++, day++) {
+      const midnight = new Date(at).setHours(24, 0, 0, 0), to = Math.min(midnight, end);
+      if (event.days.includes((day + 4) % 7)) own += to - at;   // day 0 was a Thursday
+      at = to;
+    }
+    return Math.floor((end - now - own) / 3600000);
+  }
+  /**
+   * Use a waiting Event ticket: the event `id` runs from now for the ticket's hours, by the wall clock, beside today's
+   * own event. The ticket is used only when the event starts. @returns {{ event, until, adds, hours }} (adds: the hours it
+   * adds to what the calendar runs) or null (no ticket waits, no company yet, no such event, it runs already, or it cannot
+   * be chosen now: ticketChoices() says why)
+   */
+  useTicket(id) {
+    const event = EVENTS.find(e => e.id === id), c = this.ticketChoices(), until = this.wall() + c.hours * 3600000, choice = c.events.find(e => e.id === id);
+    if (!event || !this.founded || !(c.tickets > 0) || !(c.hours > 0) || !choice || choice.running || choice.why) return null;
+    if (!startEvent(this, event.id, until)) return null;
+    useFlag(this, 'eventTicket');
+    this.applyMods(); this.refreshCosts();
+    return { event, until, adds: choice.adds, hours: c.hours };
+  }
   goalList(period) {
     return this.goals[period].map((g, index) => {
       const value = Math.max(0, Math.min(g.target, this.counter(g.kind) - g.base));
@@ -1012,11 +1277,22 @@ export class Company {
     });
   }
   goalsWaiting() { return PERIODS.reduce((n, p) => n + this.goalList(p).filter(g => g.done && !g.claimed).length, 0); }
+  /**
+   * What of the credits store's offers waits for the player in the Headquarters: { season, tickets }. season: the step
+   * of the season whose gift, or a holder's boost that can start or wait, is there to collect (0: none); tickets: Event
+   * tickets that wait for their choice. The dot on the Headquarters' button and the Overview's list count them.
+   */
+  offersWaiting() {
+    // while the store block is not known (storeUnsure) the season's steps are not collected (js/game/store.js, collectSeason)
+    const s = this.storeUnsure ? null : seasonState(this), boost = !!s && s.rewards > 0 && !!s.next && !s.stuck;
+    return { season: s && s.gifts > 0 ? s.free + 1 : boost ? s.held + 1 : 0, tickets: this.store.flags.eventTicket?.left || 0 };
+  }
   /** Collect a finished goal. @returns {{ cash, xp, bonus }} or null */
   claimGoal(period, index) {
     const g = this.goalList(period)[index];
     if (!g || !g.done || g.claimed) return null;
     this.goals[period][index].claimed = true;
+    seasonPoints(this, period);   // the season of the credits store: a goal collected is points, for every player
     const out = { cash: g.cash, xp: g.xp, bonus: false };
     if (period === 'daily') {   // the first daily goal of the day counts the day for the streak, and carries its bonus
       const s = this.streakInfo();
@@ -1025,7 +1301,7 @@ export class Company {
         out.streak = s.count; out.streakCash = Math.floor(g.cash * s.bonus); out.cash += out.streakCash;
       }
     }
-    if (period === 'daily' && !this.goals.bonus && this.goals.daily.every(x => x.claimed)) {
+    if (period === 'daily' && !this.goals.bonus && this.goals.daily.filter(x => x.claimed).length >= this.bonusNeeds()) {
       this.goals.bonus = true; this.stats.dailySets++;
       out.cash += this.goals.bonusCash; out.xp += GOALS.daily.bonusXp; out.bonus = true;
     }
@@ -1069,6 +1345,8 @@ export class Company {
   offlineTerms() {
     const t = { costs: this.costRate(), cap: this.awayLeft() };
     if (this.mods.offlineShare) t.share = this.mods.offlineShare;
+    // The Accountant of the credits store: the share the absence is paid at is higher by its factor. Without one the terms are exactly what they were.
+    if (this.mods.awayPay > 1) t.share = (t.share || OFFLINE_EFFICIENCY) * this.mods.awayPay;
     return t;
   }
   /** Time away is paid up to a daily allowance: 4 hours, 6 with Night shift. Seconds of it left today. */
@@ -1083,23 +1361,65 @@ export class Company {
   builtYards() { return this.areas.filter(a => this.econ.areaOpen(a.id) && a.upgrades.every(u => this.econ.has(u.id))).length; }
   /** How many of the yards `ids` are open with every upgrade bought. */
   built(ids) { return this.areas.filter(a => ids.includes(a.id) && this.econ.areaOpen(a.id) && a.upgrades.every(u => this.econ.has(u.id))).length; }
+  /**
+   * The gate "Open the next yard" of the credits store pays: the one out of the newest open yard.
+   * { id, yard, from, next, name, cost, due }: the gate's upgrade id, the yard it stands in and that yard's name, the
+   * yard behind it and its name, what the gate still costs (a part may be paid), and whether the gate is that yard's
+   * next purchase. The game offers a gate only once everything else in its yard is bought, and so does the store: a
+   * yard is never opened past one that is not built. null when every yard is open.
+   */
+  nextGate() {
+    const a = this.areas.find(x => x.gate && this.econ.areaOpen(x.id) && !this.econ.areaOpen(x.gate.next)), id = a ? 'gate:' + a.id : '';
+    const behind = a && this.areas.find(x => x.id === a.gate.next);
+    if (!a || !behind || !this.econ.get(id)) return null;
+    return { id, yard: a.id, from: a.name, next: behind.id, name: behind.name, cost: Math.max(0, this.econ.remaining(id)), due: this.econ.nextUpgrade(a.id)?.id === id };
+  }
   /** Fully built yards a sale needs: more with every company sold, up to every yard there is. */
   minYards() { return Math.min(this.areas.length, PRESTIGE.minYards + PRESTIGE.minYardsPerSale * this.legacy.sales); }
-  /** What a sale would pay right now. */
+  /** What a sale would pay right now. A Star bonus of the credits store that waits is in `stars`: it is used by the sale it raises, and by no other. */
   sellOffer() {
-    const yards = this.builtYards(), min = this.minYards();
-    return { yards, stars: PRESTIGE.stars(yards), allowed: this.founded && yards >= min, min };
+    const yards = this.builtYards(), min = this.minYards(), plain = PRESTIGE.stars(yards);
+    return { yards, stars: Math.max(plain, Math.floor(plain * flagValue(this, 'starBonus'))), allowed: this.founded && yards >= min, min };
+  }
+  /**
+   * The sale's offer with what the credits store changes about it, for the sale's card and the store's page: `plain` is
+   * what the yards alone pay (`stars` is more when a Star bonus waits), and `keeps` is how many upgrades of the first
+   * yard the Family yard would keep: 0 when it is not owned, or the server has not said so in this visit.
+   */
+  sellTerms() {
+    const offer = this.sellOffer();
+    const keeps = this.mods.familyYard > 0 ? this.areas[0].upgrades.filter(u => this.econ.has(u.id)).length : 0;
+    return { ...offer, plain: PRESTIGE.stars(offer.yards), keeps };
+  }
+  /**
+   * What a sale does to the piggy bank of the credits store, for the sale's card: { bank, after }, what it holds now
+   * and what it will hold after the sale. A bank holds hours of the income the company is built for, and a new
+   * company is built for the first yard's, whatever is kept of that yard (goalRef). While a purchase waits for a full
+   * bank (js/sim/store.js, bankDue) also `waits: true`, `full`: where the bank opens for it now, and `small`: where a
+   * new company's bank does (a bank cut to that size by the sale is full, and opens at once).
+   */
+  bankTerms() {
+    const bank = bankNow(this), hours = num(itemDoing(this, 'piggy')?.params?.hours), small = Math.floor(FINANCE.baseIncome * 3600 * hours);
+    const waits = !!this.store.flags.bankFull && hours > 0;
+    return { bank, after: Math.min(bank, small), ...(waits ? { waits, full: bankCap(this), small } : {}) };
   }
   /**
    * Sell the company and found a new one. Yards, cash, routes, warehouse and contracts start over;
-   * stars, rank, milestones, achievements, research, managers and reputation stay.
+   * stars, rank, milestones, achievements, research, managers and reputation stay. Of the credits store's block the
+   * season and the card stay as they are (they are the player's month, not a company's), and the piggy bank keeps
+   * what a new company's bank can hold.
+   * With the Family yard of the credits store, what was bought in the first yard stays bought: its workers, its
+   * machines and their speed, the backpack and the better price, each with what was paid for it. The gate out of
+   * it is not kept: every other yard starts over.
    * The caller saves and rebuilds the world. @returns the offer that was paid, or null
    */
   sell() {
-    const offer = this.sellOffer();
+    const offer = this.sellOffer(), terms = this.sellTerms();
     if (!offer.allowed) return null;
-    const e = this.econ;
+    if (terms.stars > terms.plain) useFlag(this, 'starBonus');   // the Star bonus is used by the sale it raised
+    const e = this.econ, kept = terms.keeps ? this.areas[0].upgrades.filter(u => e.has(u.id)).map(u => [u.id, e.paid[u.id]]) : [];
     e.cash = 0; e.unlocked = {}; e.paid = {}; e.areas = [this.areas[0].id]; e.workerRate = 0;
+    for (const [id, paid] of kept) { e.unlocked[id] = true; if (paid > 0) e.paid[id] = paid; }
     this.routes = {}; this.stock = {}; this.offers = []; this.active = []; this.readyIds.clear(); this.acc = {};
     this.market.hold = {};   // the market itself goes on: its seed and clock stay, and it waits until the Metropolis is open again
     this.books.clear(); this.shopFlow.clear(); this.trips.clear();
@@ -1107,6 +1427,7 @@ export class Company {
     this.legacy.stars += offer.stars; this.legacy.sales++;
     e.scaleCosts(this.costScale());   // the new company is a bigger build
     this.applyMods(); this.refreshCosts(); this.fillOffers();
+    this.store.bank = Math.min(num(this.store.bank), bankCap(this));   // the piggy bank holds hours of the new company's income, and no more
     this.rescaleGoals();   // goals priced for the old company would be unreachable, or a fortune, in the new one
     this.sync(true);       // what the sale itself earned (an achievement) is in the save the caller writes next
     return offer;
@@ -1209,7 +1530,7 @@ export class Company {
     return { goods, seconds };
   }
   /** How many more of `item` the running contracts still take from the shops. */
-  contractsShort(item) { return this.active.length ? Math.min(this.reserved(item), this.capacity) - (this.stock[item] || 0) : 0; }
+  contractsShort(item) { return this.active.length ? Math.min(this.reserved(item), this.room(item)) - (this.stock[item] || 0) : 0; }
   /** A running rush order needs this good: its clock runs, so it is served before the site. */
   rushNeeds(item) { return this.active.some(c => c.limit && c.needs.some(n => n[0] === item)); }
 

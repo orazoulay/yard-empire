@@ -55,20 +55,23 @@ export class Hud {
   /**
    * The unlock card sits just under the top bar, and the line of help and the status line just above the objective
    * card, whatever their heights are on this screen and at this text size (--top-h and --bottom-h in the stylesheet).
+   * The status line stands above the line of help, which wraps and grows upward: by its height (--hint-h).
    */
   watchTopBar() {
-    const bar = $('topbar'), card = $('objective'), root = document.documentElement;
-    let top = '', bottom = '';
+    const bar = $('topbar'), card = $('objective'), hint = $('hint'), root = document.documentElement;
+    let top = '', bottom = '', tall = '';
     const measure = () => {
       const t = Math.ceil(bar.getBoundingClientRect().bottom) + 'px';
       if (t !== top) root.style.setProperty('--top-h', top = t);
+      const h = hint ? hint.getBoundingClientRect().height : 0;   // 0 while hidden: it keeps the height it was shown at
+      if (h > 0 && Math.ceil(h) + 'px' !== tall) root.style.setProperty('--hint-h', tall = Math.ceil(h) + 'px');
       if (!card || typeof innerHeight !== 'number') return;
       const r = card.getBoundingClientRect();
       if (!r.height) return;   // hidden with the rest of the interface: keep where it was
       const b = Math.ceil(innerHeight - r.top) + 'px';
       if (b !== bottom) root.style.setProperty('--bottom-h', bottom = b);
     };
-    if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(measure); ro.observe(bar); if (card) ro.observe(card); }
+    if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(measure); ro.observe(bar); if (card) ro.observe(card); if (hint) ro.observe(hint); }
     addEventListener('resize', measure);   // turning the phone moves the card without always resizing it
     measure();
   }
@@ -109,6 +112,26 @@ export class Hud {
     if (!r) return;
     out.textContent = r.text;
     out.className = r.tone;
+  }
+
+  // --- running boosts ---------------------------------------------------------
+  /**
+   * The boosts of the credits store that are running, as chips under the cash, each with its time left.
+   * @param list  [{ key, label, seconds }] (js/sim/store.js, boostChips); an empty list hides the row
+   */
+  setBoosts(list) {
+    const box = $('boosts'), keys = list.map(b => b.key).join('|');
+    if (!box) return;
+    if (keys !== this.boostKeys) {   // the chips are built again only when what runs changed; the time is written into them every second
+      this.boostKeys = keys;
+      box.hidden = !list.length;
+      box.replaceChildren(...list.map(b => { const chip = el('span', 'boost-chip'); chip.append(el('b', '', b.label), el('span', 'boost-time')); return chip; }));
+    }
+    const times = box.querySelectorAll('.boost-time'), clock = s => {
+      const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = String(s % 60).padStart(2, '0');
+      return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+    };
+    list.forEach((b, i) => { const t = clock(Math.max(0, b.seconds)); if (times[i] && times[i].textContent !== t) times[i].textContent = t; });
   }
 
   // --- area chip ----------------------------------------------------------
