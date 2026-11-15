@@ -1,4 +1,4 @@
-// The credit balance in the top bar, and the store behind it: what credits buy, in sections, what is owned, what can be
+// The credit balance in the top bar, and the store behind it: what credits buy, in tabs (STORE_TABS), what is owned, what can be
 // bought again and how often today, the daily gift and the ways to earn credits, and, for the owner only, giving credits.
 // Drawn with the rows the yard list and the log use, in a sheet like theirs.
 // Everything shown comes from js/credits.js, which has it from the server; every button asks the server. What an item
@@ -16,8 +16,22 @@ import { helperText, itemTitle } from './sim/store.js';
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const KIND_ICON = { helper: 'team', look: 'eye', boost: 'up', skip: 'clock', upgrade: 'upgrade', offer: 'bag' };   // a look changes how things look; the star is for ranks
-/** The store's sections, in their order, and the kinds of item each holds. A section with nothing on sale is not shown. */
-const SECTIONS = [['Boosts', ['boost', 'skip']], ['Upgrades', ['upgrade']], ['Helpers', ['helper']], ['Offers', ['offer']], ['Looks', ['look', 'decor']], ['Services', ['service']]];
+/**
+ * The store's tabs, in their order: what an item does for the player, by its kind. Within a tab, [heading, kinds] groups
+ * (a heading of '' draws none). For you holds the day's deal and what waits for the player; Earn the gift, the tasks and
+ * what credits are. A tab with nothing in it is not shown, but for Earn. A kind not named here goes to Boosts.
+ */
+export const STORE_TABS = [
+  { id: 'foryou', name: 'For you' },
+  { id: 'boosts', name: 'Boosts', groups: [['', ['boost', 'skip', 'service']]] },
+  { id: 'grow', name: 'Grow', groups: [['Upgrades', ['upgrade']], ['Helpers', ['helper']]] },
+  { id: 'offers', name: 'Offers', groups: [['', ['offer']]] },
+  { id: 'looks', name: 'Looks', groups: [['', ['look', 'decor']]] },
+  { id: 'earn', name: 'Earn' },
+];
+const TAB_KEY = 'yard-empire-store-tab';   // the tab open last on this device: a convenience, kept only here
+const remembered = () => { try { return globalThis.localStorage?.getItem(TAB_KEY) || ''; } catch { return ''; } };
+const remember = id => { try { globalThis.localStorage?.setItem(TAB_KEY, id); } catch { /* a private window: the store opens on its usual tab */ } };
 const hex = n => '#' + n.toString(16).padStart(6, '0');
 /**
  * The first button of a look's chooser: the game's own look, though the item is owned. Every look of the store's fifth
@@ -110,7 +124,7 @@ export function storeNote(c) {
 
 /**
  * Bind the pill and the store to the game. @param game  the Game of js/main.js, with its credits, HUD, sound and account
- * @returns {{ open: () => void, render: () => void }}
+ * @returns {{ open: (tab?: string) => void, render: () => void }}
  */
 export function bindStore(game) {
   const c = game.credits, hud = game.hud, pill = $('credits-pill'), value = $('credits-value'), sheet = $('store'), list = $('store-list');
@@ -118,6 +132,7 @@ export function bindStore(game) {
   let confirmPrice = 0;                           // the price the confirmation named: the one sent with the purchase, so nothing dearer is charged
   let asked = 0;                                  // the end of the deal's day the server was last asked again for
   let minute = null, dealTimer = null, aimed = 0; // while the sheet is open: drawn again every minute, and when the deal's time ends
+  let tabNow = '';                                // the tab shown; '' until the first drawing after the store opens chooses one
   if (!pill || !sheet) return { open() {}, render() {} };
 
   const showPill = () => {
@@ -158,6 +173,11 @@ export function bindStore(game) {
   const listed = () => c.items(game.storeKeeps?.() || []);
   /** A waiting Event ticket: its row chooses, and sells no second one. The choice is a flag of the save: it needs no answer of the server. */
   const ticketWaits = it => it.does === 'event_ticket' && !game.storeUnknown && (game.ticketChoices?.().tickets || 0) > 0;
+  // For you: what waits for the player to act on (today's Monthly card to collect, a ticket to choose for, a Season pass's
+  // boost on the Goals tab), and what waits without a tap (a piggy bank purchase waiting for the bank to fill).
+  const waits = it => (it.does === 'card' && it.owned && !!game.cardNow?.()?.ready) || ticketWaits(it) || (it.does === 'season' && it.owned && (game.seasonNow?.()?.rewards || 0) > 0);
+  const kept = it => it.does === 'piggy' && (game.storeKeeps?.() || []).includes(it.id);
+  const tabFor = it => STORE_TABS.find(t => t.groups?.some(g => g[1].includes(it.kind)))?.id || 'boosts';
 
   function itemRow(it) {
     const row = el('div', 'row' + (it.owned ? ' owned' : it.short > 0 ? ' short' : '')), tile = el('span', 'r-icon'), body = el('span', 'r-body'), side = el('span', 'r-side');
@@ -376,32 +396,96 @@ export function bindStore(game) {
     for (const due of game.storeWaiting?.() || []) rows.push(el('div', 'sheet-note small store-held', `${due.name} is kept for later. ${due.why}`));
     const items = listed(), dealItem = items.find(i => i.id === c.deal?.item && i.sale !== false);
     const deal = dealText(c.deal, dealItem, c.now(), dealItem && !dealItem.owned ? whyNot(dealItem, game.storeWorth ? game.storeWorth(dealItem) : null, ticketWaits(dealItem)) : '');
-    if (deal) rows.push(el('div', 'store-deal', deal));
     // The deal's time ended while the store was open: ask again, once, so that the new day's prices are shown. Until the
     // answer, an item whose half price is over shows its usual price (js/credits.js), whatever the network does.
     const ends = c.dealEnds;
     if (ends && c.now() >= ends && asked !== ends) { asked = ends; c.refresh(); }
     aim(ends);
-    for (const [head, kinds] of SECTIONS) {
-      const section = items.filter(i => kinds.includes(i.kind));
-      if (!section.length) continue;
-      rows.push(el('div', 'store-head', head));
-      for (const it of section) rows.push(itemRow(it));
+    // Each tab's rows. For you: the deal's item first, then what waits for the player to act on, in the catalog's order;
+    // each of them also stands in its own tab. Every tab's rows stay on the page, and only the open one is shown.
+    const acting = items.filter(waits), mine = [...(dealItem ? [dealItem] : []), ...items.filter(i => i !== dealItem && (waits(i) || kept(i)))];
+    const panels = { foryou: [...(deal ? [el('div', 'store-deal', deal)] : []), ...mine.map(itemRow)] };
+    for (const t of STORE_TABS) {
+      if (!t.groups) continue;
+      const own = items.filter(i => tabFor(i) === t.id);
+      panels[t.id] = [];
+      for (const [head, of] of t.groups) {
+        const group = own.filter(i => of.includes(i.kind) || (t.id === 'boosts' && head === '' && !STORE_TABS.some(x => x.groups?.some(g => g[1].includes(i.kind)))));
+        if (!group.length) continue;
+        if (head) panels[t.id].push(el('div', 'store-head', head));
+        for (const it of group) panels[t.id].push(itemRow(it));
+      }
     }
     // Without an account there is no email to confirm: that task is for players who have one.
-    const tasks = c.tasks().filter(t => c.status !== 'guest' || t.rule !== 'email_confirmed'), gift = c.daily;
+    const tasks = c.tasks().filter(t => c.status !== 'guest' || t.rule !== 'email_confirmed'), gift = c.daily, earn = [];
     if (tasks.length || gift) {
-      rows.push(el('div', 'store-head', 'Earn credits'));
-      if (gift) rows.push(giftRow(gift));
-      for (const t of tasks) rows.push(taskRow(t));
+      earn.push(el('div', 'store-head', 'Earn credits'));
+      if (gift) earn.push(giftRow(gift));
+      for (const t of tasks) earn.push(taskRow(t));
     }
-    if (c.isOwner) { rows.push(el('div', 'store-head', 'Give credits (owner)')); rows.push(giveForm()); }
-    rows.push(el('div', 'store-head', 'About credits'));
-    for (const p of ABOUT) rows.push(el('div', 'sheet-note small', p));
-    // A pick draws the page again (every row is new): the keyboard stays on the same button of the same row.
+    if (c.isOwner) { earn.push(el('div', 'store-head', 'Give credits (owner)')); earn.push(giveForm()); }
+    earn.push(el('div', 'store-head', 'About credits'));
+    for (const p of ABOUT) earn.push(el('div', 'sheet-note small', p));
+    panels.earn = earn;
+    // The tab to show: the one asked for or shown already, while it has rows; after the store opened, For you when it holds
+    // something, else the tab open last on this device, else Boosts.
+    const has = id => panels[id]?.length > 0, ids = STORE_TABS.map(t => t.id).filter(has);
+    if (!has(tabNow)) tabNow = has('foryou') ? 'foryou' : has(remembered()) ? remembered() : has('boosts') ? 'boosts' : ids[0];
+    const dot = { foryou: acting.length > 0, offers: acting.some(i => i.kind === 'offer') };
+    const bar = el('div', 'store-tabs');
+    bar.setAttribute('role', 'tablist');
+    bar.setAttribute('aria-label', 'Store');
+    for (const id of ids) {
+      const t = STORE_TABS.find(x => x.id === id), on = id === tabNow, b = el('button', 'store-tab' + (on ? ' on' : ''), t.name);
+      b.type = 'button';
+      b.dataset.tab = id;
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.setAttribute('aria-controls', 'store-panel-' + id);
+      b.setAttribute('tabindex', on ? '0' : '-1');
+      if (dot[id]) { const d = el('span', 'store-dot'); d.setAttribute('aria-hidden', 'true'); b.append(d); b.setAttribute('aria-label', `${t.name}, something waits for you`); }
+      b.addEventListener('click', () => show(id));
+      b.addEventListener('keydown', e => {
+        const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key], at = ids.indexOf(id);
+        const to = step ? ids[(at + step + ids.length) % ids.length] : e.key === 'Home' ? ids[0] : e.key === 'End' ? ids[ids.length - 1] : '';
+        if (!to) return;
+        e.preventDefault();
+        show(to);
+      });
+      bar.append(b);
+    }
+    rows.push(bar);
+    for (const id of ids) {
+      const p = el('div', 'store-panel rows');
+      p.setAttribute('id', 'store-panel-' + id);
+      p.dataset.tab = id;
+      p.setAttribute('role', 'tabpanel');
+      p.setAttribute('aria-label', STORE_TABS.find(x => x.id === id).name);
+      p.hidden = id !== tabNow;
+      p.append(...panels[id]);
+      rows.push(p);
+    }
+    // A pick draws the page again (every row is new): the keyboard stays on the same button of the same row, or tab.
     const focused = document.activeElement, pick = focused && list.contains?.(focused) !== false && focused.dataset?.pick;
+    const onTab = focused?.classList?.contains('store-tab') && focused.dataset?.tab;
     list.replaceChildren(...rows);
     if (pick) for (const b of list.querySelectorAll('.store-choice')) if (b.dataset.pick === pick) { b.focus(); break; }
+    if (onTab) list.querySelector('.store-tab.on')?.focus();
+    // The bar is drawn anew each time and starts at its left end: on a narrow phone the open tab may be past the right
+    // edge (Looks, Earn), so the bar is scrolled to show it.
+    const shownBar = list.querySelector('.store-tabs'), onTabNow = shownBar?.querySelector('.store-tab.on');
+    if (onTabNow && typeof onTabNow.offsetLeft === 'number' && shownBar.clientWidth > 0) {
+      const past = onTabNow.offsetLeft + onTabNow.offsetWidth + 8 - shownBar.clientWidth;
+      shownBar.scrollLeft = past > 0 ? past : 0;
+    }
+  }
+
+  /** Show a tab: its rows, and the store opens on it next time on this device. The keyboard goes with it. */
+  function show(id) {
+    tabNow = id;
+    remember(id);
+    render();
+    list.querySelector('.store-tab.on')?.focus();
   }
 
   /**
@@ -417,8 +501,9 @@ export function bindStore(game) {
   }
   function rest() { clearInterval(minute); clearTimeout(dealTimer); minute = dealTimer = null; aimed = 0; }
 
-  function open() {
-    confirm = ''; say('');
+  /** @param tab  the tab to show (STORE_TABS' id), or none: For you when it holds something, else the tab open last. */
+  function open(tab = '') {
+    confirm = ''; say(''); tabNow = tab;
     if (c.status !== 'guest') c.refresh();   // ask again: the connection may be back, and the server's day (the limits, the gift) may have turned
     hud.openSheet(sheet);
     rest();

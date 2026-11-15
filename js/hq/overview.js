@@ -19,7 +19,7 @@ export class HqOverview {
     const offers = c.offersWaiting();
     if (offers.season) todo.push(h('div', { class: 'hq-todo good' }, marked('goals', `Season, step ${offers.season} is ready to collect`), this.button_('Open goals', 'go-season', () => this.go('goals'), { cls: 'primary' })));
     // the ticket is chosen on its own row in the credits store: the button goes there
-    if (offers.tickets) todo.push(h('div', { class: 'hq-todo' }, marked('goals', `An Event ticket waits for its event. Choose it in the credits store`), this.button_('Open store', 'go-ticket', () => { this.close(); this.game.store?.open(); })));
+    if (offers.tickets) todo.push(h('div', { class: 'hq-todo' }, marked('goals', `An Event ticket waits for its event. Choose it in the credits store`), this.button_('Open store', 'go-ticket', () => { this.close(); this.game.store?.open('foryou'); })));
     // Routes into Industrial City that could be running: its factories have no materials of their own.
     const cityRoutes = c.routeDefs.filter(d => !c.routes[d.id] && this.game.econ.areaOpen(d.from) && this.game.econ.areaOpen(d.to) && AREAS.find(a => a.id === d.to).location !== 'town');
     if (cityRoutes.length) todo.push(h('div', { class: 'hq-todo' }, marked('logistics', `Your factories need trucks: ${cityRoutes.length} route${cityRoutes.length === 1 ? '' : 's'} to buy`), this.button_('Logistics', 'go-logistics', () => this.go('logistics'))));
