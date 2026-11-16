@@ -324,6 +324,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     async 'POST credits/claim'({ task }) { return creditsCall({ action: 'claim', task }); },
     async 'POST credits/grant'({ username, amount, note, key }) { return creditsCall({ action: 'grant', username, amount, note, key }); },
     async 'POST credits/gift'({ key }) { return creditsCall({ action: 'gift', key }); },
+    async 'POST credits/exchange'({ key, price }) { return creditsCall({ action: 'exchange', key, price }); },
     /** What the store sells, for a visitor: the catalog's table is open to read (ids and prices of what is on sale). */
     async 'GET credits/offered'() {
       const r = await send('GET', '/rest/v1/credit_items?select=id,price&active=eq.true', undefined, { as: 'visitor' });

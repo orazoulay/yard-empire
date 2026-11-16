@@ -10,7 +10,7 @@
 // An offer the server no longer sells keeps its row while the player has it running or waiting (js/credits.js, items):
 // without a price and without Get, and with what the row does for what was bought before.
 import { icon, emblemIcon } from './icons.js';
-import { fmt } from './format.js';
+import { fmt, money } from './format.js';
 import { helperText, itemTitle } from './sim/store.js';
 
 const $ = id => document.getElementById(id);
@@ -44,7 +44,7 @@ const OWN = {
 };
 const FIRST = ['outfit', 'fence'];   // the looks of the first version: their picks are kept as they always were (js/credits.js, look)
 const ABOUT = [
-  'Credits are a second currency, apart from your money. You earn them with the daily gift and the tasks above, and the game\'s owner can give them.',
+  'Credits are a second currency, apart from your money. You earn them with the daily gift and the tasks above, by trading cash once your company has a trillion, and the game\'s owner can give them.',
   'Some things here change what your company earns: cash, boosts, upgrades and most helpers, marked "Changes earnings". The first time you buy one, your company moves to the boosted ranking for good and leaves the main ranking. Looks, and the helpers without the mark, do not.',
   'Your credits and what you own are kept on the server, with a record of every change. They need an account and a connection; without one, upgrades, helpers, passes and looks rest until the server answers. A boost that is already running keeps running, and what a pass has for you waits.',
   'One item a day is sold at half price: the same for every player, chosen by the server, until its day ends at midnight UTC. The season is a calendar month by the same clock.',
@@ -109,6 +109,12 @@ export function levelLines(it) {
   else out.push({ text: `${it.levels} levels, bought one by one, each at this price.`, off: true });
   if (it.level < it.levels && t.next) out.push({ text: `${it.level > 0 ? 'Next level' : 'Level 1'}: ${t.next}.`, off: true });
   return out;
+}
+
+/** What the trade of cash for credits says under its name: what it costs now, and how the price grows and comes back. */
+export function tradeText(tr) {
+  const rule = 'Each trade costs twice the last one, until midnight UTC, when the price goes back to $1T.';
+  return `${money(tr.price)} of your cash for ${fmt(tr.credits)} credits. ` + (tr.today > 0 ? `You traded ${tr.today === 1 ? 'once' : tr.today + ' times'} today. ` : '') + rule;
 }
 
 /** What the store says at the top, for each state of js/credits.js. */
@@ -353,6 +359,34 @@ export function bindStore(game) {
     return row;
   }
 
+  /**
+   * The trade of cash for credits: what the next one costs and pays, and a button that asks once more before it trades.
+   * The price doubles with each trade of the day; the server says it (js/credits.js, trade) and takes it out of the saved
+   * game (js/game/store.js, storeExchange).
+   */
+  function tradeRow(tr) {
+    const have = game.econ.cash, short = Math.max(0, tr.price - have), row = el('div', 'row'), tile = el('span', 'r-icon'), body = el('span', 'r-body'), side = el('span', 'r-side');
+    tile.append(icon('gem'));
+    body.append(el('span', 'r-title', 'Trade cash for credits'), el('span', 'r-sub', tradeText(tr)));
+    if (short > 0) {
+      body.append(el('span', 'r-needs', `${money(short)} more cash needed`));
+      const bar = el('span', 'r-bar'), fill = el('i'); fill.style.width = Math.round(Math.min(1, have / tr.price) * 100) + '%'; bar.append(fill); body.append(bar);
+    }
+    const reward = el('span', 'r-price'); reward.append(icon('gem', 'gem'), '+' + fmt(tr.credits));
+    const on = confirm === 'trade', b = el('button', 'store-btn' + (on ? ' confirm' : ''), busy === 'trade' ? '…' : on ? 'Confirm' : money(tr.price)); b.type = 'button';
+    b.disabled = !!busy || short > 0;
+    b.setAttribute('aria-label', on ? `Confirm: trade ${money(tr.price)} for ${tr.credits} credits` : `Trade ${money(tr.price)} for ${tr.credits} credits`);
+    b.addEventListener('click', () => {
+      if (confirm !== 'trade') { confirm = 'trade'; confirmPrice = tr.price; say(`Trade ${money(tr.price)} of your cash for ${fmt(tr.credits)} credits? Tap Confirm.`, true); render(); return; }
+      const price = confirmPrice;
+      act('trade', () => game.storeExchange(price), r => hud.unlock({ title: `+${fmt(r.credits || tr.credits)} credits`, desc: `For ${money(r.price || price)} of cash`, kicker: 'Credits', symbol: 'gem' }),
+        'Your earlier trade went through. Nothing more was taken.');
+    });
+    side.append(reward, b);
+    row.append(tile, body, side);
+    return row;
+  }
+
   function giveForm() {
     const form = el('form', 'store-form'), field = (label, input) => { const l = el('label', '', label); l.append(input); return l; };
     const name = el('input'); name.name = 'username'; name.autocomplete = 'off'; name.maxLength = 20; name.placeholder = 'username';
@@ -376,8 +410,13 @@ export function bindStore(game) {
     const rows = [];
     // The item waiting for its Confirm has another price now (the deal ended, the server's prices changed): the
     // confirmation goes, the row is back to Get, and the new price is said. Nothing is bought at a price not shown.
-    const asking = confirm && listed().find(i => i.id === confirm && i.sale !== false);
-    if (confirm && !busy && (!asking || asking.price !== confirmPrice)) {
+    // The trade of cash is not an item: its confirmation goes when the server's next price is another one (a trade on another device, or the day turned).
+    if (confirm === 'trade' && !busy && c.trade?.price !== confirmPrice) {
+      confirm = '';
+      say(c.trade ? `The price changed: the next trade costs ${money(c.trade.price)}.` : 'Trading cash is not offered right now.');
+    }
+    const asking = confirm && confirm !== 'trade' && listed().find(i => i.id === confirm && i.sale !== false);
+    if (confirm && confirm !== 'trade' && !busy && (!asking || asking.price !== confirmPrice)) {
       confirm = '';
       say(asking ? priceText(asking.name, asking.price) : 'This is no longer on offer.');
     }
@@ -417,10 +456,11 @@ export function bindStore(game) {
       }
     }
     // Without an account there is no email to confirm: that task is for players who have one.
-    const tasks = c.tasks().filter(t => c.status !== 'guest' || t.rule !== 'email_confirmed'), gift = c.daily, earn = [];
-    if (tasks.length || gift) {
+    const tasks = c.tasks().filter(t => c.status !== 'guest' || t.rule !== 'email_confirmed'), gift = c.daily, trade = c.trade, earn = [];
+    if (tasks.length || gift || trade) {
       earn.push(el('div', 'store-head', 'Earn credits'));
       if (gift) earn.push(giftRow(gift));
+      if (trade) earn.push(tradeRow(trade));
       for (const t of tasks) earn.push(taskRow(t));
     }
     if (c.isOwner) { earn.push(el('div', 'store-head', 'Give credits (owner)')); earn.push(giveForm()); }

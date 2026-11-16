@@ -53,6 +53,7 @@ export class Credits {
     this.answered = false;      // the store has answered in this visit: a 404 after that is an answer lost, not a backend without credits
     this.onSale = null;         // for a visitor: what the server's catalog sells, id -> price, once it could be asked
     this.giftKey = null;        // the key of a gift request whose answer did not arrive: sent again unchanged
+    this.tradeKey = null;       // the key of a trade of cash whose answer did not arrive: sent again unchanged
     this.status = offered ? (account.user ? 'loading' : 'guest') : 'off';
     this.online = true;         // the last request reached the server
     this.pending = new Map();   // item id -> the key of a purchase whose answer did not arrive: sent again unchanged
@@ -252,6 +253,24 @@ export class Credits {
     const key = this.giftKey || (this.giftKey = this.makeKey());
     return this.after(await this.account.call('POST', 'credits/gift', { key }), () => { this.giftKey = null; });
   }
+  /**
+   * The next trade of cash for credits, { credits, price, today }: what it pays, the cash it costs, and how many were
+   * made today (UTC). null where there is none to speak of: no answer yet, or a server from before the trade.
+   */
+  get trade() { return this.ready ? this.state.exchange : null; }
+  /**
+   * Trade cash for credits. The server takes the price out of the save it keeps (supabase/migrations/20261119000000_exchange.sql),
+   * so the game uploads its save first and takes the same price out of the save in play after (js/game/store.js, storeExchange).
+   * The same key is sent again until an answer arrives, so a retry is never a second trade.
+   * @param price  the cash the page showed: when the day's price is another, nothing happens and the answer says the price now
+   * @returns { ok, credits, price, next, balance, cash, adminRev, again? } or { ok: false, error, code?, price? }
+   */
+  async exchange(price) {
+    if (!this.offered) return { ok: false, error: 'Credits are not offered here.' };
+    if (!this.account.user) return { ok: false, signIn: true };
+    const key = this.tradeKey || (this.tradeKey = this.makeKey());
+    return this.after(await this.account.call('POST', 'credits/exchange', { key, price }), () => { this.tradeKey = null; });
+  }
   /** The owner gives credits. Shown only to an owner; the server decides who is one. */
   async grant(username, amount, note = '') {
     if (!this.offered || !this.account.user) return { ok: false, error: 'Sign in first.' };
@@ -331,5 +350,8 @@ function clean(d) {
     passes: Object.fromEntries(Object.entries(d.passes && typeof d.passes === 'object' && !Array.isArray(d.passes) ? d.passes : {}).filter(([, p]) => p && typeof p === 'object' && int(p.until) > 0)
       .map(([id, p]) => [id, { until: int(p.until), ...(Array.isArray(p.months) ? { months: p.months.filter(m => typeof m === 'string' && /^[0-9]{4}-[0-9]{2}$/.test(m)) } : {}), ...(int(p.since) > 0 ? { since: int(p.since) } : {}) }])),
     now: int(d.now),
+    // the trade of cash for credits (supabase/migrations/20261119000000_exchange.sql); a server from before it sends none
+    exchange: d.exchange && typeof d.exchange === 'object' && int(d.exchange.credits) > 0 && Number.isFinite(d.exchange.price) && d.exchange.price >= 1e12
+      ? { credits: int(d.exchange.credits), price: d.exchange.price, today: int(d.exchange.today) } : null,
   };
 }

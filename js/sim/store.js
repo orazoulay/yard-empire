@@ -51,6 +51,17 @@ export const rank = id => { const [row, place] = String(id).split(':'); return (
 
 // --- the store block of a save ------------------------------------------------------------------------------------
 /** @returns {{ applied: string[], boosts: { stat: string, value: number, until: number }[], flags: Record<string, { left: number, value: number }>, bank: number, pass: any, card: number|null }} */
+/**
+ * A trade of cash for credits the server has made (supabase/migrations/20261119000000_exchange.sql): the price comes out
+ * of the cash and goes into the money spent, as the server did to the save it keeps, so the company's value is the same.
+ * The cash never goes below nothing: the server checked it was there.
+ */
+export function tradeCash(econ, company, price) {
+  if (!(price > 0)) return;
+  econ.cash = Math.max(0, econ.cash - price);
+  company.spent += price;
+}
+
 export function emptyStore() { return { applied: [], boosts: [], flags: {}, bank: 0, pass: null, card: null }; }
 
 /**

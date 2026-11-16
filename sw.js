@@ -6,7 +6,7 @@
 //
 // VERSION and PRECACHE are written by tools/make_precache.py: run it after adding, removing or changing a file
 // (tests/pwa.test.mjs fails when they are out of date). tools/make_site.py runs it on the folder it publishes.
-const VERSION = 'v815704985284';
+const VERSION = 'v863048633182';
 const SHELL = 'lumber-shell-' + VERSION;
 
 const PRECACHE = [

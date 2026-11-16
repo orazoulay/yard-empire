@@ -4,7 +4,8 @@
 // same moment, so that a receipt and the save that remembers it cannot come apart. That happens once a second with the
 // other company chores, and at once when the server's answer changes: the chores rest while a sheet is open (the game
 // is paused under it), and a purchase is made with the store's sheet open.
-import { applyReceipts, markApplied, fillMachines, preview, receiptLine, boostChips, runnerReturn, settleDue, dueList, seasonStep, seasonState, seasonCollect, seasonOwed, cardState, cardCollect, itemDoing, itemTitle, localDay } from '../sim/store.js';
+import { applyReceipts, markApplied, fillMachines, preview, receiptLine, boostChips, runnerReturn, settleDue, dueList, seasonStep, seasonState, seasonCollect, seasonOwed, cardState, cardCollect, itemDoing, itemTitle, localDay, tradeCash } from '../sim/store.js';
+import { money } from '../format.js';
 import { TUNING } from '../data/tuning.js';
 import { today } from './company-chores.js';
 import { EFFECT_ICON } from '../icons.js';
@@ -373,5 +374,27 @@ export class StoreMethods {
       }
     }
     this.store?.render();   // the store's page, if it is open: what an item is worth now, and what is kept for later
+  }
+
+  /**
+   * Trade cash for credits at the price the store's page showed. The server pays only out of the save it keeps, and
+   * takes the price out of that save itself (supabase/migrations/20261119000000_exchange.sql): so the save in play is
+   * uploaded first (the game is paused under the store's sheet, so the cash on screen is the cash uploaded), and once the
+   * server has traded, the same price comes out of the save in play (tradeCash) and the device takes up the server's new
+   * revision, so that its next upload is taken. An answer that is lost leaves nothing done here: the same request is
+   * sent again on the next tap, and a device that uploads first is given the server's copy (js/account.js, push).
+   * @returns what js/credits.js, exchange, answers, or { ok: false, error } when the game could not get that far
+   */
+  async storeExchange(price) {
+    if (!(this.econ.cash >= price)) return { ok: false, error: `Not enough cash: this costs ${money(price)}, and you have ${money(this.econ.cash)}.` };
+    this.save();
+    if (!(await this.account.flush())) return { ok: false, error: 'Your game could not be saved to your account just now, so nothing was traded. Try again.' };
+    const r = await this.credits.exchange(price);
+    if (r.ok && r.price > 0) {
+      tradeCash(this.econ, this.company, r.price);
+      this.account.adopt(r.adminRev);
+      this.save();
+    }
+    return r;
   }
 }

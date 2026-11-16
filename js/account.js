@@ -129,6 +129,7 @@ export class Account {
     this.busy = true;
     const r = await this.call('PUT', 'save', { save, adminRev: this.rev }, { keepalive: leaving });
     this.busy = false;
+    this.pushed = r.ok;
     this.online = r.status !== 0;
     if (this.stopped) return;
     if (r.ok || r.status === 0) announce(r.ok);
@@ -145,6 +146,24 @@ export class Account {
       this.flash(r.data?.banned ? 'This account is suspended.' : 'You were signed out. Sign in again to keep saving to your account.');
       this.leave(() => remove(ID_KEY));
     }
+  }
+
+  /**
+   * Upload the device copy now, after any upload on its way, and say whether the server took it: before a trade of
+   * cash for credits, which the server pays out of the save it keeps (js/game/store.js, storeExchange).
+   */
+  async flush() {
+    if (!this.user || this.stopped) return false;
+    while (this.busy) await new Promise(done => setTimeout(done, 50));
+    this.pushed = false;
+    await this.push();
+    return this.pushed === true && !this.stopped;
+  }
+  /** The server changed the saved game itself and says its new revision: the device's copy already has the change, so its next upload is the right one. */
+  adopt(adminRev) {
+    if (!this.user || !Number.isInteger(adminRev) || adminRev < this.rev) return;
+    this.rev = adminRev;
+    write(revKey(this.user.id), adminRev);
   }
 
   // --- actions from the account sheet: each returns { ok, error? } -------------
