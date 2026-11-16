@@ -288,6 +288,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     },
     async 'PUT save'(body, opts) {
       const r = await asPlayer('POST', '/functions/v1/save', body, opts);
+      if (r.status === 403 && r.data?.banned) return { status: 403, ok: false, data: { error: 'This account is suspended.', banned: true } };
       return r.ok || r.status === 409 || r.status === 0 ? r : fail(r);   // 409 carries the admin's version of the save
     },
     async 'POST account/delete'({ password }) {
