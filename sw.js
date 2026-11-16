@@ -6,7 +6,7 @@
 //
 // VERSION and PRECACHE are written by tools/make_precache.py: run it after adding, removing or changing a file
 // (tests/pwa.test.mjs fails when they are out of date). tools/make_site.py runs it on the folder it publishes.
-const VERSION = 'v863048633182';
+const VERSION = 'v155658393561';
 const SHELL = 'lumber-shell-' + VERSION;
 
 const PRECACHE = [
@@ -61,6 +61,7 @@ const PRECACHE = [
   'js/game/loop.js',
   'js/game/movement.js',
   'js/game/objective.js',
+  'js/game/overview.js',
   'js/game/saving.js',
   'js/game/site.js',
   'js/game/store.js',

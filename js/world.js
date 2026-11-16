@@ -386,8 +386,10 @@ export function createWorld(areaRects, clear = []) {
     camera.lookAt(target.x, 0, target.z - 1.5);
     camera.updateMatrixWorld();   // so labels projected this frame use the new camera, not last frame's
     // Zoomed out, more ground is in sight than the shadows cover: widen them (they get a little softer).
-    // Not for the small zoom of the camera's own moves, or the shadows would shimmer with every step.
-    const half = zoom > 1.12 ? 32 * zoom : 32;
+    // Not for the small zoom of the camera's own moves, or the shadows would shimmer with every step. Not past twice
+    // the usual either: from above (js/game/overview.js) they cover the middle of the picture, and what lies further
+    // is drawn lit, so the shadow pass draws no more than it does at the usual limit's distance.
+    const half = zoom > 1.12 ? 32 * Math.min(zoom, 2) : 32;
     if (Math.abs(half - shadowHalf) > 0.5) {
       shadowHalf = half;
       const cam = sun.shadow.camera;

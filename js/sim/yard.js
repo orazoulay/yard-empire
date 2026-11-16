@@ -236,21 +236,83 @@ export function cameraFrame(aspect, zoom = 1) {
 
 export const ZOOM = { min: 0.62, max: 1.5, normal: 1 };   // 1 = the usual distance, below it closer, above it further
 
-/** The player's own zoom: a wish that is set at once and a value that eases toward it. */
+/**
+ * The player's own zoom: a wish that is set at once and a value that eases toward it. It goes out as far as `max`:
+ * ZOOM.max, or further when the game says so (setMax), to see every open yard from above (fitZoom).
+ */
 export class Zoom {
-  constructor() { this.want = ZOOM.normal; this.value = ZOOM.normal; this.from = ZOOM.normal; }
+  constructor() { this.want = ZOOM.normal; this.value = ZOOM.normal; this.from = ZOOM.normal; this.max = ZOOM.max; }
+  /** How far out the zoom may go now; never nearer than ZOOM.max. A wish past a new, nearer limit comes back to it. */
+  setMax(max) {
+    this.max = Math.max(ZOOM.max, Number.isFinite(max) ? max : ZOOM.max);
+    this.want = Math.min(this.want, this.max); this.from = Math.min(this.from, this.max);
+  }
   /** A mouse wheel or a trackpad: a positive delta moves away. */
-  wheel(delta) { this.want = clamp(this.want * Math.exp(clamp(delta, -240, 240) * 0.0016), ZOOM.min, ZOOM.max); }
+  wheel(delta) { this.want = clamp(this.want * Math.exp(clamp(delta, -240, 240) * 0.0016), ZOOM.min, this.max); }
   /** Two fingers went down: remember where the zoom was. */
   pinchStart() { this.from = this.want; }
   /** @param ratio  how far apart the fingers are now, over how far apart they were at the start */
-  pinch(ratio) { if (ratio > 0) this.want = clamp(this.from / ratio, ZOOM.min, ZOOM.max); }
+  pinch(ratio) { if (ratio > 0) this.want = clamp(this.from / ratio, ZOOM.min, this.max); }
   reset() { this.want = ZOOM.normal; }
   step(dt) {
     this.value += (this.want - this.value) * (1 - Math.exp(-dt * 9));
     if (Math.abs(this.want - this.value) < 0.0005) this.value = this.want;
     return this.value;
   }
+}
+
+// ------------------------------------------------------------------ the view from above
+// Zoomed out past ZOOM.max, the camera leaves the player for the middle of the company, until every open yard and the
+// next one to open are on the screen (js/game/camera.js). Where the camera stands for a zoom is js/world.js,
+// updateCamera: above the point it looks at by 17 * dist and behind it by 11.5 * dist, looking 1.5 past it, with the
+// lens and the distance of cameraFrame. The same is worked out here, without the 3D library, to find the zoom that fits.
+
+/** The part of the map worth seeing from above: every open yard and the first one still locked. { minX, maxX, minZ, maxZ, cx, cz } */
+export function overviewBox(areas, isOpen) {
+  const shown = [];
+  for (const a of areas) { if (isOpen(a.id)) shown.push(a); else { shown.push(a); break; } }
+  const b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+  for (const a of shown.length ? shown : areas.slice(0, 1)) {
+    b.minX = Math.min(b.minX, a.bounds.minX); b.maxX = Math.max(b.maxX, a.bounds.maxX);
+    b.minZ = Math.min(b.minZ, a.bounds.minZ); b.maxZ = Math.max(b.maxZ, a.bounds.maxZ);
+  }
+  return { ...b, cx: (b.minX + b.maxX) / 2, cz: (b.minZ + b.maxZ) / 2 };
+}
+
+/** Where a point of the ground lands on the screen (-1..1 each way, y up) for the camera looking at `focus` at this zoom. */
+export function screenAt(x, z, focus, aspect, zoom) {
+  const { vFov, dist } = cameraFrame(aspect, zoom);
+  const px = focus.x, py = 17 * dist, pz = focus.z + 11.5 * dist;
+  let fx = 0, fy = -py, fz = focus.z - 1.5 - pz;                         // forward, toward the point looked at
+  const fl = Math.hypot(fx, fy, fz); fx /= fl; fy /= fl; fz /= fl;
+  // right = forward x up (0, 1, 0); the camera's up = right x forward
+  let rx = -fz, rz = fx; const rl = Math.hypot(rx, rz); rx /= rl; rz /= rl;
+  const ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
+  const dx = x - px, dy = -py, dz = z - pz;
+  const depth = dx * fx + dy * fy + dz * fz, t = Math.tan((vFov * Math.PI) / 360);
+  return { x: (dx * rx + dz * rz) / (depth * t * aspect), y: (dx * ux + dy * uy + dz * uz) / (depth * t) };
+}
+
+/**
+ * The zoom at which the whole box is on the screen, looked at from its middle, inside `roomX` of the screen's width and
+ * `roomY` of its height (from the middle out: 0.8 leaves a tenth of the height at the top for the top bar and one at the
+ * bottom for the cards). Never less than 1.
+ */
+export function fitZoom(box, aspect, roomX = 0.9, roomY = 0.8) {
+  const focus = { x: box.cx, z: box.cz }, corners = [[box.minX, box.minZ], [box.maxX, box.minZ], [box.minX, box.maxZ], [box.maxX, box.maxZ]];
+  const fits = zoom => corners.every(([x, z]) => { const s = screenAt(x, z, focus, aspect, zoom); return Math.abs(s.x) <= roomX && Math.abs(s.y) <= roomY; });
+  let lo = 1, hi = 2;
+  if (fits(lo)) return lo;
+  while (!fits(hi) && hi < 64) hi *= 2;
+  for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (fits(mid)) hi = mid; else lo = mid; }
+  return hi;
+}
+
+/** How much the camera has left the player for the view from above, 0..1: none up to ZOOM.max, all of it at the zoom that fits. */
+export function overviewBlend(zoom, fit) {
+  if (!(fit > ZOOM.max)) return 0;
+  const t = clamp((zoom - ZOOM.max) / (fit - ZOOM.max), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 // ------------------------------------------------------------------ weather

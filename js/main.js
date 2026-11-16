@@ -55,6 +55,7 @@ import { CompanyChoresMethods, today, SOLD_KEY } from './game/company-chores.js'
 import { SiteMethods } from './game/site.js';
 import { ObjectiveMethods } from './game/objective.js';
 import { SavingMethods } from './game/saving.js';
+import { OverviewMethods } from './game/overview.js';
 import { StoreMethods } from './game/store.js';
 import { LooksMethods } from './game/looks.js';
 import { paintEmblem } from './gfx/emblem.js';
@@ -203,7 +204,7 @@ class Game {
 }
 
 // The Game is the sum of its parts: each file in js/game/ adds its methods, and `this` is the Game in all of them.
-mix(Game, LoopMethods, CameraMethods, GraphicsMethods, MovementMethods, FeedbackMethods, CompanyChoresMethods, SiteMethods, ObjectiveMethods, SavingMethods, LooksMethods, StoreMethods);
+mix(Game, LoopMethods, CameraMethods, OverviewMethods, GraphicsMethods, MovementMethods, FeedbackMethods, CompanyChoresMethods, SiteMethods, ObjectiveMethods, SavingMethods, LooksMethods, StoreMethods);
 
 // Find out who is playing before the game loads their save. Without a server this resolves at once as a guest.
 loading.step(1);   // yard interface: the loading bar follows the real steps: files here, then the save, then the yard

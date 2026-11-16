@@ -2,7 +2,8 @@
 // The player's own zoom: the wheel of a mouse (or two fingers on a trackpad), a pinch on a touch
 // screen, and a double tap, a double click or the Home key to go back to normal.
 // The rules (limits, easing) are in js/sim/yard.js; this file only listens.
-// It multiplies the camera's own distance, so the small zooms the camera makes by itself (closer when
+// How far out it goes is set by the game each frame (setMax): past the usual limit, as far as every open yard fits on
+// the screen (js/game/overview.js). It multiplies the camera's own distance, so the small zooms the camera makes by itself (closer when
 // the player stands, further when they run, the pan over a new yard) go on as before on top of it.
 import { Zoom } from './sim/yard.js';
 
@@ -61,5 +62,7 @@ export class ZoomControl {
   }
   /** Ease toward the wanted zoom; call once a frame. Returns the zoom: 1 = normal, below it closer, above it further. */
   step(dt) { return this.zoom.step(dt); }
+  /** How far out the zoom may go now (js/game/overview.js: every open yard from above). */
+  setMax(max) { this.zoom.setMax(max); }
   get value() { return this.zoom.value; }
 }
