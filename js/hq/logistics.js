@@ -27,8 +27,9 @@ export class HqLogistics {
         free > 0 ? this.button_(`Sell ${free}`, 'sell-' + item, () => this.act('sell', () => c.sellStock(item)), { cls: 'small' }) : null);
     });
     // How long each running order still needs, from what the yards made in the last minute.
+    const shares = c.shares();   // what each order has for itself: goods two orders ask for are counted once
     const waits = c.active.flatMap(x => x.needs.map(([item, qty]) => {
-      const missing = qty - Math.min(c.stock[item] || 0, qty);
+      const missing = qty - (shares.get(x)?.[item] ?? 0);
       if (missing <= 0) return null;
       const yard = c.maker[item], r = c.yardReport(yard), perSec = (r.sales + r.stocked) / Math.max(econ.price(item), 1e-9);
       const text = perSec > 0.001 ? `about ${Math.max(1, Math.ceil(missing / perSec / 60))} min at the current pace` : `nothing is reaching the ${yardName(yard)} shop right now`;

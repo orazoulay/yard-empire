@@ -6,19 +6,25 @@
 // (js/labels.js, far), and the yard still locked says so. The shadows stop widening with the zoom (js/world.js,
 // updateCamera): far out they cover the middle of the picture, and what lies outside is drawn lit, so the shadow pass
 // costs no more from above than at the usual limit.
-import { overviewBox, fitZoom } from '../sim/yard.js';
+import { overviewBox, fitZoom, nameRoom } from '../sim/yard.js';
+
+const NAME_GAP = 6;   // pixels kept free between two yards' names
 
 /** The view from above of the Game. */
 export class OverviewMethods {
   /**
    * The part of the map worth seeing from above and the zoom at which it fits this screen: { box, fit }. Worked out
-   * again only when a yard opens or the screen's shape changes.
+   * again only when a yard opens or the screen's size changes. With it, how wide a yard's name may be before it covers
+   * the next one: the narrowest yard's width on this screen, handed to the stylesheet as --yard-name-room.
    */
   overview(aspect) {
-    const open = this.areas.filter(a => this.econ.areaOpen(a.id)).length, key = open + '|' + aspect.toFixed(3);
+    const open = this.areas.filter(a => this.econ.areaOpen(a.id)).length, key = open + '|' + aspect.toFixed(3) + '|' + innerWidth;
     if (this.overviewKey !== key) {
       const box = overviewBox(this.areas.map(a => a.cfg), id => this.econ.areaOpen(id));
-      this.overviewNow = { box, fit: fitZoom(box, aspect) };
+      const fit = fitZoom(box, aspect), cfgs = this.areas.map(a => a.cfg);
+      this.overviewNow = { box, fit };
+      const room = Math.floor(nameRoom(cfgs, id => this.econ.areaOpen(id), aspect, fit) * innerWidth) - NAME_GAP;
+      document.documentElement.style.setProperty('--yard-name-room', Math.max(40, room) + 'px');
       this.overviewKey = key;
       if (this.labels.far) this.showYardNames();   // a yard opened while the player looks from above
     }

@@ -279,6 +279,23 @@ export function overviewBox(areas, isOpen) {
   return { ...b, cx: (b.minX + b.maxX) / 2, cz: (b.minZ + b.maxZ) / 2 };
 }
 
+/**
+ * The room a yard's name has from above, as a share of the screen's width (0..1): the width of the narrowest yard of
+ * the box, measured across its middle, with the camera over the box at the zoom that fits it. The far row is the
+ * narrowest. A name wider than this covers the name of the yard beside it, so the label wraps to it (css/style.css,
+ * .label.yard-name; js/game/overview.js).
+ */
+export function nameRoom(areas, isOpen, aspect, fit) {
+  const box = overviewBox(areas, isOpen), focus = { x: box.cx, z: box.cz };
+  let room = 1;
+  for (const a of areas) {
+    const b = a.bounds, z = (b.minZ + b.maxZ) / 2;
+    room = Math.min(room, (screenAt(b.maxX, z, focus, aspect, fit).x - screenAt(b.minX, z, focus, aspect, fit).x) / 2);
+    if (!isOpen(a.id)) break;   // the first one still locked is the last one shown
+  }
+  return room;
+}
+
 /** Where a point of the ground lands on the screen (-1..1 each way, y up) for the camera looking at `focus` at this zoom. */
 export function screenAt(x, z, focus, aspect, zoom) {
   const { vFov, dist } = cameraFrame(aspect, zoom);

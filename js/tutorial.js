@@ -10,7 +10,7 @@ const STEPS = [
   // Done when the worker is hired, not at the first dollar paid: a player who has paid half is still being shown the way.
   { symbol: 'team', text: 'Stand on the plot to hire', done: g => g.econ.has(WORKER) },
 ];
-const LAST = STEPS.length - 1;
+const LAST = STEPS.length - 1, SELL = 2;   // SELL: the step "Take the planks and sell them"
 
 /**
  * What the last step says, from the money: sell more while the cash in hand does not cover what is left of the
@@ -76,6 +76,12 @@ export class Tutorial {
   zone(obj) {
     const plot = this.game.areas[0].plot;
     if (plot && this.hire()?.toPlot) return plot;
+    // "Take the planks and sell them", with empty hands and the saw still cutting: the game's own pointer is a worker's
+    // next job (more logs). The arrows wait where the planks come out instead, as the card says.
+    if (this.step === SELL && !this.game.player.carry.type && obj?.item !== 'plank') {
+      const saw = this.game.areas[0].stations.find(st => st.type === 'processor');
+      if (saw && (saw.sim.inputs > 0 || saw.sim.busy || saw.sim.outputs > 0)) return saw.zoneFor('take');
+    }
     return obj?.zone || null;
   }
 }

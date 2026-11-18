@@ -122,7 +122,8 @@ export class LoopMethods {
     const obj = this.objective();
     this.tutorial.update(obj);
     const target = this.tutorial.active ? this.tutorial.zone(obj) : obj?.zone;
-    this.guide.update(dt, target ? this.route(p.pos, this.waypoint(p.pos, target)) : null);
+    const aim = this.guideAim(target, p.pos);
+    this.guide.update(dt, aim ? this.route(p.pos, this.waypoint(p.pos, aim)) : null);
     this.pulse.update(dt, this.tutorial.active ? target : null);
     this.objTimer -= dt;
     if (this.objTimer <= 0) {

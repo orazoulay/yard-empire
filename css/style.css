@@ -85,9 +85,20 @@ button { font-family: inherit; }
 .top-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .top-main, .top-sub { flex: none; display: flex; align-items: center; }
 .top-main { gap: 8px; }
+/* The first row never ends past the screen's edge. The name gives way by itself: its box takes what the money, the
+   credits and the buttons leave, and when that is less than the name is wide, the name wraps onto a second line,
+   which the box does not show. No screen width is named for it: the money may read $5 or $888.72T, the credits 5 or
+   12,345. Past that the money itself is cut short, before a button leaves the screen. */
+.logo-room {
+  flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; align-content: flex-start; overflow: hidden;
+  font-size: clamp(1rem, 4.2vw, 1.3125rem); height: 1.78em; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .4));
+}
+.logo-room::before { content: ""; width: 1px; height: 100%; margin-right: -1px; }
+.top-row > .top-main { flex: 0 1 auto; min-width: 0; }
+.top-main > .icon-btn, .top-main > .pill.credits { flex: none; }
 .top-sub { gap: 6px; }
 #logo, .l-logo { font-weight: 800; line-height: .98; letter-spacing: .05em; }
-#logo { font-size: clamp(1rem, 4.2vw, 1.3125rem); filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .4)); }
+#logo { font-size: 1em; }   /* its size and its shadow are its box's (.logo-room) */
 #logo .top, .l-logo .top { display: block; color: var(--yellow); }
 #logo .bottom, .l-logo .bottom { display: block; color: #fff; font-size: .8em; letter-spacing: .16em; }
 #area-chip { flex: 0 1 auto; min-width: 0; pointer-events: auto; cursor: pointer; color: var(--text); transition: transform .12s; }
@@ -97,11 +108,14 @@ button { font-family: inherit; }
 #area-count { flex: none; }
 #area-chip::after { content: ""; flex: none; margin: 4px 0 0 1px; border: 4px solid transparent; border-top-color: var(--muted); }   /* it opens a list */
 /* The money is the number an idle game is watched for: the biggest text in the bar. */
-#cash { font-size: clamp(1.25rem, 5.4vw, 1.5rem); }
-#cash .bill { width: 30px; height: 19px; flex: none; }
-.cash-col { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-#cash-value { min-width: 2ch; text-align: right; font-variant-numeric: tabular-nums; }
-#cash-rate { font-size: .75rem; font-weight: 600; letter-spacing: 0; color: var(--muted); white-space: nowrap; }
+/* When the row is too narrow for it, the pill gives up the bill's picture before a digit: the picture is the last in
+   its line (drawn on the left: the line runs from the right), so it is what wraps away, onto a line the pill does not show. */
+#cash { font-size: clamp(1.25rem, 5.4vw, 1.5rem); min-width: 0; flex-direction: row-reverse; flex-wrap: wrap; align-content: flex-start; overflow: hidden; }
+#cash .bill { width: 30px; height: 19px; flex: none; order: 1; }
+.cash-col { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 3px; min-width: 0; height: 100%; }
+#cash-value, #cash-rate { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#cash-value { min-width: 2ch; text-align: right; font-variant-numeric: tabular-nums; line-height: 1.1; }
+#cash-rate { font-size: .75rem; font-weight: 600; letter-spacing: 0; color: var(--muted); }
 #cash-rate.up { color: var(--green); }   /* gains in green, losses in red, as everywhere */
 #cash-rate.down { color: var(--red); }
 #cash-rate[hidden] { display: none; }
@@ -261,10 +275,13 @@ html.bare #hud, html.bare #labels { visibility: hidden; }
 .s-counts { font-size: .75rem; font-weight: 600; letter-spacing: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 .label.machine { font-size: .78125rem; letter-spacing: .04em; color: var(--yellow); }
 /* the view from above: each yard's name over it (js/game/overview.js); the one still locked is quieter */
-/* a yard is about a fifth of a phone's width from above: a long name wraps onto two lines instead of covering the next one */
+/* a name is no wider than the narrowest yard is on this screen (--yard-name-room, js/game/overview.js): a name of two words wraps onto two lines instead of covering the next one, and the box is never narrower than its longest word */
+/* where the yards are narrow on the screen (many yards on a phone) the letters and the box's sides get smaller with the room, so that a name of one
+   long word ("Carpentry") fits its yard too: about five ninths of a letter's height for each of nine letters, and the sides */
 .label.yard-name {
-  font-size: clamp(.75rem, 2.4vw, .9375rem); letter-spacing: 0; line-height: 1.15; padding: 3px 6px; border-radius: 8px; text-shadow: none;
-  white-space: normal; max-width: min(22vw, 180px); width: max-content;
+  font-size: min(clamp(.75rem, 2.4vw, .9375rem), max(.5625rem, calc((var(--yard-name-room, 16vw) - 10px) / 5)));
+  letter-spacing: 0; line-height: 1.15; padding: 3px clamp(3px, calc(var(--yard-name-room, 16vw) / 14), 6px); border-radius: 8px; text-shadow: none;
+  white-space: normal; max-width: min(var(--yard-name-room, 16vw), 180px); min-width: min-content; width: max-content;
   background: var(--glass); border: 1px solid var(--glass-border);
 }
 .label.yard-name.locked { color: var(--muted); font-weight: 600; }
@@ -365,6 +382,7 @@ html.calm .label.plot .ring { transition: none; transform: none; }
   animation: fade .18s;
 }
 .sheet-backdrop[hidden] { display: none; }
+#elsewhere { z-index: 24; }   /* "played on another device" is asked over whatever sheet is open: nothing is saved to the account until it is answered */
 @keyframes fade { from { opacity: 0; } }
 .sheet { width: min(340px, calc(100vw - 32px)); padding: 18px; display: flex; flex-direction: column; gap: 8px; animation: sheet .18s ease-out; }
 @keyframes sheet { from { transform: translateY(10px); opacity: 0; } }
@@ -611,6 +629,8 @@ html.calm .icon-btn, html.calm .sheet-btn, html.calm #area-chip, html.calm .o-ic
 .sheet-btn.account { display: flex; align-items: center; justify-content: center; gap: 8px; border-color: rgba(90, 169, 230, .5); }
 .sheet-btn.account.signed-in::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(57, 197, 83, .25); }
 .sheet-btn.link { display: grid; place-items: center; text-decoration: none; }
+/* these two set display themselves, which beat .sheet-btn[hidden] above: "Open admin portal" was shown to every signed-in player */
+.sheet-btn.account[hidden], .sheet-btn.link[hidden] { display: none; }
 .sheet-btn:disabled { opacity: .6; cursor: default; }
 #account { overflow-y: auto; padding: 16px 0; }
 .sheet.account { margin: auto; }

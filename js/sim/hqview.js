@@ -201,3 +201,21 @@ export function sinceText(seconds) {
   if (seconds < 60) return `${Math.floor(seconds / 5) * 5} seconds ago`;
   return `${Math.floor(seconds / 60)} min ago`;
 }
+
+/**
+ * The profit as a share of the income, for the Finance tab: "42% of income". Nothing when nothing came in. When the
+ * costs are many times the income (a company that just started over still pays the minute before), words: a share of
+ * millions of percent is no figure to read.
+ */
+export function profitShare(profit, income) {
+  if (!(income > 0.001)) return '';
+  const pct = Math.round(profit / income * 100);
+  return pct < -999 ? 'costs are far above income' : `${pct}% of income`;
+}
+
+/**
+ * The figures beside a chart's lines, top down, without one that reads the same as the one above it: on a flat
+ * chart the middle line's "$0.5" is written "$1", like the top line's.
+ * @param marks  the values of the lines, top down  @param show  how a value is written
+ */
+export function axisMarks(marks, show) { return marks.filter((v, i) => i === 0 || show(v) !== show(marks[i - 1])); }

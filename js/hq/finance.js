@@ -4,7 +4,7 @@ import { HISTORY, h, s, empty, money, aMinute, amount, figure, ago, rate, kpi, s
 import { AREAS } from '../data/areas.js';
 import { niceMax } from '../sim/series.js';
 import { icon } from '../icons.js';
-import { exactMoney, isShortened, lastSeconds, thin, incomeRows } from '../sim/hqview.js';
+import { exactMoney, isShortened, lastSeconds, thin, incomeRows, profitShare, axisMarks } from '../sim/hqview.js';
 
 export class HqFinance {
   // --- Finance ----------------------------------------------------------------------------
@@ -35,7 +35,7 @@ export class HqFinance {
       h('div', { class: 'fin-kpis' },
         kpi('Income', aMinute(sm.income), '/min', trend(sm.income, before?.income)),
         kpi('Costs', aMinute(sm.costs), '/min', trend(sm.costs, before?.costs)),
-        kpi('Profit', aMinute(sm.profit), '/min', sm.income > 0.001 ? sub(h('span', { text: `${Math.round(sm.profit / sm.income * 100)}% of income` })) : sub(), sm.profit < 0 ? 'down' : 'up'),
+        kpi('Profit', aMinute(sm.profit), '/min', profitShare(sm.profit, sm.income) ? sub(h('span', { text: profitShare(sm.profit, sm.income) })) : sub(), sm.profit < 0 ? 'down' : 'up'),
         kpi('Company value', sm.valuation, '', trend(sm.valuation, before?.value))),
       h('div', { class: 'hq-controls' }, h('span', { class: 'hq-sub', text: 'The charts show the last' }),
         this.choice('range', 'Time the charts show', [[120, '2 min'], [600, '10 min']], this.prefs.range, v => this.setPref('range', v))),
@@ -88,9 +88,9 @@ export class HqFinance {
     const all = rows.flat(), high = niceMax(Math.max(0, ...all) * per) / per, low = Math.min(0, ...all) < 0 ? -niceMax(-Math.min(...all) * per) / per : 0;
     const x = t => L + (t - first.t) / span * (W - L - R), y = v => H - B - (Math.max(low, Math.min(high, v)) - low) / (high - low) * (H - B - T);
     const fix = n => Math.round(n * 10) / 10;
-    const marks = low < 0 ? [high, 0, low] : [high, high / 2, 0];
+    const lines = low < 0 ? [high, 0, low] : [high, high / 2, 0], marks = axisMarks(lines, show);   // every line is drawn; a figure is written once
     const svg = s('svg', { class: 'fin-svg', viewBox: `0 0 ${W} ${H}`, width: W, height: H },
-      marks.map(v => s('line', { class: 'fin-grid' + (v === 0 ? ' base' : ''), x1: L, x2: W - R, y1: fix(y(v)), y2: fix(y(v)) })),
+      lines.map(v => s('line', { class: 'fin-grid' + (v === 0 ? ' base' : ''), x1: L, x2: W - R, y1: fix(y(v)), y2: fix(y(v)) })),
       marks.map(v => s('text', { class: 'fin-axis', x: L - 8, y: fix(y(v) + 4), 'text-anchor': 'end', text: show(v) }, isShortened(v * per) ? s('title', { text: full(v) }) : null)),
       s('text', { class: 'fin-axis', x: L, y: H - 7, text: ago(span) }),
       s('text', { class: 'fin-axis', x: W - R, y: H - 7, 'text-anchor': 'end', text: 'now' }),

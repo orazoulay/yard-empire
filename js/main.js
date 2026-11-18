@@ -170,6 +170,7 @@ class Game {
         location.reload();
       },
       onReplayTutorial: () => this.tutorial.restart(),
+      onRestore: save => this.restore(save),   // a backup file opened from the settings: as from the Headquarters' Records tab
       onOpen: () => { this.settingsOpen = true; this.sfx.click(); },
       onClose: () => { this.settingsOpen = false; },
       onToggle: name => { this.sfx.unlock(); this.sfx.click(); this.settings.buzz(15); if (name === 'graphics') this.applyGraphics(); },

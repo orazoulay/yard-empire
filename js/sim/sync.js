@@ -17,10 +17,13 @@ export const blankSave = now => ({ v: 3, cash: 0, unlocked: {}, paid: {}, areas:
  * - An admin change (serverRev ahead of the device) always wins, including a reset to nothing.
  * - Otherwise the copy played most recently wins, so offline play is uploaded rather than lost.
  * - An account with no progress anywhere takes over the guest game on this device.
+ * - A device that was told the company is played on another one (`yielded`: the server refused its upload, see
+ *   js/account.js) takes the server's copy, however lately it stamped its own: it stood open, it was not played.
  * @returns {{ from: 'server'|'local'|'guest'|'none', save: object|null }}
  */
-export function pickSave({ local = null, localRev = 0, server = null, serverRev = 0, guest = null }) {
+export function pickSave({ local = null, localRev = 0, server = null, serverRev = 0, guest = null, yielded = false }) {
   if (serverRev > localRev) return { from: 'server', save: server };
+  if (yielded && server) return { from: 'server', save: server };
   if (!local && !server) return guest ? { from: 'guest', save: guest } : { from: 'none', save: null };
   if (!local) return { from: 'server', save: server };
   if (!server) return { from: 'local', save: local };

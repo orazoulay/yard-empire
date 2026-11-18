@@ -196,6 +196,7 @@ export class Company {
     this.flow = { income: meter(), costs: meter(), transport: meter() };
     this.trips = new Map();                        // route id -> items per second
     this.shopFlow = new Map();                     // item -> items per second reaching the shops
+    this.settling = s ? CONTRACTS.staleSeconds : 0;   // play seconds a loaded game still waits with new offers, while nothing is measured (orderable)
     this.acc = {};                                 // route id -> part of the next item
     this.events = [];                              // for the game to celebrate: founded, milestone, rank, ready
     this.readyIds = new Set();
@@ -468,6 +469,7 @@ export class Company {
     for (const m of this.trips.values()) m.tick(t);
     for (const m of this.shopFlow.values()) m.tick(t);
     this.refreshIn = Math.max(0, this.refreshIn - t);
+    this.settling = Math.max(0, this.settling - t);
     this.staleIn -= t;
     if (this.staleIn <= 0) { this.staleIn = CONTRACTS.staleSeconds; this.pruneOffers(); }
     this.refreshCosts();
@@ -570,6 +572,23 @@ export class Company {
     }
     return false;
   }
+  /**
+   * What of the warehouse each running contract has for itself: for its card and for what is still missing. Two orders
+   * for the same good never count the same goods. As ready() has it, an order that can go takes its goods whole, in
+   * the order of fillOrder; the others then share what is left, in that order too.
+   * @returns {Map<object, Record<string, number>>}  contract -> item -> how many it has, never more than it asks for
+   */
+  shares() {
+    const left = { ...this.stock }, out = new Map(), order = this.fillOrder();
+    const take = c => {
+      const mine = {};
+      for (const [item, qty] of c.needs) { const n = Math.min(left[item] || 0, qty); mine[item] = n; left[item] = (left[item] || 0) - n; }
+      out.set(c, mine);
+    };
+    for (const c of order) if (c.needs.every(([item, qty]) => (left[item] || 0) >= qty)) take(c);
+    for (const c of order) if (!out.has(c)) take(c);
+    return out;
+  }
   /** Goods the player can make and sell now, oldest yard first. */
   producible() {
     const staff = this.staff(), out = [];
@@ -588,6 +607,11 @@ export class Company {
   orderable() {
     const all = this.producible(), small = this.capacity * CONTRACTS.kinds[0].size;
     const quick = all.filter(item => this.shopRate(item) * CONTRACTS.fillSeconds >= small);
+    // A game that was just loaded has measured nothing yet: an offer made now would ask for the newest goods, which may
+    // never reach a shop (robots, engines). It waits until a good is seen arriving fast enough, or until the wait is
+    // over (settling). Which goods are asked for is otherwise as it was: it decides what a company can earn, and the
+    // leaderboard's bound is set by that (tests/metropolis.test.mjs).
+    if (!quick.length && this.settling > 0) return [];
     return (quick.length ? quick : all).slice(-CONTRACTS.recentItems);
   }
   /** Swap out offers for goods that have stopped reaching the shops, as long as other goods still do. */
@@ -1009,7 +1033,8 @@ export class Company {
       const r = this.reward(x), wait = Math.max(...x.needs.map(([item, qty]) => qty / Math.max(this.shopRate(item), 1e-3)));
       return (r.cash - r.value) / wait;
     };
-    const pool = this.offers.filter(o => !o.limit || this.fillTime(o) * RUSH.margin <= o.limit);
+    // An order whose goods are not reaching the shops would hold its place for good: only the player takes such a one.
+    const pool = this.offers.filter(o => this.fillTime(o) <= CONTRACTS.fillSeconds * CONTRACTS.slowTimes && (!o.limit || this.fillTime(o) * RUSH.margin <= o.limit));
     return pool.length ? pool.reduce((a, b) => (worth(b) > worth(a) ? b : a)) : null;
   }
   /** What the Warehouse Manager does by himself: the same deliver and accept the buttons call. */
@@ -1067,15 +1092,27 @@ export class Company {
    * one finished Sawmill, so a company that was just sold (nothing built yet) still gets real goals.
    */
   goalRef() { return Math.max(this.companyRef(), FINANCE.baseIncome); }
-  /** After a sale: every goal not collected yet is offered again at the size of the new company. */
+  /**
+   * After a sale: every goal not collected yet is offered again at the size of the new company. One the new company
+   * cannot finish (goods to truck with the routes gone, research it cannot pay for) becomes a goal of a kind that is
+   * not on the list and that it can finish; for the event, whose goal has one size, an earning goal, as on the day
+   * the event starts for a company that cannot finish it (refreshGoals).
+   */
   rescaleGoals() {
     const ref = this.goalRef();
     for (const period of PERIODS) {
-      this.goals[period] = this.goals[period].map(g => (g.claimed ? g : {
-        ...g, told: false, base: this.counter(g.kind),
-        target: g.kind === 'income' ? Math.round(ref * (period === 'event' ? EVENT_GOAL : GOALS[period]).earnSeconds) : g.target,
-        cash: Math.round(ref * (period === 'event' ? EVENT_GOAL.paySeconds : GOALS[period].paySeconds)),
-      }));
+      const rule = period === 'event' ? EVENT_GOAL : GOALS[period], have = new Set(this.goals[period].map(g => g.kind));
+      this.goals[period] = this.goals[period].map(g => {
+        if (g.claimed) return g;
+        let { kind, target } = g;
+        if (!this.goalPossible(kind, target, rule.earnSeconds)) {
+          const next = GOALS.kinds.find(k => !have.has(k.id) && (k.money || k[period] != null) && this.goalPossible(k.id, k[period], rule.earnSeconds));
+          if (next) { have.delete(kind); have.add(next.id); kind = next.id; target = next[period]; }
+        }
+        // counted from now, in whole units: the save that follows a sale keeps the counters rounded, and a base with a fraction would read as "$0.35 earned" after the reload
+        return { ...g, kind, told: false, base: Math.round(this.counter(kind)),
+          target: kind === 'income' ? Math.round(ref * rule.earnSeconds) : target, cash: Math.round(ref * rule.paySeconds) };
+      });
     }
     this.goals.bonusCash = Math.round(ref * GOALS.daily.bonusSeconds);
   }

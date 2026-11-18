@@ -76,7 +76,8 @@ export const CONTRACTS = {
   repCap: 100,
   recentItems: 4,          // offers ask for goods of the newest yards
   fillSeconds: 300,        // ... and only for goods that reach the shops fast enough to fill a supply order in this time
-  staleSeconds: 30,        // how often offers for goods that stopped reaching the shops are swapped out
+  staleSeconds: 30,        // how often offers for goods that stopped reaching the shops are swapped out; a loaded game waits this long with new offers while nothing is measured
+  slowTimes: 4,            // the Warehouse Manager takes no order that needs more than this many times fillSeconds at the pace its goods reach the shops now
   assumedRate: 0.2,        // items a second assumed to reach the shops while nothing has been measured yet
   tierXp: 0.1,             // experience grows by this share per yard index of the goods
   kinds: [

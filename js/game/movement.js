@@ -56,6 +56,16 @@ export class MovementMethods {
     const sz = { x: prev.x, z: next.z }; if (free(sz)) return sz;
     return prev;
   }
+  /**
+   * Where the arrows end for the zone they lead to: its middle, or, when that lies inside a footprint nobody walks
+   * through (a machine's pads lie on its belt), the spot where a worker stands to use it (standAt). A route skips the
+   * footprint its end is in, so arrows to the middle of a pad ran straight into the machine from behind or beside it.
+   * @param zone  the zone, or null  @param from  where the player stands
+   */
+  guideAim(zone, from) {
+    if (!zone || typeof zone.station?.standAt !== 'function' || !this.blocks().some(r => inRect(zone, r))) return zone;
+    return zone.station.standAt(zone, from);
+  }
   /** The way to walk from a to b, for the arrows and for the workers: straight, or around the machine that stands in between. */
   route(a, b) {
     const loX = Math.min(a.x, b.x), hiX = Math.max(a.x, b.x), loZ = Math.min(a.z, b.z), hiZ = Math.max(a.z, b.z);   // only what lies between the two can be in the way

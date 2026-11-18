@@ -46,6 +46,15 @@ export function awayText(seconds) {
 }
 
 /**
+ * What a backup file holds, in one line under the button that opened it (Settings): what the Headquarters' Records
+ * tab shows as rows. @param s  the summary importSave gives  @param when  the day it was made, as the page writes dates
+ */
+export function backupLine(s, when) {
+  const what = [s.name, s.rank, `${s.yards} ${s.yards === 1 ? 'yard' : 'yards'}`, '$' + fmt(s.cash), s.stars ? `${s.stars} legacy ${s.stars === 1 ? 'star' : 'stars'}` : ''].filter(Boolean).join(', ');
+  return `This backup is whole${when ? ', made on ' + when : ''}: ${what}. Opening it replaces the game you are playing now.`;
+}
+
+/**
  * The terms of the pay for time away, as the lines of the welcome-back sheet.
  * @param {{ away: number, seconds: number, capped: boolean, share: number, afterCosts: boolean, left: number, allowance: number }} o
  *   away: seconds really gone; seconds: how many of them were paid; share: 0 to 1 of the workers' rate;

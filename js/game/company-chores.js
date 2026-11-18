@@ -33,6 +33,7 @@ export class CompanyChoresMethods {
     if (shown !== undefined && shown !== this.familyState()) return false;
     const offer = this.company.sell();
     if (!offer) return false;
+    this.calmRate = { rate: 0, rest: 0 };   // the meter of what the workers bring in belongs to the company that was sold: save() writes it (js/game/saving.js), and it would pay the new one for time away
     this.save(); this.noSave = true;
     try { sessionStorage.setItem(SOLD_KEY, String(offer.stars)); } catch { /* private mode */ }
     location.reload();

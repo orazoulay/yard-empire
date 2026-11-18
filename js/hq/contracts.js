@@ -45,7 +45,8 @@ export class HqContracts {
         h('div', { class: 'hq-story-who' }, h('b', { text: story.who }), h('span', { text: ', ' + story.role + (running ? '' : ' · ' + story.about) })),
         h('p', { class: 'hq-story-text', text: `“${story.text}”` })) : null,
       ...x.needs.map(n => {
-        const have = Math.min(c.stock[n[0]] || 0, n[1]);
+        // a running order shows what it has for itself: two orders for one good do not both count the same goods (Company.shares)
+        const have = running ? c.shares().get(x)?.[n[0]] ?? 0 : Math.min(c.stock[n[0]] || 0, n[1]);
         return h('div', { class: 'hq-need' }, h('span', { text: needText(n) }),
           running ? bar(have / n[1]) : null, running ? h('b', { text: `${have} / ${n[1]}` }) : null);
       }),

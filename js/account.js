@@ -10,12 +10,24 @@ import { GUEST_KEY, saveKey, logKey, pickSave, keepStore, withoutStore } from '.
 const ID_KEY = 'lumber-tycoon-account';        // last signed-in player, so they can start offline
 const revKey = id => `lumber-tycoon-rev:u${id}`;
 const FLASH_KEY = 'lumber-tycoon-flash';       // one message to show after a reload
+const DEVICE_KEY = 'lumber-tycoon-device';     // this browser's own name, made once: the server lets one device at a time write a company
+const elseKey = id => `lumber-tycoon-elsewhere:u${id}`;   // the server said this player's company is played on another device
 const SYNC_EVERY = 20000;
 
 const read = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
 const write = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } };
 const remove = key => { try { localStorage.removeItem(key); } catch { /* private mode */ } };
 const seenRev = id => Number(read(revKey(id))) || 0;
+/** This browser's name for the server: 32 hex digits, kept on the device. A browser that keeps nothing gets a new one each visit. */
+function deviceName() {
+  const kept = read(DEVICE_KEY);
+  if (typeof kept === 'string' && /^[0-9a-f]{16,64}$/.test(kept)) return kept;
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) crypto.getRandomValues(bytes); else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  const name = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+  write(DEVICE_KEY, name);
+  return name;
+}
 
 /** One API call to the Python server this page came from. Never throws: status 0 means no connection (or a timeout). */
 async function serverCall(method, path, body, { timeout = 8000, keepalive = false } = {}) {
@@ -59,6 +71,12 @@ export class Account {
     this.reset = null;        // { email }: the player came by the "new password" link in an email; the form for it opens
     this.pulled = false;      // the server's save was had in this visit, and the device copy was compared with it (pull)
     this.holdStore = () => false;   // true while the game does not know the store block (js/game/store.js): an upload then carries none
+    // One device at a time writes a company. Without this a game left open on one device, where nobody plays, uploaded
+    // its copy every 20 seconds over what was played on another, and the newest stamp won at the next start.
+    this.device = deviceName();
+    this.claim = false;       // the next upload takes the company for this device: set when the server's save was had (pull), or by the player (keepHere)
+    this.elsewhere = false;   // the server refused an upload: the company was opened on another device after this one. Nothing is uploaded until the player chooses.
+    this.onElsewhere = null;  // called when that happens, to ask the player (js/account-ui.js)
   }
 
   get saveKey() { return saveKey(this.user?.id); }
@@ -71,7 +89,7 @@ export class Account {
     const me = await this.call('GET', 'me', null, { timeout: 2500 });
     if (me.status === 0) {                          // offline: carry on as whoever played here last
       this.user = cached; this.supported = !!cached;
-      if (cached) this.rev = seenRev(cached.id);
+      if (cached) { this.rev = seenRev(cached.id); this.elsewhere = !!read(elseKey(cached.id)); }   // the word of an earlier visit stands until the server's save is had
       return this;
     }
     if (me.data?.accounts !== true) return this;    // no account server behind this page
@@ -81,7 +99,7 @@ export class Account {
     if (me.data.banned) this.flash('This account is suspended.');
     else if (me.data.note) this.flash(me.data.note, me.data.noteGood === true);   // the player came back through the link in an email
     else if (cached && !this.user) this.flash('You were signed out. Sign in again to keep saving to your account.');
-    if (this.user) { write(ID_KEY, this.user); await this.pull(); } else remove(ID_KEY);
+    if (this.user) { write(ID_KEY, this.user); await this.pull(); this.elsewhere = !!read(elseKey(this.user.id)); } else remove(ID_KEY);
     return this;
   }
 
@@ -92,13 +110,16 @@ export class Account {
     this.rev = localRev;
     const r = await this.call('GET', 'save');
     if (!r.ok || !r.data) return;                   // keep playing from the device copy (the game then knows it was not pulled)
-    const pick = pickSave({ local: read(saveKey(id)), localRev, server: r.data.save, serverRev: r.data.adminRev, guest: read(GUEST_KEY) });
+    // a device that was told the company is played on another one takes the server's copy: it stood open, it was not played
+    const pick = pickSave({ local: read(saveKey(id)), localRev, server: r.data.save, serverRev: r.data.adminRev, guest: read(GUEST_KEY), yielded: !!read(elseKey(id)) });
     // a device copy from a game that did not know the credits store takes the server's store block (js/sim/sync.js, keepStore)
     if (pick.save) write(saveKey(id), keepStore(pick.save, r.data.save)); else remove(saveKey(id));
     if (pick.from === 'guest') remove(GUEST_KEY);   // the guest game moved into this account; it is not copied to the next one
     this.rev = r.data.adminRev;
     write(revKey(id), this.rev);
     this.pulled = true;
+    remove(elseKey(id));
+    this.claim = true;   // this visit starts from what the server has: the company is this device's from its first upload on
   }
 
   /**
@@ -122,14 +143,16 @@ export class Account {
   }
 
   async push(leaving = false) {
-    if (!this.user || this.stopped) return;
+    if (!this.user || this.stopped || this.elsewhere) return;
     if (this.busy) { this.again = true; return; }
     const kept = read(this.saveKey), save = this.holdStore() ? withoutStore(kept) : kept;   // a block that is not known never replaces the server's
     if (!save) return;
     this.busy = true;
-    const r = await this.call('PUT', 'save', { save, adminRev: this.rev }, { keepalive: leaving });
+    const claim = this.claim;
+    const r = await this.call('PUT', 'save', { save, adminRev: this.rev, device: this.device, ...(claim ? { claim: true } : {}) }, { keepalive: leaving });
     this.busy = false;
     this.pushed = r.ok;
+    if (r.ok && claim) this.claim = false;
     this.online = r.status !== 0;
     if (this.stopped) return;
     if (r.ok || r.status === 0) announce(r.ok);
@@ -137,7 +160,11 @@ export class Account {
     const retry = this.again && r.status === 0;
     this.again = false;
     if (retry) return this.push();
-    if (r.status === 409 && r.data) {               // an admin changed this player's progress: take it over
+    if (r.status === 409 && r.data?.elsewhere) {    // the company was opened on another device after this one: stop, and ask the player
+      this.elsewhere = true;
+      write(elseKey(this.user.id), true);           // a page closed without an answer loads the other device's game next time (pull)
+      this.onElsewhere?.();
+    } else if (r.status === 409 && r.data) {        // an admin changed this player's progress: take it over
       this.leave(() => {
         if (r.data.save) write(this.saveKey, r.data.save); else remove(this.saveKey);
         write(revKey(this.user.id), r.data.adminRev);
@@ -153,11 +180,26 @@ export class Account {
    * cash for credits, which the server pays out of the save it keeps (js/game/store.js, storeExchange).
    */
   async flush() {
-    if (!this.user || this.stopped) return false;
+    if (!this.user || this.stopped || this.elsewhere) return false;
     while (this.busy) await new Promise(done => setTimeout(done, 50));
     this.pushed = false;
     await this.push();
     return this.pushed === true && !this.stopped;
+  }
+  /**
+   * The player's answer to "this company is played on another device": load that game here. A reload, and the page
+   * that loads takes the server's copy (pull) and the company with it.
+   */
+  loadOther() { this.leave(); }
+  /**
+   * The other answer: keep this device's game. The company is taken back with this device's copy, which replaces what
+   * was played on the other one. @returns whether the server took it; without a connection the next upload asks again
+   */
+  async keepHere() {
+    if (!this.user || this.stopped) return false;
+    remove(elseKey(this.user.id));
+    this.elsewhere = false; this.claim = true;
+    return this.flush();
   }
   /** The server changed the saved game itself and says its new revision: the device's copy already has the change, so its next upload is the right one. */
   adopt(adminRev) {
@@ -222,7 +264,7 @@ export class Account {
     if (!r.ok) return { ok: false, error: problem(r) };
     this.flash('Your account was deleted.', true);   // what the player asked for: said as done, not as a problem
     // The copy on this device belonged to the account too: it goes after the game's last save, so that save cannot bring it back.
-    this.leave(() => { remove(ID_KEY); remove(saveKey(id)); remove(logKey(saveKey(id))); remove(revKey(id)); });
+    this.leave(() => { remove(ID_KEY); remove(saveKey(id)); remove(logKey(saveKey(id))); remove(revKey(id)); remove(elseKey(id)); });
     return { ok: true };
   }
 

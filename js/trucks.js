@@ -79,7 +79,10 @@ export class Trucks {
     const game = this.game, end = { x: to.x - STOP.x, z: to.z + STOP.z };
     const pts = [{ x: from.x + STOP.x, z: from.z + STOP.z }];
     const around = (a, b) => game.route(a, b);
-    for (let i = 0; i < 12; i++) {
+    // every gate on the way is two turns (up to it, then through it), and the last turn is the stop itself: a road
+    // through all the gates there are is the longest. A road that is still not there after that has a closed gate on it.
+    const turns = 2 * (game.doors?.length ?? 0) + 2;
+    for (let i = 0; i < turns; i++) {
       const last = pts[pts.length - 1], next = game.waypoint(last, end);
       const way = wayAround(around, last, { x: next.x, z: next.z });
       for (let k = 1; k < way.length; k++) pts.push(way[k]);

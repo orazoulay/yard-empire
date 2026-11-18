@@ -67,6 +67,25 @@ export function bindAccountUi(account, { onOpen } = {}) {
     try { return await work(); } finally { button.disabled = false; button.textContent = before; }
   };
 
+  // The server refused an upload because the company was opened on another device after this one (js/account.js).
+  // Nothing is uploaded from here until the player says which game stays; the game waits meanwhile, as behind the account sheet.
+  const other = $('elsewhere');
+  const askElsewhere = () => {
+    if (!other.hidden) return;
+    if (!sheet.hidden) close();
+    other.hidden = false; account.open = true;
+    $('else-load').focus({ preventScroll: true });
+  };
+  $('else-load').addEventListener('click', () => account.loadOther());
+  $('else-keep').addEventListener('click', e => busy(e.currentTarget, 'Saving…', async () => {
+    const took = await account.keepHere();
+    other.hidden = true; account.open = false;
+    showNotice('account', took ? { text: 'This device\'s game is the one that is saved now.', tone: 'gold', seconds: 6 }
+      : account.online ? { text: 'The save could not be uploaded just now. It will be tried again.', tone: 'muted', seconds: 8 }
+        : { text: 'No connection. This device\'s game will be saved when you are back online.', tone: 'muted', seconds: 8 });
+  }));
+  account.onElsewhere = askElsewhere;
+
   // What the sheet and the Settings button show depends on who is playing.
   const user = account.user;
   entry.hidden = false;
@@ -104,6 +123,10 @@ export function bindAccountUi(account, { onOpen } = {}) {
   $('acc-tab-new').addEventListener('click', () => setMode('new'));
   $('acc-tab-in').addEventListener('click', () => setMode('in'));
 
+  // What the server said about the last try is about what was typed then: it goes when the player types again, and
+  // does not stand under a password that is now a good one.
+  form.addEventListener('input', () => show(error, ''));
+  pwForm.addEventListener('input', () => show(pwError, ''));
   form.addEventListener('submit', async e => {
     e.preventDefault();
     show(error, ''); show(good, '');
@@ -219,6 +242,7 @@ export function bindAccountUi(account, { onOpen } = {}) {
     setMode('new'); open();
     return true;
   };
+  if (account.elsewhere) askElsewhere();   // said in an earlier visit, and the server's save could not be had in this one
   if (account.reset) return { offer };
   if (!user && flash) { setMode('in'); open(flash, false, account.flashGood); }
   else if (user && flash) showNotice('account', { text: flash, tone: 'gold', seconds: 8 });   // signed in by the link in the email
