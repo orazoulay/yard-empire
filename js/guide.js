@@ -10,7 +10,8 @@ export class Guide {
     shape.moveTo(-0.45, -0.25); shape.lineTo(0, 0.2); shape.lineTo(0.45, -0.25);
     shape.lineTo(0.45, -0.5); shape.lineTo(0, -0.05); shape.lineTo(-0.45, -0.5); shape.closePath();
     const geo = new THREE.ShapeGeometry(shape);
-    geo.rotateX(-Math.PI / 2);
+    geo.rotateX(-Math.PI / 2);   // flat on the ground, drawn side up: the point now faces -z
+    geo.rotateY(Math.PI);        // and update() turns +z toward the target, so the point goes to +z: it used to point back at the player
     this.group = new THREE.Group();
     this.meshes = [];
     for (let i = 0; i < COUNT; i++) {

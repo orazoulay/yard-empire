@@ -1219,6 +1219,11 @@ button.hq-btn.armed { border-color: var(--p-gold); color: var(--p-gold-ink); }
 .bar { height: 10px; border: 2px solid var(--ink); border-radius: 99px; background: #fff; }
 .bar .fill { border-radius: 0; }
 .text-btn { font-weight: 800; }
+/* the sign in the round label over a plot (hire a worker, open a gate): in the middle of the circle and in ink. The rule
+   that centres its holder also caught the drawing inside it and pinned it to the corner, and white on the white
+   circle could not be seen */
+.label.plot .ring span.icon { color: var(--ink); }
+.label.plot .ring svg.icon { position: static; }
 /* the first screen is grass green: what is written on it is written in ink, which the grey of a white block is too faint for */
 #loading .l-text, #loading .l-tip, #loading .l-pitch, #loading .text-btn { color: var(--ink); }
 
