@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-IMakL3k+yyH0KWQ4RUAc4AlYeCmgJV2nryHjf2/BaOg='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://mrxszsbwtsnhmfufyjmt.supabase.co; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0e1319">
+  <meta name="theme-color" content="#55c267">
   <meta name="description" content="Saw logs, sell planks, open 20 yards and run the company behind them.">
   <title>Yard Empire</title>
   <!-- install on a phone: manifest for Android and desktop, the apple-* tags for iPhone and iPad -->
@@ -108,7 +108,13 @@
         </section>
         <section class="sheet-group" aria-labelledby="grp-display">
           <h3 id="grp-display" class="group-title">Display</h3>
-          <button id="btn-graphics" class="sheet-btn">Graphics: Auto</button>
+          <!-- The title says the level and steps to the next one when pressed, as it always did; the five buttons under it choose a level at once. -->
+          <div class="sheet-choice">
+            <button id="btn-graphics" class="choice-title">Graphics: Auto</button>
+            <div class="choice-seg" role="group" aria-label="Graphics level">
+              <button id="gfx-auto" aria-pressed="true">Auto</button><button id="gfx-low" aria-pressed="false">Low</button><button id="gfx-balanced" aria-pressed="false">Balanced</button><button id="gfx-high" aria-pressed="false">High</button><button id="gfx-ultra" aria-pressed="false">Ultra</button>
+            </div>
+          </div>
           <button id="btn-motion" class="sheet-btn toggle">Reduce motion: Off</button>
           <button id="btn-text" class="sheet-btn toggle">Larger text: Off</button>
           <button id="btn-fullscreen" class="sheet-btn">Fullscreen</button>

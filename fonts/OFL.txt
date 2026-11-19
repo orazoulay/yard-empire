@@ -1,3 +1,9 @@
+Three typefaces are packed with the game, each under the SIL Open Font License, Version 1.1, copied below:
+
+Inter      Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+Baloo 2    Copyright 2019 The Baloo 2 Project Authors (https://github.com/EkType/Baloo2)
+Nunito     Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
+
 Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.

@@ -5,7 +5,7 @@ import { icon } from './icons.js';
 import { loading } from './loading.js';
 import { Journal, ago, rateText, awayFacts, SHORTCUTS, logTarget, backupLine } from './ui-logic.js';
 import { importSave } from './sim/backup.js';
-import { GRAPHICS_LABEL } from './settings-logic.js';
+import { GRAPHICS, GRAPHICS_LABEL } from './settings-logic.js';
 
 // The icon of a card, by the small heading above its title, when the card does not name one itself.
 const KICKER_ICON = { Unlocked: 'upgrade', 'New area': 'expansion', New: 'hq', Milestone: 'award', Promoted: 'star', Contract: 'contracts',
@@ -281,6 +281,13 @@ export class Hud {
     const gfx = $('btn-graphics');
     renders.push(() => { gfx.textContent = 'Graphics: ' + GRAPHICS_LABEL[settings.graphics]; });
     gfx.addEventListener('click', () => { settings.nextGraphics(); onToggle?.('graphics'); });
+    // the five levels side by side under the title: one press chooses a level, and the one in use is marked
+    for (const level of GRAPHICS) {
+      const b = $('gfx-' + level);
+      if (!b) continue;
+      renders.push(() => b.setAttribute('aria-pressed', String(settings.graphics === level)));
+      b.addEventListener('click', () => { if (settings.graphics !== level) { settings.set('graphics', level); onToggle?.('graphics'); } });
+    }
     const render = () => { for (const r of renders) r(); };
     settings.onChange(render);   // the mute key and the system's motion setting change these from outside the sheet
     render();
