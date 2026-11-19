@@ -88,12 +88,15 @@ export class Headquarters {
     // Reopening shows the tab that was open last, also after a reload. One that is locked now, or gone, gives way to Overview.
     this.tab = tab || startTab(this.tab, TABS.map(t => t.id), id => !!this.company.tabLock(id));
     this.startTour();
+    // The first visit shows the tour on the Overview whatever was asked for: the tab asked for (the trophy button's Ranking, a line of the log) opens when the tour ends.
+    this.afterTour = this.tourAt != null && tab && tab !== this.tab ? tab : null;
     this.isOpen = true; this.el.hidden = false; this.timer = 0; this.holding = false;
     this.game.onHqToggle(true);
     this.render();
     this.restoreScroll();
     this.showTab();
-    if (this.tab === 'ranking') this.loadBoard();
+    // The ranking is asked for when its tab opens, and for a signed-in player when the Overview does: its line says the company's place.
+    if (this.tab === 'ranking' || (this.tab === 'overview' && this.game.account?.user && this.boardStale())) this.loadBoard();
     $('hq-close').focus({ preventScroll: true });
   }
   close() {

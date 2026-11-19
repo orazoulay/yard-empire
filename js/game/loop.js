@@ -142,6 +142,7 @@ export class LoopMethods {
     if (!this.renderer.lost) this.renderer.render(this.scene, this.camera);   // while a phone has taken the graphics away, the rules still run
     this.hud.tick(dt);
     this.hq.tick(dt);
+    this.ranking.sync();
 
     this.debug?.update(dt);
 

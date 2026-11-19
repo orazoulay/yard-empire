@@ -280,10 +280,13 @@ export class Account {
   // --- leaderboard: null means the server could not be reached --------------------
   /**
    * The all-time list, or with 'week' the list of who gained the most company value since Monday 00:00 UTC.
-   * @param board  'boosted' for the ranking of the companies that bought something that changes what they earn; otherwise the main one
+   * @param board  'all' for the one list of everybody who joined (a server that has it says "board": "all" in its answer,
+   *               marks the boosted companies, counts the list and gives the asking player's neighbours; a server from
+   *               before it answers with the main list); 'boosted' for the companies that bought something that changes
+   *               what they earn; otherwise the main list, which leaves those out
    */
   async leaderboard(period, board) {
-    const query = [period === 'week' ? 'period=week' : '', board === 'boosted' ? 'board=boosted' : ''].filter(Boolean).join('&');
+    const query = [period === 'week' ? 'period=week' : '', board === 'boosted' || board === 'all' ? 'board=' + board : ''].filter(Boolean).join('&');
     const r = await this.call('GET', query ? 'leaderboard?' + query : 'leaderboard');
     return r.ok ? r.data : null;
   }

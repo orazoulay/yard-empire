@@ -161,9 +161,13 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     const r = await asPlayer('POST', '/functions/v1/credits', body);
     return r.ok || (r.status >= 400 && r.status < 500 && r.data?.code) || r.status === 0 ? r : fail(r);
   }
-  /** One of the two rankings: the main one, or with `which` 'boosted' the one of the companies that bought something that changes what they earn. */
+  /**
+   * The ranking: with `which` 'all' the one list of everybody who joined (20261119180000_ranking.sql; a database from
+   * before it answers with the main list), with 'boosted' the companies that bought something that changes what they
+   * earn, otherwise the main list, which leaves those out.
+   */
   const board = (period, which) => (session ? asPlayer : (m, p, b) => send(m, p, b, { as: 'visitor' }))('POST', '/rest/v1/rpc/leaderboard',
-    { period: period === 'week' ? 'week' : 'all', ...(which === 'boosted' ? { board: 'boosted' } : {}) });
+    { period: period === 'week' ? 'week' : 'all', ...(which === 'boosted' || which === 'all' ? { board: which } : {}) });
 
   const routes = {
     /** Who is playing. Tells account.js that accounts exist here, and whether the pass on this device is still good. */
@@ -334,6 +338,8 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     async 'GET leaderboard?period=week'() { const r = await board('week'); return r.ok ? r : fail(r); },
     async 'GET leaderboard?board=boosted'() { const r = await board('all', 'boosted'); return r.ok ? r : fail(r); },
     async 'GET leaderboard?period=week&board=boosted'() { const r = await board('week', 'boosted'); return r.ok ? r : fail(r); },
+    async 'GET leaderboard?board=all'() { const r = await board('all', 'all'); return r.ok ? r : fail(r); },
+    async 'GET leaderboard?period=week&board=all'() { const r = await board('week', 'all'); return r.ok ? r : fail(r); },
     async 'POST leaderboard'({ listed }) {
       const r = await asPlayer('POST', '/rest/v1/rpc/set_listed', { p_listed: !!listed });
       if (!r.ok) return fail(r);

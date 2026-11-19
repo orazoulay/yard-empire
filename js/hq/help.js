@@ -38,9 +38,12 @@ export class HqHelp {
     if (c.stats.contracts > 0 || Object.values(c.research).some(v => v > 0)) { this.setPref('toured', true, false); return; }
     this.tourAt = 0; this.tab = 'overview';
   }
+  /** @param go  the tab the tour's last card leads to; without it, the tab that was asked for when the tour took the screen (open(), js/hq.js) */
   endTour(go) {
     this.tourAt = null; this.setPref('toured', true, false);
-    if (go) this.go(go); else this.render();
+    const to = go || this.afterTour;
+    this.afterTour = null;
+    if (to) this.go(to); else this.render();
   }
   tourCard() {
     if (this.tourAt == null) return null;

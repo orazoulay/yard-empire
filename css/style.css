@@ -66,6 +66,17 @@ button { font-family: inherit; }
 .icon-btn.mini::before { content: ""; position: absolute; inset: -8px; }
 .badge { position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); border: 1.5px solid #10151c; }
 .badge[hidden] { display: none; }
+/* The ranking's button: a trophy, and beside it the company's place once the server has said it ("#3"). */
+.icon-btn.mini.rank[hidden] { display: none; }
+.icon-btn.mini.rank .s-icon { display: grid; place-items: center; color: var(--yellow); }
+.icon-btn.mini.rank.placed { width: auto; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px 0 6px; }
+.rank-place { font-size: .75rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.rank-place[hidden] { display: none; }
+/* On the narrowest phones the yard's name needs the room: the trophy alone, the place is in the Headquarters. */
+@media (max-width: 359px) {
+  .icon-btn.mini.rank.placed { width: 28px; display: grid; padding: 0; }
+  .rank-place { display: none; }
+}
 .text-btn {
   pointer-events: auto; background: none; border: 0; color: var(--muted); font-weight: 600; font-size: .8125rem;
   padding: 8px 6px; cursor: pointer;
@@ -382,6 +393,7 @@ html.calm .label.plot .ring { transition: none; transform: none; }
   animation: fade .18s;
 }
 .sheet-backdrop[hidden] { display: none; }
+#rank-invite { z-index: 23; }   /* the invitation to join the ranking: over the yard, under what must be answered */
 #elsewhere { z-index: 24; }   /* "played on another device" is asked over whatever sheet is open: nothing is saved to the account until it is answered */
 @keyframes fade { from { opacity: 0; } }
 .sheet { width: min(340px, calc(100vw - 32px)); padding: 18px; display: flex; flex-direction: column; gap: 8px; animation: sheet .18s ease-out; }
@@ -1093,6 +1105,11 @@ button.hq-btn.armed { border-color: var(--p-gold); color: var(--p-gold); }
 .hq-rank.me { position: sticky; top: 12px; bottom: 0; z-index: 1; }
 .hq-rank.pinned { box-shadow: 0 -10px 16px -6px var(--p-bg); }
 .hq-rank-gap { display: grid; place-items: center; height: 12px; font-size: 18px; color: var(--p-ink3); }
+/* One list for everybody: a boosted company's mark beside its name, and the line that says whom the player is chasing. */
+.hq-rank .hq-goal-text { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.hq-chip.hq-rank-boosted { font-size: .75rem; padding: 1px 7px 1px 5px; color: #b9a7ff; border-color: rgba(143, 107, 255, .4); }
+.hq-row.hq-rank-next b { font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+.hq-todo.hq-rankline { margin-top: 10px; }
 /* a chart's numbers as a table */
 .fin-table { overflow-x: auto; }
 .fin-table table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); font-variant-numeric: tabular-nums; }

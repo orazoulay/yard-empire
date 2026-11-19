@@ -37,6 +37,7 @@ import { Account } from './account.js';
 import { CLOUD } from './config.js';
 import { Credits } from './credits.js';           // credits: the server's answer about this player, kept in memory only
 import { bindStore } from './credits-ui.js';
+import { bindRanking } from './ranking-ui.js';
 import { Pet } from './pets.js';
 import { supabaseTransport } from './cloud.js';
 import { bindAccountUi } from './account-ui.js';
@@ -183,6 +184,7 @@ class Game {
     this.store = bindStore(this);                      // the credit balance in the top bar, and the store behind it
     this.credits.onChange(() => this.applyLooks());
     this.bindStoreRules();                             // the credits store's rules: what is owned folds into the company and the yards (js/game/store.js)
+    this.ranking = bindRanking(this);                  // the trophy button with the company's place, and the invitation to join (js/ranking-ui.js)
     this.watch = new YardWatch(); this.hq.showName();   // more to do: what the Advisor reads, and the company's name in the header
     this.hud.setCash(this.econ.cash, true);
 

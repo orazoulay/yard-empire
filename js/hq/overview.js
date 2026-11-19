@@ -37,6 +37,7 @@ export class HqOverview {
           kpi('Profit', aMinute(s.profit), '/min', null, s.profit < 0 ? 'down' : 'up'),
           kpi('Yards', String(this.game.econ.areas.length), `of ${AREAS.length}`),
           kpi('Employees', String(staff.workers))),
+        this.rankLine(),   // where the company stands among the other players (js/hq/people.js)
         this.button_('Income and costs on Finance', 'go-finance', () => this.go('finance'), { cls: 'quiet small' })),
       section('Next milestones', ...this.milestones(3)),
     ];

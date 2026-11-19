@@ -53,6 +53,7 @@
         <button id="area-chip" class="pill small" aria-haspopup="dialog" aria-label="Go to a yard"><span class="dot"></span><span id="area-name">Sawmill Yard</span><span id="area-count" class="muted">1/2</span></button>
         <div class="top-sub">
           <div id="save-status" class="status" hidden><span id="save-icon" class="s-icon"></span><span id="save-text"></span></div>
+          <button id="rank-btn" class="icon-btn mini rank" aria-label="Ranking" hidden><span id="rank-icon" class="s-icon"></span><span id="rank-place" class="rank-place" hidden></span></button>
           <button id="log-btn" class="icon-btn mini" aria-haspopup="dialog" aria-label="What happened"><span id="log-icon" class="s-icon"></span><span id="log-dot" class="badge" hidden></span></button>
         </div>
       </div>
@@ -239,6 +240,17 @@
       <button id="else-load" class="sheet-btn primary">Load that game here</button>
       <button id="else-keep" class="sheet-btn">Keep this device's game</button>
       <div class="sheet-note small">Keeping this device's game replaces what was played on the other one.</div>
+    </div>
+  </div>
+
+  <!-- Asked once of a signed-in player who is not on the ranking (js/ranking-ui.js). -->
+  <div id="rank-invite" class="sheet-backdrop" hidden>
+    <div class="sheet card" role="dialog" aria-modal="true" aria-labelledby="rank-invite-title" aria-describedby="rank-invite-note">
+      <div class="sheet-title" id="rank-invite-title">Join the ranking?</div>
+      <div class="sheet-note" id="rank-invite-note">See where your company stands among the other players. They see your username and your company's value, and you see theirs.</div>
+      <button id="rank-invite-join" class="sheet-btn primary">Join the ranking</button>
+      <button id="rank-invite-later" class="sheet-btn">Not now</button>
+      <div class="sheet-note small">You can join or leave at any time in the Headquarters, on the Ranking tab.</div>
     </div>
   </div>
 
