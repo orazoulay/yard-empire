@@ -33,6 +33,7 @@ import { View } from './view.js';
 import { RateMeter } from './sim/offline.js';
 import { initPwa } from './pwa.js';
 import { initNative } from './native.js';
+import { updater } from './update.js';            // the Android app's own updater; null in a browser
 import { Account } from './account.js';
 import { CLOUD } from './config.js';
 import { Credits } from './credits.js';           // credits: the server's answer about this player, kept in memory only
@@ -210,6 +211,9 @@ class Game {
 mix(Game, LoopMethods, CameraMethods, OverviewMethods, GraphicsMethods, MovementMethods, FeedbackMethods, CompanyChoresMethods, SiteMethods, ObjectiveMethods, SavingMethods, LooksMethods, StoreMethods);
 
 // Find out who is playing before the game loads their save. Without a server this resolves at once as a guest.
+// In the app: the game's files have all loaded, which is the first thing a new set fetched from the site has to prove.
+// On a start with such a set waiting, the page is replaced by it here, before anything of the game begins.
+await updater?.start();
 loading.step(1);   // yard interface: the loading bar follows the real steps: files here, then the save, then the yard
 const account = await new Account(CLOUD.url ? supabaseTransport(CLOUD) : undefined).boot();   // Supabase when one is configured, else this page's own server
 loading.step(2);

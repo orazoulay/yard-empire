@@ -4,6 +4,8 @@
 // going fullscreen have no meaning here. In a browser this file does nothing.
 import { isNativeApp } from './pwa-detect.js';
 import { APP_LINK, readLink } from './cloud.js';
+import { showNotice } from './notice.js';
+import { updater as appUpdater } from './update.js';
 
 const SEEN_KEY = 'yard-empire-link-seen';   // a mark of the last link taken (never the link itself), so that it is taken once
 
@@ -67,6 +69,25 @@ export function watchLinks(app, deps) {
   try { Promise.resolve(app?.getLaunchUrl?.()).then(r => { takeLink(r?.url, deps); }, () => {}); } catch { /* an app built without the plugin */ }
 }
 
+/**
+ * The app's own updater (js/update.js): the game has started, so new files on trial are kept from here on; and
+ * when a new version has been fetched from the site, the status line offers it, as it does in a browser. A player
+ * who does not press Restart gets the new version at the next start of the app.
+ */
+export function watchUpdates(game, updater = appUpdater, notice = showNotice) {
+  if (!updater) return false;
+  updater.onReady = () => notice('update', {
+    text: 'A new version is ready', action: 'Restart', tone: 'gold', priority: 2,
+    onAction: () => {
+      try { game?.save?.(); } catch { /* restart anyway: the game saves again when it can */ }
+      updater.apply();
+    },
+  });
+  if (updater.ready) updater.onReady(updater.ready);
+  Promise.resolve(updater.confirm()).catch(() => {});
+  return true;
+}
+
 export function initNative(game, win = globalThis) {
   if (!isNativeApp(win)) return false;
   document.documentElement.classList.add('native');   // css/style.css hides what belongs to a browser
@@ -75,5 +96,6 @@ export function initNative(game, win = globalThis) {
   // the page is hidden (js/main.js), so nothing is lost either way.
   app?.addListener?.('backButton', () => { if (!goBack(game)) app.minimizeApp?.(); });
   watchLinks(app, { game, win });
+  watchUpdates(game);
   return true;
 }

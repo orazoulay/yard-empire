@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delete your account · Yard Empire</title>
+  <meta name="description" content="Delete your Yard Empire account and everything stored for it.">
+  <link rel="stylesheet" href="legal.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../">YARD <span>EMPIRE</span></a>
+    <nav><a href="privacy.html">Privacy policy</a><a href="delete-account.html">Delete your account</a></nav>
+  </header>
+
+  <h1>Delete your account</h1>
+  <p>You can delete your Yard Empire account here or in the game. You do not need the game installed to use this page.</p>
+
+  <h2>What is deleted</h2>
+  <ul>
+    <li>Your account: email address, username and password.</li>
+    <li>Your saved game on our servers.</li>
+    <li>Your entry on the leaderboard, if you had one.</li>
+  </ul>
+  <p>This happens straight away and cannot be undone. Routine backups kept by our hosting provider, where there are any, are replaced on their own schedule. A copy of the game saved on your own device stays there until you clear the game's data.</p>
+
+  <h2>Delete it now</h2>
+  <div class="panel">
+    <form id="delete-form" novalidate>
+      <label>Email of the account
+        <input id="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required>
+      </label>
+      <label>Password
+        <input id="password" type="password" autocomplete="current-password" maxlength="200" required>
+      </label>
+      <div id="problem" class="note bad" role="alert" hidden></div>
+      <button type="submit" id="submit">Delete my account for good</button>
+    </form>
+    <div id="done" class="note good" role="status" hidden>Your account and everything stored for it have been deleted.</div>
+  </div>
+
+  <h2>Or in the game</h2>
+  <p>Open Settings, then your account, then "Delete my account", and enter your password.</p>
+
+  <h2>Forgot your password?</h2>
+  <p>Set a new one first: in the game, open Settings, "Sign in or create account", "Sign in", then "Forgot password?". If you cannot do that, write to the address on the <a href="privacy.html">privacy policy</a> page from the email of the account, and we will delete it for you.</p>
+
+  <script type="module" src="delete.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

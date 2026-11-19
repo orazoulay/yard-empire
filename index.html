@@ -335,6 +335,9 @@
     </div>
   </div>
 
+  <!-- In the Android app only: new game files fetched from the site are on trial until the game has started from them.
+       First and by itself, so its guard runs when one of those files is broken. In a browser it does nothing. -->
+  <script type="module" src="js/update.js"></script>
   <!-- The loading screen has a script of its own with no three.js to wait for, so it can speak while the game's files arrive. -->
   <script type="module" src="js/loading.js"></script>
   <!-- first, so that it also sees a game file that fails to load -->
