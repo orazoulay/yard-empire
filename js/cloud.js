@@ -43,14 +43,24 @@ function pageLink() {
 }
 
 /**
+ * The Android app's own address: the phone opens the app for it (the intent filter in mobile/android's
+ * AndroidManifest.xml), and js/native.js hands what the link carried to the game. The scheme is the app's ID, which
+ * no other app on Google Play can have. Supabase follows it only while the project lists it under Redirect URLs.
+ */
+export const APP_LINK = 'com.yardempire.co.il://link';
+
+/**
  * The game's own address, for the link in an email to come back to. Without it Supabase goes by where the request
  * came from, and a browser only tells it the site (https://name.github.io/), not the folder the game is in: the
- * link then ended on the host's "not found" page. Empty in the Android app, whose address is the phone's own, and
- * outside a browser; Supabase then uses the address set in the project.
+ * link then ended on the host's "not found" page. In the Android app it is the app's own address (APP_LINK): the page
+ * there is the phone's own (https://localhost/), which no link can come back to, and with nothing asked the link opened
+ * the game's site in the phone's browser instead of the app. Empty outside a browser; Supabase then uses the address
+ * set in the project.
  */
 function pageHome() {
   const l = globalThis.location;
-  if (!l || !/^https?:$/.test(l.protocol || '') || globalThis.Capacitor?.isNativePlatform?.()) return '';
+  if (!l || !/^https?:$/.test(l.protocol || '')) return '';
+  if (globalThis.Capacitor?.isNativePlatform?.()) return APP_LINK;
   return l.origin + String(l.pathname || '/').replace(/[^/]*$/, '');
 }
 
@@ -104,7 +114,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       keep(fromTokens({ ...tokens, user: { email } }));
       write(storage, WAITING_KEY, null);
       news = { note: 'Your email is confirmed. You are signed in.', good: true, signedIn: true };
-    } else if (type === 'signup' || type === 'email') news = { note: 'Your email is confirmed. Sign in to continue.', good: true };
+    } else if (type === 'signup' || type === 'email') news = { note: 'Your email is confirmed. Sign in to continue.' + (home === APP_LINK ? '' : ' If you created the account in the app, go back to it and sign in there.'), good: true };
   };
   const inHash = link ? readLink(link.hash) : null, arrived = inHash || (link ? readLink('', link.search) : null);
   if (arrived) {
