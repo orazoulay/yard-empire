@@ -24,12 +24,15 @@ export class HqFinance {
     const yards = AREAS.filter(a => econ.areaOpen(a.id)).map(a => {
       const r = c.yardReport(a.id);
       const invested = a.upgrades.reduce((sum, u) => sum + (econ.paid[u.id] || 0), 0);
-      return { name: a.name, r, invested };
+      return { name: a.name, r, invested, harbour: a.ladder === false };
     }).sort((x, y) => y.r.profit - x.r.profit);
     const span = min => (min >= 120 ? `${Math.round(min / 60)} h` : `${Math.max(1, Math.round(min))} min`);
     const most = Math.max(1e-9, ...yards.map(y => Math.abs(y.r.profit)));
-    const payback = y => (y.r.profit > 0.001 && y.invested > 0 ? `pays back in ${span(y.invested / y.r.profit / 60)}` : y.r.profit <= 0 ? 'not paying back' : '');
-    // Where the cash comes from: each yard's own sales, and what deliveries and the warehouse brought in.
+    // The Port is built to earn nothing by itself (its ships sell what the yards make), so it is not judged by payback.
+    const payback = y => (y.harbour ? 'Export yard' : y.r.profit > 0.001 && y.invested > 0 ? `pays back in ${span(y.invested / y.r.profit / 60)}` : y.r.profit <= 0 ? 'not paying back' : '');
+    // Where the money comes from: each yard's own sales, and what deliveries and the warehouse brought in; with a ship,
+    // also the goods that went aboard, which the income counts at their normal price as they are loaded (Company.aboard).
+    const ships = c.port.open;
     const sources = incomeRows(yards.map(y => ({ name: y.name, sales: y.r.sales })), sm.income), quiet = yards.filter(y => !(y.r.sales > 0)).length;
     return [
       h('div', { class: 'fin-kpis' },
@@ -43,10 +46,10 @@ export class HqFinance {
       this.chart({ key: 'value', title: 'Company value gained in this time', series: [[(p, first) => p.value - first.value, 'Gained', 'income']] }),
       fsection('Where the money comes from',
         sources.length ? h('div', { class: 'fin-panel cols' }, ...sources.map(r => h('div', { class: 'fin-row share source' },
-          h('span', { class: 'fin-name', text: r.other ? 'Contracts and warehouse' : r.name }), h('span', { class: 'fin-share' }, h('i', { width: r.share })),
+          h('span', { class: 'fin-name', text: r.other ? (ships ? 'Contracts, warehouse and ships' : 'Contracts and warehouse') : r.name }), h('span', { class: 'fin-share' }, h('i', { width: r.share })),
           h('span', { class: 'fin-pct', text: Math.round(r.share * 100) + '%' }), rate(r.value))))
           : empty('No cash came in during the last minute. Every yard that sells is listed here with its share.'),
-        sources.length && quiet ? note(`${quiet} yard${quiet === 1 ? ' sells' : 's sell'} nothing in a shop right now: what ${quiet === 1 ? 'it makes' : 'they make'} goes to other yards or to the warehouse.`) : null),
+        sources.length && quiet ? note(`${quiet} yard${quiet === 1 ? ' sells' : 's sell'} nothing in a shop right now: what ${quiet === 1 ? 'it makes' : 'they make'} goes to other yards${ships ? ', to the warehouse or aboard a ship' : ' or to the warehouse'}.`) : null),
       fsection('Where the money goes',
         h('div', { class: 'fin-panel cols' }, ...costs.map(([name, v]) => {
           const share = sm.costs > 0 ? v / sm.costs : 0;

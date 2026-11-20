@@ -12,7 +12,7 @@ import { box, mat, soaks, GLOW, LIGHT, CITY_STACKS } from '../world.js';
 import { bake } from '../engine/bake.js';
 import { cylinderShape } from '../engine/materials.js';
 import { ground, glowMap } from '../textures.js';
-import { cityEdge, PARAPET } from '../sim/site.js';
+import { cityEdge, edgeYards, PARAPET } from '../sim/site.js';
 
 // ------------------------------------------------------------------------------------------ shapes, made once
 const share = geo => { geo.userData.shared = true; return geo; };
@@ -461,13 +461,15 @@ const STRETCH = 13;   // the edge is joined a stretch of street at a time, so th
 /**
  * What stands around Industrial City and the Metropolis, ready for the scene. Nothing here is taller than the camera
  * can see over (SIGHT in js/sim/site.js), and nothing lies under a yard: the yards draw their own ground.
- * @param rects  the yards the edge goes around
- * @param clear  ground to keep free (the building site's plot): the buildings that stood on it are left out
+ * @param yards    the built-up yards (every yard outside Lumber Town): the edge goes around those edgeYards picks
+ * @param clear    ground to keep free (the building site's plot): the buildings that stood on it are left out
+ * @param options  passed on to cityEdge: south: false when the coast row lies along the yards' south side
  */
-export function makeCityEdge(rects, clear = []) {
+export function makeCityEdge(yards, clear = [], options = {}) {
   const g = new THREE.Group(); g.name = 'city-edge';
+  const rects = edgeYards(yards);
   // Where everything stands is worked out as plain numbers (js/sim/site.js, cityEdge), from fixed runs of numbers.
-  const layout = cityEdge(rects, clear);
+  const layout = cityEdge(rects, clear, options);
   const minX = Math.min(...rects.map(r => r.minX)), maxX = Math.max(...rects.map(r => r.maxX)), minZ = Math.min(...rects.map(r => r.minZ)), maxZ = Math.max(...rects.map(r => r.maxZ));
 
   // the ground: the asphalt under it all, and the pavements on it

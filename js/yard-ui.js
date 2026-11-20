@@ -147,7 +147,7 @@ export class YardUi {
       plot.label.el.classList.toggle('paying', paid > part.paid);   // on for one look, a quarter of a second
       part.paid = paid;
       const standing = Math.hypot(plot.x - p.x, plot.z - p.z) <= (plot.radius || 0);
-      const text = plotNote({ cash, remaining: g.econ.remaining(u.id), cost: u.cost, standing, goods: ITEMS[a.cfg.workerJob?.items[0]]?.label || '' });
+      const text = plotNote({ cash, remaining: g.econ.remaining(u.id), cost: u.cost, standing, goods: ITEMS[a.cfg.workerJob?.items[0]]?.label || '', lock: g.econ.lockOf(u.id) });
       if (text === part.text) continue;
       part.text = text; part.note.textContent = text; part.note.hidden = !text;
     }

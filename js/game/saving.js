@@ -1,6 +1,6 @@
 // Saving, and paying for time away: the save is the economy as JSON beside the account's key; checkOffline pays
 // what the yards earned while the game was closed or asleep.
-import { offlineEarnings, OFFLINE_EFFICIENCY } from '../sim/offline.js';
+import { offlineEarnings, awaySeconds, OFFLINE_EFFICIENCY } from '../sim/offline.js';
 import { today } from './company-chores.js';
 import { awayPay, flagValue } from '../sim/store.js';
 
@@ -21,14 +21,23 @@ export class SavingMethods {
     const terms = this.company.offlineTerms();   // wages and upkeep come off; the limit is what is left of today's allowance
     const away = (now - this.econ.lastSeen) / 1000;
     const r = offlineEarnings({ rate: this.econ.workerRate, lastSeen: this.econ.lastSeen, now, ...terms });
+    // A ship at sea sails on by the same seconds as the pay, at the same share, whether the yards earned or not. These
+    // seconds are never also run through the rules: the frame that called this catches up a quarter of a second at most.
+    const secs = awaySeconds({ lastSeen: this.econ.lastSeen, now, cap: terms.cap });
+    const sailing = secs > 0 && this.company.port.ships.some(s => s.left > 0);
+    // A ship that came home is told of once: by the welcome-back sheet when there is one (the yards earned), else by its own card.
+    const sea = sailing ? this.company.shipsAway(secs * (terms.share || OFFLINE_EFFICIENCY), r.earned >= 1) : { ships: 0, cash: 0 };
     this.econ.lastSeen = now;   // the same absence is never paid twice
-    if (r.earned < 1) return;
+    if (r.earned < 1) {
+      if (sailing) { this.company.useAway(secs); this.hud.setCash(this.econ.cash); this.save(); }   // a ship sailed on the allowance though the yards paid nothing
+      return;
+    }
     const times = flagValue(this.company, 'awayX2');   // a Double welcome-back of the credits store that waits: shown now, used when the pay is collected
-    this.company.useAway(r.seconds);
+    this.company.useAway(r.seconds);   // once, for the pay and the ships together (r.seconds and secs are the same whole seconds)
     this.offlineOpen = true;
     // yard interface: the sheet gets the terms of the pay as figures (how long away, the share, what is left of today) and words them itself
     this.hud.showOffline({ earned: Math.floor(r.earned * times), seconds: r.seconds, capped: r.capped, away, share: terms.share || OFFLINE_EFFICIENCY,
-      afterCosts: terms.costs > 0, left: this.company.awayLeft(), allowance: this.company.awayAllowance(), times, accountant: this.company.mods.awayPay > 1 }, () => {
+      afterCosts: terms.costs > 0, left: this.company.awayLeft(), allowance: this.company.awayAllowance(), times, accountant: this.company.mods.awayPay > 1, ships: sea }, () => {
       this.offlineOpen = false;
       this.company.earn(awayPay(this.company, r.earned).earned);
       this.hud.setCash(this.econ.cash);

@@ -1,5 +1,5 @@
 // Pure game-state logic: cash, purchases, derived stats from unlocked upgrades. No rendering here.
-import { PRESTIGE } from '../data/company.js';
+import { PRESTIGE, RANKS } from '../data/company.js';
 
 /** Two significant digits, like the generated costs: 1,234 -> 1,200. */
 const roundCost = n => { const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(n)) - 1)); return Math.round(n / p) * p; };
@@ -64,9 +64,16 @@ export class Economy {
     const own = this.unlockedEffects('capacity').reduce((m, e) => Math.max(m, e.value), this.baseCapacity);
     return Math.ceil(own * (this.boost.capacity || 1) - 1e-9);   // the Bigger backpack of the credits store (js/sim/store.js)
   }
-  price(item) {
+  price(item) { return this.priceAt(item, this.boost.price); }
+  /**
+   * The price without the credits store's timed price boosts: what lasts (upgrades, research, managers, legacy stars, what
+   * is owned for good in the store) is in it, a boost that runs is not. A ship's sum is made of it (Company.holdValue).
+   * It is the same formula as price() with another factor, so with no boost running the two are the same number.
+   */
+  keptPrice(item) { return this.priceAt(item, this.boost.kept ?? this.boost.price); }
+  priceAt(item, factor) {
     const base = this.items[item]?.price || 0;
-    return this.unlockedEffects('price').filter(e => e.item === item).reduce((p, e) => p * e.mult, base) * this.boost.price;
+    return this.unlockedEffects('price').filter(e => e.item === item).reduce((p, e) => p * e.mult, base) * factor;
   }
   speed(recipe) {
     return this.unlockedEffects('speed').filter(e => e.recipe === recipe).reduce((p, e) => p * e.mult, 1) * this.boost.speed;
@@ -101,8 +108,19 @@ export class Economy {
     return u.cost - (this.paid[id] || 0);
   }
 
+  /**
+   * Why `id` cannot be paid for yet, or null. A gate may need a rank of the company (`rank` on the gate in
+   * js/data/areas.js). A game with no company has no ranks, and nothing is locked: the calibration plays that way.
+   */
+  lockOf(id) {
+    const u = this.get(id);
+    if (!u || u.rank == null || !this.company || this.company.rank >= u.rank) return null;
+    return 'Needs the rank ' + RANKS[u.rank].name;
+  }
+
   /** Move up to `amount` cash into an upgrade. Returns { paid, completed }. */
   payToward(id, amount) {
+    if (this.lockOf(id)) return { paid: 0, completed: false };
     const rem = this.remaining(id);
     if (rem <= 0) return { paid: 0, completed: false };
     const paid = Math.min(amount, rem, this.cash);

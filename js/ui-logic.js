@@ -1,15 +1,27 @@
 // The small rules of the yard's interface that need no page to run: what a label says, how sales add
 // up into one number, how a password is judged, what the save status reads. Tested in tests/yard-interface.test.mjs.
 import { fmt, money } from './format.js';
+import { shareText } from './sim/offline.js';
 
 export const cap = text => (text ? text[0].toUpperCase() + text.slice(1) : '');
+
+// --- a machine's label -------------------------------------------------------------------------------
+/**
+ * What a machine of the city, the Metropolis or the region says when it waits for a material: "NEEDS CHAIRS", or, when
+ * the trucks leave that material for the building site's running stage (Company.heldForSite), "CHAIRS GO TO THE SITE".
+ * @param label  the material's name as the items have it ('chairs', 'glass')
+ */
+export function waitLabel(label, toSite = false) {
+  const name = label.toUpperCase();
+  return toSite ? `${name} ${/[^S]S$/.test(name) ? 'GO' : 'GOES'} TO THE SITE` : 'NEEDS ' + name;
+}
 
 // --- the loading screen ----------------------------------------------------------------------------
 /** Short, true things about the game, one of which is shown while it loads. `keys: true` only makes sense with a keyboard. */
 export const TIPS = [
   { text: 'The green arrows on the ground always point at what to do next.' },
   { text: 'Stand on a plot to pay for it. You can pay a part now and the rest later.' },
-  { text: 'Workers keep earning while you are away, for a few hours a day.' },
+  { text: 'Out of sight your workers slow right down. They earn a little, for a few hours a day.' },
   { text: 'Opening your second yard founds the company and its Headquarters.' },
   { text: 'A contract pays more than selling the same goods in the shop.' },
   { text: 'Tap the yard name at the top to go to an open yard, and to see the yards ahead.' },
@@ -58,13 +70,16 @@ export function backupLine(s, when) {
  * The terms of the pay for time away, as the lines of the welcome-back sheet.
  * @param {{ away: number, seconds: number, capped: boolean, share: number, afterCosts: boolean, left: number, allowance: number }} o
  *   away: seconds really gone; seconds: how many of them were paid; share: 0 to 1 of the workers' rate;
- *   left and allowance: seconds of today's allowance still unused, and its full length
+ *   left and allowance: seconds of today's allowance still unused, and its full length;
+ *   ships: { ships, cash } of the Port's ships that came home in that time (Company.shipsAway): already paid
  */
-export function awayFacts({ away, seconds, capped, share, afterCosts, left, allowance, times = 1, accountant = false }) {
+export function awayFacts({ away, seconds, capped, share, afterCosts, left, allowance, times = 1, accountant = false, ships = null }) {
+  const home = ships?.ships > 0 ? ships.ships : 0;
   return {
+    ships: home ? `${home === 1 ? 'A ship' : home + ' ships'} came home while you were away: +$${fmt(ships.cash)}, already in your cash` : '',
     away: awayText(Math.max(away, seconds)),
     paid: awayText(seconds) + (capped ? ", today's limit" : ''),
-    rate: `${Math.round(share * 100)}% of what your workers earn` + (accountant ? ' with your Accountant' : '') + (afterCosts ? ', after wages and upkeep' : '')
+    rate: `${shareText(share)} of what your workers earn` + (accountant ? ' with your Accountant' : '') + (afterCosts ? ', after wages and upkeep' : '')
       + (times > 1 ? `, times ${times} with your Double welcome-back` : ''),
     left: left >= 60 ? `${awayText(left)} of ${awayText(allowance)}` : `Nothing: the ${awayText(allowance)} are used up`,
   };
@@ -88,13 +103,15 @@ export function plotTag({ remaining, cost }) {
 /**
  * The lines under a plot's price, one below the other. What was paid, once a part is paid. Then: what to do
  * once the cash is there; what to sell for the rest, to a player who stands on the plot with nothing left to
- * pay; the missing amount when it is close; and nothing while the price is far away.
- * @param {{ cash: number, remaining: number, cost?: number, standing?: boolean, goods?: string }} o
+ * pay; the missing amount when it is close; and nothing while the price is far away. A plot that takes no money
+ * yet (a gate that needs a rank: Economy.lockOf) says only what it needs.
+ * @param {{ cash: number, remaining: number, cost?: number, standing?: boolean, goods?: string|false, lock?: string|null }} o
  *   remaining: what is still to pay; cost: the full price; standing: the player is on the plot;
- *   goods: what this yard sells, by name ("planks")
+ *   goods: what this yard sells, by name ("planks"); lock: why it cannot be paid yet, or null
  */
-export function plotNote({ cash, remaining, cost = remaining, standing = false, goods = '' }) {
+export function plotNote({ cash, remaining, cost = remaining, standing = false, goods = '', lock = null }) {
   if (!(remaining > 0)) return '';
+  if (lock) return lock;
   const lines = [], paid = cost - remaining, missing = '$' + fmt(Math.ceil(remaining - cash));
   if (paid >= 1) lines.push(`Paid $${fmt(paid)} of $${fmt(cost)}`);
   if (cash >= remaining) lines.push('Stand here to buy');
@@ -124,15 +141,17 @@ export function purchaseName(label) {
 /**
  * Which purchase the objective card counts toward, so that it never loses its goal: the one the arrows lead
  * to when one can be paid, else the next one of the yard the player is in, else the open yard's purchase with
- * the least still to pay.
- * @param {{ pay?: object|null, here?: object|null, plots?: { plot: object, remaining: number }[] }} o
+ * the least still to pay. A plot that takes no money yet (`locked`: a gate that needs a rank) is never the next
+ * thing to pay for.
+ * @param {{ pay?: object|null, here?: object|null, plots?: { plot: object, remaining: number, locked?: boolean }[] }} o
  * @returns {object|null}  one of the plots given, or null when nothing is left to buy
  */
 export function cardPlot({ pay = null, here = null, plots = [] }) {
   if (pay) return pay;
-  if (here) return here;
+  const shut = new Set(plots.filter(p => p.locked).map(p => p.plot));
+  if (here && !shut.has(here)) return here;
   let best = null;
-  for (const p of plots) if (p.remaining > 0 && (!best || p.remaining < best.remaining)) best = p;
+  for (const p of plots) if (p.remaining > 0 && !p.locked && (!best || p.remaining < best.remaining)) best = p;
   return best ? best.plot : null;
 }
 
@@ -145,7 +164,8 @@ export function makesText(recipe, items) {
 }
 /**
  * The rows of the yard list: every yard of the game in order. An open yard can be travelled to. A yard that
- * is not open says what it makes and what opens it, with the price of its gate as the economy has it.
+ * is not open says what it makes and what opens it, with the price of its gate as the economy has it. A gate that
+ * takes no money yet (a rank the company has not got: Economy.lockOf) says so, and its row is never ready to buy.
  * @param {{ areas: object[], econ: object, here: string, place: (location: string) => string, items: object, recipes: object }} o
  *   areas: the yards as data (js/data/areas.js); econ: the Economy; here: the id of the yard the player is in
  */
@@ -154,13 +174,19 @@ export function yardRows({ areas, econ, here, place, items, recipes }) {
     const row = { id: a.id, name: a.name, place: place(a.location), index: i + 1, ground: a.ground, open: econ.areaOpen(a.id), here: a.id === here };
     if (row.open) return row;
     const machine = a.stations.find(s => s.type === 'processor') || a.upgrades.find(u => u.effect.type === 'station')?.effect.station;
-    row.makes = makesText(recipes[machine?.recipe], items);
+    // the Port has no machine: what it does is the ship it sells by
+    row.makes = machine ? makesText(recipes[machine.recipe], items) : a.upgrades.some(u => u.effect.type === 'ship') ? 'sells your goods overseas by ship' : '';
     const prev = areas.find(p => p.gate && p.gate.next === a.id);
     if (!prev) return { ...row, needs: '' };
     const gate = 'gate:' + prev.id, cost = econ.get(gate)?.cost ?? prev.gate.cost, price = '$' + fmt(cost);
     if (!econ.areaOpen(prev.id)) return { ...row, needs: `Opens after ${prev.name}, for ${price}` };
     const left = prev.upgrades.filter(u => !econ.has(u.id)).length, paid = cost - econ.remaining(gate);
     row.next = true;
+    const lock = econ.lockOf(gate);
+    if (lock) {
+      row.needs = left > 0 ? `Finish ${prev.name} (${left} more to build). ${lock} to open its gate, for ${price}` : `${lock} to open the gate in ${prev.name}, for ${price}`;
+      return row;
+    }
     if (left > 0) row.needs = `Finish ${prev.name} (${left} more to build), then pay ${price} at its gate`;
     else if (paid >= 1) { row.needs = `$${fmt(paid)} of ${price} paid at the gate in ${prev.name}`; row.progress = paid / cost; }
     else row.needs = `Pay ${price} at the gate in ${prev.name}`;
@@ -245,6 +271,8 @@ export const MOMENTS = {
   send: { size: 'small' },                             // goods sent to the building site
   build: { size: 'small', sound: 'fanfare' },          // a building is started
   sell: { size: 'small', sound: 'cash' },              // sold from the warehouse
+  ship: { size: 'medium', sound: 'collect' },          // a ship of the Port came home with its sum
+  refit: { size: 'medium' },                           // a refit of the ships is done
 };
 /** What a moment is heard, felt and seen as: { sound, buzz, confetti, punch }. An unknown one is a tap. */
 export function feelOf(moment) {

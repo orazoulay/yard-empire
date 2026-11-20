@@ -55,6 +55,7 @@ const BELT = {
   town:       { frame: 0x3aa7d8, surface: '#1e6f94', chevron: 'rgba(255,255,255,0.22)' },
   city:       { frame: 0x4a4f57, surface: '#23272e', chevron: 'rgba(255,200,40,0.55)' },
   metropolis: { frame: 0x2f8f83, surface: '#1c4f4a', chevron: 'rgba(255,255,255,0.3)' },
+  region:     { frame: 0x35506b, surface: '#1f3346', chevron: 'rgba(242,182,48,0.55)' },
 };
 
 /**
@@ -67,6 +68,7 @@ const BY_LOCATION = {
   town:       { ground: 'soil', fence: 'rail', outfit: 'lumber', shop: 'red', stand: 'post' },
   city:       { ground: 'asphalt', fence: 'mesh', outfit: 'plant', shop: 'slate', stand: 'dock' },
   metropolis: { ground: 'concrete', fence: 'glass', outfit: 'assembly', shop: 'teal', stand: 'showroom' },
+  region:     { ground: 'concrete', fence: 'mesh', outfit: 'rigger', shop: 'blue', stand: 'dock' },
 };
 
 const BY_YARD = {
@@ -90,6 +92,10 @@ const BY_YARD = {
   autofactory: { ground: 'asphalt',  fence: 'glass',  outfit: 'assembly',  shop: 'blue',     stand: 'showroom' },
   robotics:    { ground: 'tile',     fence: 'glass',  outfit: 'lab',       shop: 'teal',     stand: 'showcase' },
   store:       { ground: 'flags',    fence: 'glass',  outfit: 'clerk',     shop: 'wine',     stand: 'showroom' },
+  port:        { ground: 'cobble',   fence: 'iron',   outfit: 'plant',     shop: 'blue',     stand: 'dock' },      // no shop and no workers: a harbour all the same
+  shipyard:    { ground: 'concrete', fence: 'mesh',   outfit: 'rigger',    shop: 'blue',     stand: 'depot' },       // slate made the depot a black slab on the pale concrete; the Aircraft Factory's is red
+  advtech:     { ground: 'tile',     fence: 'glass',  outfit: 'lab',       shop: 'violet',   stand: 'showcase' },
+  aircraft:    { ground: 'asphalt',  fence: 'mesh',   outfit: 'plant',     shop: 'red',      stand: 'showroom' },
 };
 
 /**
@@ -108,6 +114,7 @@ const DRESS_BY_LOCATION = {
   town:       { hero: [], trade: ['crates', 'barrels', 'sacks'], filler: ['crate', 'barrel', 'stump'], verge: GRASS, floor: 'boards' },
   city:       { hero: [], trade: ['pallet', 'barrels', 'floodlight', 'bollards', 'hazardsign'], filler: ['crate', 'cones', 'barrel'], floor: 'paint', line: 0xf2b630 },
   metropolis: { hero: [], trade: ['planter', 'bollardlights', 'planttree', 'bench'], filler: ['pallet', 'litterbin', 'planter'], floor: 'plaza', line: 0x2f8f83 },
+  region:     { hero: [], trade: ['pallet', 'crates', 'floodlight', 'bollards', 'handtruck'], filler: ['crate', 'barrel', 'cones'], floor: 'paint', line: 0xf2b630 },
 };
 const DRESS = {
   sawmill:     { hero: ['timbershed'], trade: ['logdeck', 'sawhorse', 'plankstack', 'pennant', 'firewood', 'stumpaxe'], filler: ['stump', 'crates', 'barrel', 'toolrack', 'lantern'], verge: GRASS, floor: 'boards' },
@@ -136,6 +143,12 @@ const DRESS = {
   autofactory: { hero: ['neoncar'], trade: ['carbody', 'tyres', 'panelrack', 'chargepost', 'planter', 'cones'], filler: ['tyres', 'planter', 'bollardlights', 'planttree'], floor: 'plaza', line: 0x2f7fd6 },
   robotics:    { hero: ['neonbot'], trade: ['chargedock', 'dronepad', 'armcrate', 'servers', 'planter', 'bollardlights'], filler: ['planter', 'planttree', 'partsbins', 'litterbin'], floor: 'plaza', line: 0x25b8c9 },
   store:       { hero: ['kiosk'], trade: ['showcase', 'giftstack', 'bunting', 'bench', 'balloons', 'planttree', 'lampglobe'], filler: ['planter', 'litterbin', 'bench', 'giftstack', 'flowerbox'], floor: 'plaza', line: 0xc9a24a },
+  // no big piece at the back: the Port's north fence runs under the Department Store's counter, and a tank or a mast
+  // there read as the Store's own. Cargo along the fences instead, and the quay's crane is the Port's landmark.
+  port:        { hero: [], trade: ['crates', 'pallet', 'barrels', 'drumrack', 'bollards', 'handtruck', 'forklift', 'floodlight'], filler: ['crate', 'barrel', 'pallet', 'crates'], floor: 'paint', line: 0xf2b630 },
+  shipyard:    { hero: ['gantry'], trade: ['beams', 'coils', 'gascyl', 'cabledrums', 'toolchest', 'floodlight'], filler: ['pallet', 'barrel', 'cones', 'beams'], floor: 'paint', line: 0xf2b630 },
+  advtech:     { hero: ['ventshed'], trade: ['servers', 'acunit', 'partsbins', 'solar', 'handtruck', 'lampglobe'], filler: ['pallet', 'crate', 'bollards', 'cones'], floor: 'paint', line: 0x25b8c9 },
+  aircraft:    { hero: ['tankfarm', 'windsock'], trade: ['tyres', 'panelrack', 'toolchest', 'forklift', 'chargepost', 'floodlight'], filler: ['pallet', 'cones', 'bollards', 'barrels'], floor: 'paint', line: 0xf2b630 },
 };
 
 /**

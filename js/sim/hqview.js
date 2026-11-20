@@ -1,6 +1,6 @@
 // What the Headquarters screen works out before it draws: what is remembered, orderings, estimates and wording.
 // Pure: plain numbers and lists in, plain values out. No page and no game objects, so every rule here has a test.
-import { OFFLINE_EFFICIENCY, OFFLINE_CAP_SECONDS } from './offline.js';
+import { OFFLINE_EFFICIENCY, OFFLINE_CAP_SECONDS, shareText } from './offline.js';
 
 // --- figures --------------------------------------------------------------------------------
 /** True when js/format.js shortens this amount ($5.2M): only then is there an exact figure worth adding. */
@@ -136,15 +136,34 @@ export function modRows(mods, { capacity, slots }) {
   if (off(mods.wage)) rows.push(['Wages and salaries', signed(mods.wage)]);
   if (off(mods.upkeep)) rows.push(['Machine upkeep', signed(mods.upkeep)]);
   if (off(mods.storage)) rows.push(['Warehouse', `${capacity} of each item`]);
+  if (off(mods.hold)) rows.push(["Ships' holds", signed(mods.hold)]);
+  if (off(mods.voyage)) rows.push(['Voyages', signed(mods.voyage)]);
+  if (mods.premium > 0) rows.push(['Export premium', `+${Math.round(mods.premium * 100)} points`]);
   if (mods.contractSlots > 0) rows.push(['Contracts at once', String(slots)]);
   if (mods.routes) rows.push(['Truck routes', off(mods.routeRate) ? `open, loads ${signed(mods.routeRate)}` : 'open']);
   if (mods.offlineShare || mods.offlineCap || mods.awayPay > 1) {
     // the Accountant of the credits store multiplies the share, as the absence is paid (js/sim/company.js, offlineTerms)
     const share = (mods.offlineShare || OFFLINE_EFFICIENCY) * (mods.awayPay > 1 ? mods.awayPay : 1), cap = mods.offlineCap || OFFLINE_CAP_SECONDS;
-    rows.push(['Time away', `${Math.round(share * 100)}% for up to ${Math.round(cap / 360) / 10} h a day`]);
+    rows.push(['Time away', `${shareText(share)} for up to ${Math.round(cap / 360) / 10} h a day`]);
   }
   return rows.map(([name, value]) => ({ name, value }));
 }
+
+/** Names in a sentence: "chairs", "chairs and glass", "bricks, chairs and glass". */
+export function andList(names) { return names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' and ' + names.at(-1); }
+
+// --- a running build comes first (Company.routeHeld) ----------------------------------------------------
+// While a stage of the building site asks for a good, the trucks into the region leave it at the shops. The player's
+// switch for the site is then the choice "build now, or let the region run", and every screen that shows a held route
+// or a yard standing still for it says so, and names the switch.
+export const LET_RUN = 'Switch off Deliveries to the site to let the region run.';
+/** The Construction tab: the goods the trucks leave for this stage, and the yards of the region that stand still meanwhile. */
+export const siteHoldText = (goods, yards) => `The trucks into the region leave the ${andList(goods)} for this stage. Standing still until it has them: ${yards.join(', ')}. ${LET_RUN}`;
+/** The Port tab, when a good it waits for is made by a yard that stands still for the site (products: their names). */
+export const portHoldText = (products, goods) => {
+  const what = andList(products);
+  return `${what[0].toUpperCase() + what.slice(1)} are not being made: the building site takes the ${andList(goods)} first. Switch off Deliveries to the site, on the Construction tab, to let the region run.`;
+};
 
 // --- truck routes -----------------------------------------------------------------------------------
 /** The routes that can be bought together with the cash on hand, cheapest first so that it is as many as possible, and their price. */

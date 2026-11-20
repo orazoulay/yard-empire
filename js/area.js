@@ -17,6 +17,7 @@ import { roleFor } from './sim/jobs.js';
 import { flagSpot, decorSpots } from './sim/decor.js';
 import { makeFlag } from './gfx/emblem.js';
 import { buildDecor, DECORS } from './gfx/decor.js';
+import { DECK } from './gfx/harbour.js';
 
 export const GATE_HALF = 2.2;
 const SIDES = ['n', 's', 'w', 'e'];
@@ -147,6 +148,16 @@ export class Area {
     });
   }
 
+  /**
+   * Where the Port's quay runs through this side of the fence out over the water: [{ at, half }], or none. Nothing stands
+   * between a deck and its ship; the player is kept on the yard by its edge and off the deck by its footprint as before
+   * (js/game/movement.js), and the lamps stand where they always did, just beside it.
+   */
+  quayGap(side) {
+    const q = this.cfg.stations.find(s => s.type === 'quay'), b = this.bounds;
+    return q && side === 's' && q.z + DECK.to > b.maxZ ? [{ at: q.x, half: DECK.half + 0.1 }] : [];
+  }
+
   buildFence() {
     const b = this.bounds, g = this.cfg.gate;
     const ends = { n: [b.minX, b.minZ, b.maxX, b.minZ], s: [b.minX, b.maxZ, b.maxX, b.maxZ], w: [b.minX, b.minZ, b.minX, b.maxZ], e: [b.maxX, b.minZ, b.maxX, b.maxZ] };
@@ -156,7 +167,7 @@ export class Area {
       if (this.sharedWithEarlier(side)) continue;
       const [x1, z1, x2, z2] = ends[side];
       drawn.push({ side, x1, z1, x2, z2 });
-      runs.push(...fenceRuns([x1, z1, x2, z2], [g, way].filter(o => o && o.side === side).map(o => ({ at: o.at, half: o.half ?? GATE_HALF }))));
+      runs.push(...fenceRuns([x1, z1, x2, z2], [g, way].filter(o => o && o.side === side).map(o => ({ at: o.at, half: o.half ?? GATE_HALF })).concat(this.quayGap(side))));
     }
     // rails, pickets, a wall, railings, mesh or glass: by the yard's look, or the player's Fence choice (bought with credits)
     this.fenceRuns = runs; this.fenceGroup = new THREE.Group(); this.group.add(this.fenceGroup);

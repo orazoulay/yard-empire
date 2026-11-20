@@ -25,6 +25,7 @@ import { Sfx } from './audio.js';
 import { Particles } from './particles.js';
 import { Sky } from './sky.js';
 import { Trucks } from './trucks.js';
+import { Ships } from './ship.js';
 import { YardLife } from './yardlife.js';
 import { Site, SiteSign } from './site.js';
 import { Builders } from './builders.js';
@@ -73,8 +74,13 @@ class Game {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     setAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
 
-    // the Metropolis is built-up land too; the building site's plot is kept free of trees and of the city's buildings
-    const { scene, camera, updateCamera, sun, hemi, setDetail } = createWorld(AREAS.map(a => ({ ...a.bounds, city: a.location !== 'town' })), [SITE.plot]);
+    // Every yard outside Lumber Town is built-up land the forest keeps away from; the city's edge goes around those of
+    // Industrial City and the Metropolis (edgeYards, js/sim/site.js). The coast row lies along the Metropolis's south
+    // side, so the edge has no street there, and the sea begins behind the row. The building site's plot is kept free
+    // of trees and of the city's buildings.
+    const coast = AREAS.filter(a => a.location === 'region').map(a => a.bounds);
+    this.seaZ = coast.length ? Math.max(...coast.map(r => r.maxZ)) : null;
+    const { scene, camera, updateCamera, sun, hemi, setDetail } = createWorld(AREAS.map(a => ({ ...a.bounds, city: a.location !== 'town' })), [SITE.plot], { seaZ: this.seaZ, south: !coast.length });
     this.scene = scene; this.camera = camera; this.updateCamera = updateCamera;
     scene.environment = skyLight(this.renderer);
     this.sun = sun;
@@ -104,6 +110,7 @@ class Game {
     // Credits (js/credits.js): owned only once the server says so in this visit. Built before the yards, which ask it for their fence.
     this.credits = new Credits(account, { offered: !!CLOUD.url });
     this.fenceKind = () => this.credits.look('fence');
+    this.quay = null;   // the Port's quay (js/stations.js, Quay) once the Port is built: the ships lie at it
     // Areas + the doors between them
     this.areas = AREAS.map((cfg, i) => new Area(this, cfg, AREAS.slice(0, i)));
     this.doors = [];
@@ -136,6 +143,7 @@ class Game {
     this.sfx = new Sfx(this.settings);
     this.particles = new Particles(scene);
     this.trucks = new Trucks(this);
+    this.ships = new Ships(this);   // the Port's ships, where the rules say they are (js/ship.js)
     // the yard itself (list C): what is only there to be looked at, the player's own zoom, and what the camera can see
     this.life = new YardLife(this, setDetail);
     this.zoom = new ZoomControl(this.canvas, this.input);

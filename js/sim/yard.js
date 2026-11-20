@@ -276,7 +276,11 @@ export function overviewBox(areas, isOpen) {
     b.minX = Math.min(b.minX, a.bounds.minX); b.maxX = Math.max(b.maxX, a.bounds.maxX);
     b.minZ = Math.min(b.minZ, a.bounds.minZ); b.maxZ = Math.max(b.maxZ, a.bounds.maxZ);
   }
-  return { ...b, cx: (b.minX + b.maxX) / 2, cz: (b.minZ + b.maxZ) / 2 };
+  // What lies past a yard's south edge and must still be seen (the Port's moored ship: area.overview.south, in metres),
+  // so the fit can keep it above the cards. Only open yards count (the one to open next has no ship).
+  let reachZ = b.maxZ;
+  for (const a of shown.length ? shown : areas.slice(0, 1)) if (isOpen(a.id)) reachZ = Math.max(reachZ, a.bounds.maxZ + (a.overview?.south || 0));
+  return { ...b, reachZ, cx: (b.minX + b.maxX) / 2, cz: (b.minZ + b.maxZ) / 2 };
 }
 
 /**
@@ -285,8 +289,8 @@ export function overviewBox(areas, isOpen) {
  * narrowest. A name wider than this covers the name of the yard beside it, so the label wraps to it (css/style.css,
  * .label.yard-name; js/game/overview.js).
  */
-export function nameRoom(areas, isOpen, aspect, fit) {
-  const box = overviewBox(areas, isOpen), focus = { x: box.cx, z: box.cz };
+export function nameRoom(areas, isOpen, aspect, fit, framed = null) {
+  const box = framed || overviewBox(areas, isOpen), focus = { x: box.cx, z: box.cz };
   let room = 1;
   for (const a of areas) {
     const b = a.bounds, z = (b.minZ + b.maxZ) / 2;
@@ -313,16 +317,57 @@ export function screenAt(x, z, focus, aspect, zoom) {
 /**
  * The zoom at which the whole box is on the screen, looked at from its middle, inside `roomX` of the screen's width and
  * `roomY` of its height (from the middle out: 0.8 leaves a tenth of the height at the top for the top bar and one at the
- * bottom for the cards). Never less than 1.
+ * bottom for the cards). Never less than 1. `roomBottom` is the room below the middle where it is not the same as above.
+ * The south edge is the box's reachZ (what must be seen past the last yard) where it has one.
  */
-export function fitZoom(box, aspect, roomX = 0.9, roomY = 0.8) {
-  const focus = { x: box.cx, z: box.cz }, corners = [[box.minX, box.minZ], [box.maxX, box.minZ], [box.minX, box.maxZ], [box.maxX, box.maxZ]];
-  const fits = zoom => corners.every(([x, z]) => { const s = screenAt(x, z, focus, aspect, zoom); return Math.abs(s.x) <= roomX && Math.abs(s.y) <= roomY; });
+export function fitZoom(box, aspect, roomX = 0.9, roomY = 0.8, roomBottom = roomY) {
+  const focus = { x: box.cx, z: box.cz }, south = box.reachZ ?? box.maxZ;
+  const corners = [[box.minX, box.minZ], [box.maxX, box.minZ], [box.minX, south], [box.maxX, south]];
+  const fits = zoom => corners.every(([x, z]) => { const s = screenAt(x, z, focus, aspect, zoom); return Math.abs(s.x) <= roomX && s.y <= roomY && s.y >= -roomBottom; });
   let lo = 1, hi = 2;
   if (fits(lo)) return lo;
   while (!fits(hi) && hi < 64) hi *= 2;
   for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (fits(mid)) hi = mid; else lo = mid; }
   return hi;
+}
+
+/**
+ * The pixels at the bottom of the screen that the objective card and the line of help above it cover: the card begins
+ * --bottom-h from the bottom (css/style.css: pad 10..18 + the safe area + 88) and the line of help stands above it
+ * (32 and a gap), 150 on a phone and on a laptop.
+ */
+export const CARDS = 150;
+/**
+ * The room below the middle of the screen (of the half-height, 0..1) that is left above the cards on a screen `height`
+ * pixels tall; never less than 0.4, so a short screen still fits. On a short, wide screen (a phone on its side) the floor
+ * is what holds: the map keeps fitting, and the Port's ship may then sit under the card. That is by choice: a map that no
+ * longer fits would be worse than a ship half hidden on a rare shape of screen.
+ */
+export const cardsRoom = height => Math.max(0.4, 1 - 2 * CARDS / height);
+
+/**
+ * The view from above of a box: { box, fit }. Fitted as it always was (the box in the middle) unless something past the
+ * box's south edge (reachZ: the Port's ship) would then be under the cards, `bottom` of the half-height below the middle:
+ * then the middle the camera looks at (cz) moves south by as little as brings it above them, and the zoom goes further
+ * out only if that cuts the north edge. The box returned has the moved middle.
+ */
+export function frameBox(box, aspect, bottom = 0.8) {
+  const plain = { ...box, reachZ: box.maxZ }, first = fitZoom(plain, aspect);
+  if (!(box.reachZ > box.maxZ)) return { box, fit: first };
+  const ys = (b, fit) => [[b.minX, b.minZ], [b.maxX, b.minZ], [b.minX, box.reachZ], [b.maxX, box.reachZ]].map(([x, z]) => screenAt(x, z, { x: b.cx, z: b.cz }, aspect, fit).y);
+  let b = box, fit = first, refit = false;
+  for (let i = 0; i < 40; i++) {
+    const y = ys(b, fit), low = Math.min(...y), high = Math.max(...y), err = low + bottom;   // err < 0: the reach is under the cards
+    if (err >= -1e-6 && high <= 0.8 + 1e-6 && (refit || err < 1e-4 || b.cz <= box.cz)) break;   // within the limits, and (not past what was needed)
+    if (err < -1e-6 || (!refit && err >= 1e-4 && b.cz > box.cz)) {
+      const k = screenAt(b.cx, b.cz, { x: b.cx, z: b.cz + 1 }, aspect, fit).y - screenAt(b.cx, b.cz, { x: b.cx, z: b.cz }, aspect, fit).y;   // how far a metre further south moves the middle up
+      b = { ...b, cz: Math.max(box.cz, b.cz - err / k) };
+    } else { fit = fitZoom(b, aspect, 0.9, 0.8, bottom); refit = true; }
+  }
+  // the loop ends on a state that holds both limits; if it ran out of passes, fit once more
+  const y = ys(b, fit);
+  if (Math.min(...y) < -bottom - 1e-3 || Math.max(...y) > 0.8 + 1e-3) fit = fitZoom(b, aspect, 0.9, 0.8, bottom);
+  return { box: b, fit };
 }
 
 /** How much the camera has left the player for the view from above, 0..1: none up to ZOOM.max, all of it at the zoom that fits. */

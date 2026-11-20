@@ -327,6 +327,8 @@ html.calm .label.plot .ring { transition: none; transform: none; }
 .label.plot .note[hidden] { display: none; }
 .label.plot.gate .ring .fg { stroke: var(--yellow); }
 .label.plot.gate .name { color: var(--yellow); }
+/* A gate that needs a rank takes no money yet: its tag reads what it needs, in the muted colour of a locked yard's name. */
+.label.plot.locked .cost { color: var(--muted); }
 /* A plot's name and note stand on any ground (light cobbles, sand, snow): a dark outline under the letters. */
 .label.plot .name, .label.plot .note {
   text-shadow: 0 0 2px rgba(0, 0, 0, .9), 0 1px 2px rgba(0, 0, 0, .9), 0 0 6px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .35);
@@ -1166,6 +1168,15 @@ button.hq-btn.armed { border-color: var(--p-gold); color: var(--p-gold-ink); }
 
 /* the Market tab: on a narrow screen the two buttons of a good go on two lines instead of being squeezed */
 .hq-card.market .hq-actions { flex-wrap: wrap; }
+/* the Port tab: the destinations one under the other (a name, its time and premium), the goods to mark, the refits' bars across the card */
+.hq-seg.hq-routes { display: flex; flex-direction: column; align-items: stretch; }
+.hq-routes button.hq-seg-btn { justify-content: space-between; height: auto; min-height: 36px; padding: 6px 11px; white-space: normal; text-align: left; }
+.hq-route-terms { flex: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hq-card.hq-ship .hq-actions { flex-wrap: wrap; }
+.hq-export { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--p-line); }
+.hq-export-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hq-export button.hq-switch { flex: none; }
+.hq-card.refit .hq-need { flex-basis: 100%; }
 
 /* ---------- more to do: the streak's days, the box a company name is typed in, advice and backup cards ---------- */
 .hq-days { display: flex; gap: 6px; }

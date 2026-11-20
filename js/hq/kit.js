@@ -102,7 +102,7 @@ export const chip = (text, tone = '', mark) => h('span', { class: 'hq-chip ' + t
 export const marked = (name, text) => h('span', { class: 'hq-marked' }, icon(name), h('span', { text }));
 // Which icon stands for what is counted: milestones by measure, goals by kind.
 export const MEASURE_ICON = { yards: 'businesses', workers: 'team', income: 'coin', contracts: 'contracts', research: 'research', routes: 'logistics',
-  market: 'market', goodPrice: 'market', sold: 'store', peak: 'coin', rush: 'clock' };
+  market: 'market', goodPrice: 'market', sold: 'store', peak: 'coin', rush: 'clock', exported: 'logistics' };
 export const KIND_ICON = { income: 'coin', sold: 'store', contracts: 'contracts', upgrades: 'upgrade', trucked: 'logistics', research: 'research' };
 export const section = (title, ...kids) => h('section', { class: 'hq-section' }, h('h3', { text: title }), ...kids);
 /**

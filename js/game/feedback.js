@@ -1,7 +1,8 @@
 // What the player sees, hears and feels when something happens: pop-ins and shock rings, the hooks stations and
-// areas call (pickup, batch, built, hired, sale, payment), the cards and confetti for what the company reports, and feel().
+// areas call (pickup, batch, built, hired, sale, a good put aboard at the quay, payment), the cards and confetti for what the
+// company reports, and feel().
 import * as THREE from 'three';
-import { RANKS, milestoneText } from '../data/company.js';
+import { RANKS, PORT, milestoneText } from '../data/company.js';
 import { ITEMS } from '../data/areas.js';
 import { fmt } from '../format.js';
 import { MOMENTS, feelOf } from '../ui-logic.js';
@@ -88,6 +89,12 @@ export class FeedbackMethods {
     if (this.near(ch.pos.x, ch.pos.z)) this.saleBurst(ch.pos, shop.tillAt, mine);   // a few sparks, or the Sale effect of the credits store (js/game/looks.js)
     this.refreshPlots();
   }
+  /** The player put a good down at the quay: it is in a ship's hold now, not sold. */
+  onLoad(item, ch, quay) {
+    if (!this.company.loadByHand(item, quay.area)) return;
+    this.fx.sum('stored', ch.headPos.clone().add(new THREE.Vector3(0.8, 0.6, 0)), 1);
+    this.sfx.drop(); this.settings.buzz(6);
+  }
   onPay(plot, r) {
     this.hud.setCash(this.econ.cash);
     this.refreshPlots();
@@ -126,6 +133,7 @@ export class FeedbackMethods {
       } else if (e.type === 'rank') {
         const r = RANKS[e.rank];
         card = { title: r.name, desc: 'You reached a new rank', kicker: 'Promoted' };
+        this.refreshPlots();   // a gate that waited for this rank shows its price as one to pay at once
       } else if (e.type === 'ready') {
         if (this.company.mods.autoDeliver) continue;   // the Warehouse Manager is about to deliver it
         card = { title: 'Order ready', desc: `Deliver it to ${e.contract.client} in your Headquarters`, kicker: 'Contract' };
@@ -146,6 +154,12 @@ export class FeedbackMethods {
       } else if (e.type === 'built') {
         card = { symbol: 'construction', title: `${e.build.name} is finished`, desc: `+$${fmt(e.cash)} and +${fmt(e.xp)} experience`, kicker: 'Built' };
         this.hud.setCash(this.econ.cash); this.hud.bumpCash(); this.showSite(false);
+      } else if (e.type === 'ship') {   // a ship of the Port is back from its voyage (Company.shipsHome): the sum is in the cash
+        const route = PORT.routes.find(r => r.id === e.route)?.name || 'its voyage';
+        card = { symbol: 'logistics', title: `Your ship is home from ${route}`, desc: `+$${fmt(e.pay)} for ${fmt(e.goods)} goods sold overseas`, kicker: 'Port' };
+        this.hud.setCash(this.econ.cash); this.hud.bumpCash();
+      } else if (e.type === 'refit') {   // a refit of the Port's ships has all its ship parts (Company.giveRefit)
+        card = { symbol: 'logistics', title: e.refit.name, desc: e.refit.desc, kicker: 'Refit done' };
       } else if (e.type === 'notice') card = e.card;   // more to do: hints, price alerts, rush orders, regular clients: the company words them itself
       if (!card) continue;
       if (MOMENTS[e.type]) this.feel(e.type);

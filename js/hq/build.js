@@ -7,6 +7,7 @@ import { AREAS } from '../data/areas.js';
 import { BUILDS } from '../data/builds.js';
 import { icon } from '../icons.js';
 import { saleLines, bankLines } from '../sim/store.js';
+import { siteHoldText } from '../sim/hqview.js';
 
 export class HqBuild {
   // --- Construction: the building site (js/data/builds.js, and "the building site" in js/sim/company.js) --------
@@ -46,16 +47,20 @@ export class HqBuild {
       h('h4', {}, i < at ? icon('check') : null, h('span', { text: st.name })),
       i === at ? null : h('div', { class: 'hq-sub', text: i < at ? 'Finished' : st.needs.map(needText).join(' and ') })));
     const sendable = c.siteSendable();
+    // A running build comes first: the trucks into the region wait for this stage's goods, and its yards stand still (Company.siteHolds)
+    const holds = c.siteHolds(), regionRuns = c.regionYards.some(id => c.routeDefs.some(d => d.to === id && c.routes[d.id]));
     return [
       section(running.name, note(`Stage ${at + 1} of ${running.stages.length}: ${running.stages[at].name}`),
         ...goods, time ? row('This stage', time) : null,
+        holds.routes.length ? h('p', { class: 'hq-note hq-sale-line warn' }, icon('clock'), h('span', { text: siteHoldText(holds.items.map(label), holds.yards.map(id => AREAS.find(a => a.id === id).name)) })) : null,
         h('div', { class: 'hq-actions wrap' },
           this.switch_('Deliveries to the site', 'site-on', c.site.on, () => { c.setSiteOn(!c.site.on); this.game.save(); this.render(); }),
           this.button_(sendable ? `Send ${fmt(sendable)} from the warehouse` : 'Send from the warehouse', 'site-send', () => this.act('send', () => c.sendToSite()), { disabled: !sendable }),
           go, show),
         note('The building rises as the goods arrive. Go to the site to watch, and to walk into it while it has no roof.'),
-        note(c.site.on ? 'Goods arrive while you play. A rush order is served first, and a contract that needs the same good shares it with the site; time away pays cash as before.'
-          : 'Deliveries are stopped: every good is sold as usual, and the site keeps what it has. Goods arrive while you play.')),
+        // time away pays at the pace the yards earn, which is lower while a stage holds the region's yards (Company.routeHeld)
+        note(c.site.on ? `Goods arrive while you play. A rush order is served first, and a contract that needs the same good shares it with the site; time away pays cash at the pace your yards earn${regionRuns ? ', which is lower while the region stands still for the site' : ''}.`
+          : `Deliveries are stopped: every good is sold as usual${regionRuns ? ', the trucks into the region run' : ''}, and the site keeps what it has. Goods arrive while you play.`)),
       section('Stages', ...stages),
       section('What to build', ...cards),
     ];
@@ -77,7 +82,9 @@ export class HqBuild {
             ? h('button', { class: 'hq-chip travel', 'data-key': 'go-' + a.id, 'aria-label': 'Travel to ' + a.name, onclick: () => { if (this.game.travel(a.id)) this.close(); }, text: a.name + ' ›' })
             : h('span', { class: 'hq-chip dim', text: a.name })))),
           note(open ? 'Tap an open yard to travel there.' : l.opens),
-          l.market && open ? h('div', { class: 'hq-actions' }, this.button_('See the market', 'go-market-' + l.id, () => this.go('market'))) : null);
+          l.market && open ? h('div', { class: 'hq-actions' }, this.button_('See the market', 'go-market-' + l.id, () => this.go('market'))) : null,
+          // the ships take goods made in both locations of PORT, but they lie at the region's quay: the region's card leads to them
+          l.id === 'region' && open ? h('div', { class: 'hq-actions' }, this.button_('See the port', 'go-port-' + l.id, () => this.go('port'))) : null);
       }
       return h('article', { class: 'hq-card place' },
         h('header', {}, h('h4', { text: l.name }), h('span', { class: 'hq-chip', text: 'Coming in a later update' })),
@@ -105,7 +112,7 @@ export class HqBuild {
       h('div', { class: 'hq-sub', text: 'Once you have built far, you may sell the company and found a new one. The sale pays legacy stars, and every star raises all your prices by ' + Math.round(PRESTIGE.starBonus * 100) + '% for good. You never have to.' }),
       h('ul', { class: 'hq-needs' },
         h('li', { text: 'Stays: stars, rank, milestones, achievements, research, managers, reputation.' }),
-        h('li', { text: 'Starts over: cash, yards and upgrades, truck routes, warehouse, contracts.' }),
+        h('li', { text: 'Starts over: cash, yards and upgrades, truck routes, warehouse, contracts, ships and refits.' }),
         h('li', { text: `Each new company is a bigger build: every star also adds ${Math.round(PRESTIGE.costPerStar * 1000) / 10}% to the cost of its upgrades`
           + (PRESTIGE.minYardsPerSale ? `, and each sale needs ${PRESTIGE.minYardsPerSale} more yards built than the one before.` : '.') })),
       o.allowed

@@ -43,6 +43,7 @@ export const MEASURES = {
   sold: { name: 'items brought to the shops' },
   peak: { name: 'earned in one minute', money: true },
   rush: { name: 'rush orders delivered in time', one: 'rush order delivered in time' },
+  exported: { name: 'goods exported' },
 };
 /** "5 contracts delivered", "$1M earned in total": a milestone in words. `fmt` formats the number. */
 export const milestoneText = (m, fmt) => {
@@ -51,12 +52,12 @@ export const milestoneText = (m, fmt) => {
 };
 const steps = (measure, pairs) => pairs.map(([at, xp]) => ({ id: `${measure}:${at}`, measure, at, xp }));
 export const MILESTONES = [
-  ...steps('yards', [[2, 100], [3, 60], [4, 80], [6, 150], [8, 250], [10, 400], [12, 600], [14, 900], [16, 1500], [18, 2000], [20, 3000]]),
+  ...steps('yards', [[2, 100], [3, 60], [4, 80], [6, 150], [8, 250], [10, 400], [12, 600], [14, 900], [16, 1500], [18, 2000], [20, 3000], [22, 4000], [24, 5000]]),
   ...steps('workers', [[4, 50], [12, 150], [24, 400], [32, 700], [40, 1000]]),
   ...steps('income', [[1e5, 60], [1e6, 120], [1e7, 250], [1e8, 500], [1e9, 1000], [1e10, 2000], [1e11, 4000], [1e12, 8000]]),
   ...steps('contracts', [[1, 40], [5, 100], [15, 250], [40, 500], [100, 1000], [250, 2000], [500, 4000]]),
   ...steps('research', [[1, 40], [5, 200], [13, 600], [23, 1500]]),
-  ...steps('routes', [[1, 60], [4, 200], [11, 800], [19, 1200]]),
+  ...steps('routes', [[1, 60], [4, 200], [11, 800], [19, 1200], [25, 1500]]),
   // The newer content. Experience is in line with the steps above: a first step is worth 60 to 150, and the last
   // of a ladder, which takes days of play, 800 to 1,000. 6,610 in all, a sixth of what the older milestones give.
   ...steps('market', [[1000, 150], [10000, 400], [100000, 1000]]),      // a finished Automobile Factory sends about 1,800 cars an hour to its shop
@@ -64,6 +65,7 @@ export const MILESTONES = [
   ...steps('sold', [[10000, 100], [100000, 300], [1000000, 800]]),
   ...steps('peak', [[1e6, 100], [1e8, 300], [1e10, 800]]),              // the most earned in one minute of play
   ...steps('rush', [[1, 60], [10, 250], [50, 800]]),
+  ...steps('exported', [[1000, 150], [10000, 400], [100000, 1000]]),    // a full hold of 600 is a voyage: 100,000 goods are a few days of sailing
 ];
 
 export const WAREHOUSE = { capacity: 60 };   // of each item, before research
@@ -145,6 +147,37 @@ export const MARKET = {
   autoSellLevel: 3,
 };
 
+/**
+ * The port of the International Region (rules in js/sim/port.js and js/sim/company.js). A ship takes finished goods
+ * overseas and comes back with their normal price and a premium. `seconds` is the voyage there and back in seconds of
+ * play; out of sight a ship moves as the workers earn. `locations`: whose goods a ship takes. `part`: the good a refit
+ * is made of. A refit costs `minutes` of the company's reference income when it is started and then takes `parts`
+ * as they reach the shop. The hold, the times and the premiums were set by the simulators (docs/business/ECONOMY_DESIGN.md,
+ * "The International Region: the port and export").
+ *
+ * The premiums were first 10%, 20% and 35%. Measured with the simulator's bot (tests/region.test.mjs), a finished company
+ * fills its hold of 1,350 in 32 minutes and sends every hold to the Far East, which with the Customs office paid 40% on
+ * what went overseas: more than the 25% the design allows export. They are now 8%, 12% and 18%: the Far East with the
+ * Customs office pays 23%, and is still where a finished company sends its ships; a hold that fills at once still goes
+ * along the coast, at 8%, the least export pays; and each destination is the best one for some time of filling (coast
+ * under 15 minutes, the ocean to 35, the Far East beyond, at these voyages). The hold and the voyages stand as guessed.
+ */
+export const PORT = {
+  hold: 300,
+  routes: [
+    { id: 'coast', name: 'Coastal ports', seconds: 300, premium: 0.08 },
+    { id: 'ocean', name: 'Across the ocean', seconds: 900, premium: 0.12 },
+    { id: 'east', name: 'The Far East', seconds: 2400, premium: 0.18 },
+  ],
+  locations: ['metropolis', 'region'],
+  part: 'shippart',
+  refits: [
+    { id: 'hold', name: 'Deeper hold', desc: 'The hold takes 900 goods', parts: 400, minutes: 30, xp: 300, effect: { hold: 900 } },
+    { id: 'turbines', name: 'Turbines', desc: 'Every voyage is another quarter shorter', parts: 800, minutes: 60, xp: 500, effect: { speed: 0.75 } },
+    { id: 'second', name: 'Second ship', desc: 'A second ship, with its own hold and destination', parts: 1500, minutes: 90, xp: 800, effect: { ships: 2 } },
+  ],
+};
+
 export const CATEGORIES = {
   production: { name: 'Production', icon: '⚙️' },
   workforce: { name: 'Workforce', icon: '👷' },
@@ -179,8 +212,8 @@ export const RESEARCH = [
     effect: { type: 'mult', stat: 'upkeep', value: 0.5 } },
   { id: 'salesoffice', cat: 'finance', name: 'Sales office', desc: 'Run two contracts at the same time', cost: 150000, rank: 2,
     effect: { type: 'add', stat: 'contractSlots', value: 1 } },
-  { id: 'nightshift', cat: 'automation', name: 'Night shift', desc: 'While you are away, workers earn 60% for up to 6 hours', cost: 400000, rank: 3,
-    effect: { type: 'set', values: { offlineShare: 0.6, offlineCap: 6 * 3600 } } },
+  { id: 'nightshift', cat: 'automation', name: 'Night shift', desc: 'While you are away, workers earn 6% for up to 6 hours', cost: 400000, rank: 3,
+    effect: { type: 'set', values: { offlineShare: 0.06, offlineCap: 6 * 3600 } } },   // a fifth more than the ordinary share (js/sim/offline.js), and two hours more
   { id: 'payroll', cat: 'workforce', name: 'Payroll system', desc: 'Wages are 25% lower', cost: 900000, rank: 3, needs: ['training'],
     effect: { type: 'mult', stat: 'wage', value: 0.75 } },
   { id: 'negotiation', cat: 'finance', name: 'Negotiation', desc: 'Contracts pay 20% more', cost: 2000000, rank: 3, needs: ['salesoffice'],
@@ -207,6 +240,16 @@ export const RESEARCH = [
     effect: { type: 'set', values: { forecast: true } } },
   { id: 'vault', cat: 'logistics', name: 'Automated storage', desc: 'The warehouse holds half as much again', cost: 4000000000, rank: 5, needs: ['depot'],
     effect: { type: 'mult', stat: 'storage', value: 1.5 } },
+  // Four for the International Region. Their prices stand near the plots of the yards where they start to matter (the
+  // region's plots run from 3 to 200 billion). Task 9's bound test covers the one that raises what a ship pays (Customs office).
+  { id: 'containers', cat: 'logistics', name: 'Containers', desc: 'A ship\'s hold is half as large again', cost: 8000000000, rank: 6, location: 'region',
+    effect: { type: 'mult', stat: 'hold', value: 1.5 } },
+  { id: 'weather', cat: 'logistics', name: 'Weather routing', desc: 'Voyages are a fifth shorter', cost: 20000000000, rank: 6, location: 'region',
+    effect: { type: 'mult', stat: 'voyage', value: 0.8 } },
+  { id: 'customs', cat: 'finance', name: 'Customs office', desc: 'Every destination pays five points more', cost: 50000000000, rank: 6, location: 'region',
+    effect: { type: 'add', stat: 'premium', value: 0.05 } },
+  { id: 'pilot', cat: 'automation', name: 'Harbour pilot', desc: 'A ship whose hold is full sails by itself, to where it sailed last', cost: 100000000000, rank: 6, location: 'region',
+    effect: { type: 'set', values: { autoSail: true } } },
 ];
 
 /** Headquarters tabs. unlock: { contracts: n }, { rank: n } or { location: id } (a yard there is open); none means open from the founding. */
@@ -221,8 +264,9 @@ export const TABS = [
   { id: 'finance', name: 'Finance', icon: '📈', unlock: { rank: 2 }, hint: 'Reach the rank Factory Owner to open the books.' },
   { id: 'market', name: 'Market', icon: '💹', unlock: { location: 'metropolis' }, hint: 'Open Commercial Metropolis to trade on its market.' },
   { id: 'expansion', name: 'Expansion', icon: '🗺️' },
-  { id: 'construction', name: 'Construction', unlock: { yards: 20 }, hint: 'Open all 20 yards to start building.' },   // the building site (js/data/builds.js)
+  { id: 'construction', name: 'Construction', unlock: { yards: 20 }, hint: 'Open the first 20 yards to start building.' },   // the building site (js/data/builds.js)
   { id: 'ranking', name: 'Ranking', icon: '🏆' },
+  { id: 'port', name: 'Port', unlock: { location: 'region' }, hint: 'Open the International Region to export by sea.' },   // the ships of the Port (js/hq/port.js)
   { id: 'records', name: 'Records' },
   { id: 'advisor', name: 'Advisor' },
 ];
@@ -240,10 +284,9 @@ export const LOCATIONS = [
   { id: 'metropolis', name: 'Commercial Metropolis', stage: 3, playable: true, market: true, icon: '🌆',
     pitch: 'Engines, cars, robots and a department store, sold on a market where prices move. Sell when the price is good, or keep goods in the warehouse until it is.',
     opens: 'Finish the Electronics Factory, then pay for the road at its gate.' },
-  { id: 'region', name: 'International Industrial Region', stage: 4, icon: '🚢', rank: 6,
-    pitch: 'Ports, trade routes and regional managers who run whole districts for you.',
-    industries: ['Shipyard', 'Aircraft Manufacturing', 'Advanced Technology'],
-    needs: ['Build up the Metropolis', 'Reach the rank Industrial Tycoon'] },
+  { id: 'region', name: 'International Industrial Region', stage: 4, playable: true, icon: '🚢',
+    pitch: 'A port on the coast. Your ship carries finished goods overseas and comes back with more than the shops pay. Its shipyard, its processors and its aircraft are made of what your other yards can spare.',
+    opens: 'Finish the Department Store and reach the rank Industrial Tycoon, then pay for the road at its gate.' },
   { id: 'global', name: 'Global Business Empire', stage: 5, icon: '🌍', rank: 7,
     pitch: 'Companies on every continent, and the industries of the future.',
     industries: ['Space Industry', 'Global Logistics', 'Research Institutes'],
@@ -332,6 +375,12 @@ export const ACHIEVEMENTS = [
   // Two for the building site (js/data/builds.js): 700 experience on top of what the builds themselves pay.
   { id: 'firsthome', name: 'First home', desc: 'Finish the Family House', measure: 'houseBuilt', at: 1, xp: 300 },
   { id: 'builder', name: 'Master builder', desc: 'Finish all three builds', measure: 'builds', at: 3, xp: 400 },
+  // Five for the International Region: 1,350 experience. (The second ship's id is not 'fleet': Fleet owner, the truck routes, has it.)
+  { id: 'harbour', name: 'Harbour town', desc: 'Open a yard in the International Region', measure: 'regionOpen', at: 1, xp: 200 },
+  { id: 'coastline', name: 'Coastline', desc: 'Build all four yards of the International Region to the last upgrade', measure: 'regionBuilt', at: 4, xp: 400 },
+  { id: 'maiden', name: 'Maiden voyage', desc: 'Bring a ship home from its first voyage', measure: 'voyages', at: 1, xp: 150 },
+  { id: 'fareast', name: 'Old hand', desc: 'Bring a ship home from the Far East ten times', measure: 'voyagesFar', at: 10, xp: 300 },
+  { id: 'secondship', name: 'Two ships', desc: 'Own a second ship', measure: 'ships', at: 2, xp: 300 },
 ];
 
 // ---------------------------------------------------------------- selling the company (phase 4)

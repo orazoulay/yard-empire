@@ -26,6 +26,7 @@ const SHAPES = {
   market: [r(4.5, 11, 3.5, 6, 1), p('M6.25 8.5V11M6.25 17v2.5'), r(10.25, 5.5, 3.5, 7.5, 1), p('M12 3v2.5M12 13v3'), r(16, 9.5, 3.5, 6.5, 1), p('M17.75 7v2.5M17.75 16v3')],   // three price candles
   expansion: [p('M12 21s-6.5-5.7-6.5-11a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11-6.5 11z'), c(12, 10, 2.3)],
   ranking: [p('M8 4h8v5a4 4 0 0 1-8 0z'), p('M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4'), p('M12 13v4M8.5 20.5h7M9.5 17h5')],
+  port: [c(12, 5, 2), p('M12 7v13.5'), p('M8 10h8'), p('M5 14c0 4 3.1 6.5 7 6.5s7-2.5 7-6.5'), p('M3.5 15.5L5 13.5l1.5 2M17.5 15.5l1.5-2 1.5 2')],   // an anchor: a ring, a shank, a crossbar and two flukes
   // what is counted, in goals and milestones
   coin: [c(12, 12, 8.5), p('M14.6 9.4c-.5-.8-1.4-1.3-2.6-1.3-1.5 0-2.6.8-2.6 1.9 0 2.7 5.4 1.3 5.4 4 0 1.1-1.1 1.9-2.8 1.9-1.2 0-2.2-.5-2.7-1.3'), p('M12 6.2v1.9M12 15.9v1.9')],
   store: [p('M4 9.5l1.5-5h13l1.5 5'), p('M4 9.5a2.67 2.67 0 0 0 5.33 0 2.67 2.67 0 0 0 5.34 0 2.67 2.67 0 0 0 5.33 0'), p('M5.5 12.6V20h13v-7.4'), p('M10 20v-4.5h4V20')],
@@ -62,7 +63,8 @@ const SHAPES = {
 };
 
 /** The icon for what an upgrade does, by the type of its effect. */
-export const EFFECT_ICON = { worker: 'team', station: 'businesses', area: 'expansion', speed: 'upgrade', capacity: 'bag', price: 'coin' };   // capacity is not the shop: a bag
+export const EFFECT_ICON = { worker: 'team', station: 'businesses', area: 'expansion', speed: 'upgrade', capacity: 'bag', price: 'coin',   // capacity is not the shop: a bag
+  ship: 'logistics', searoute: 'expansion', hold: 'bag', shipspeed: 'upgrade' };   // the Port's: its ship, a new destination, a deeper hold, faster voyages
 
 /** An SVG element for one of the icons above; an unknown name gives an empty icon of the same size. */
 export function icon(name, cls = '') {

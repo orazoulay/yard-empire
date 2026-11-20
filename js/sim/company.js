@@ -4,10 +4,11 @@
 //
 // The company sits beside the Economy: it reads cash, upgrades and open yards from it, changes cash only
 // through addCash / spend, and is saved inside the Economy's save as `company`.
-import { FINANCE, RANKS, MILESTONES, WAREHOUSE, CONTRACTS, ROUTES, RESEARCH, TABS, STAFF, STAFF_RULES, GOALS, ACHIEVEMENTS, PRESTIGE, EVENTS, EVENT_GOAL, LOCATIONS, RUSH, CLIENTS, STREAK, MARKET } from '../data/company.js';
+import { FINANCE, RANKS, MILESTONES, WAREHOUSE, CONTRACTS, ROUTES, RESEARCH, TABS, STAFF, STAFF_RULES, GOALS, ACHIEVEMENTS, PRESTIGE, EVENTS, EVENT_GOAL, LOCATIONS, RUSH, CLIENTS, STREAK, MARKET, PORT } from '../data/company.js';
 import { BUILDS, SITE } from '../data/builds.js';
 import { RateMeter, OFFLINE_CAP_SECONDS, OFFLINE_EFFICIENCY } from './offline.js';
 import { Market } from './market.js';
+import { Port } from './port.js';
 import { CREDITS } from '../data/credits.js';
 import { UNCHECKED } from './sync.js';
 import { MAX_FLAGS, MAX_BOOSTS, seasonState, loadStore, storeJSON, storeMods, tickStore, useFlag, flagValue, itemDoing, bankAdd, bankCap, bankNow, seasonStep, seasonPoints, startEvent } from './store.js';
@@ -18,7 +19,8 @@ const BOOK_KEYS = ['sales', 'supplied', 'stocked', 'site', 'materials'];   // si
 const PERIODS = ['daily', 'weekly', 'event'];   // the lists of goals a player can collect from
 // The last five came with the records: market goods sold, how many of them from the warehouse at a good and at a top price, rush orders made and missed.
 const STAT_KEYS = ['income', 'costs', 'contracts', 'trucked', 'sold', 'byHand', 'projects', 'bestContract', 'dailySets', 'autoDelivered',
-  'marketSold', 'marketGood', 'marketTop', 'rush', 'rushLate'];
+  'marketSold', 'marketGood', 'marketTop', 'rush', 'rushLate',
+  'exported', 'voyages', 'voyagesFar'];   // the last three came with the port: goods shipped, voyages home, and those to the farthest destination
 const SLOW_TICK = 0.5;   // seconds between the cheap housekeeping passes
 const CLIENT_NAMES = new Set(CONTRACTS.kinds.flatMap(k => k.clients));   // the only names the client book keeps, so it cannot grow
 const CLIENT_MAX = 9999;
@@ -49,7 +51,11 @@ function rand(seed) {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
-/** Dollars per second a fully built yard adds, by yard index: what wages and upkeep are a share of. */
+/**
+ * Dollars per second a fully built yard adds, by its step of the income ladder (Company.step, not its index in AREAS:
+ * the Port takes no step, so from the Shipyard on an index is one step too many, 2.2 times the figure): what wages and
+ * upkeep are a share of.
+ */
 export const refIncome = i => (i <= 0 ? FINANCE.baseIncome : FINANCE.baseIncome * Math.pow(FINANCE.growth, i) * (1 - 1 / FINANCE.growth));
 export const rankOf = xp => RANKS.reduce((best, r, i) => (xp >= r.xp ? i : best), 0);
 /**
@@ -94,6 +100,10 @@ export class Company {
   constructor({ econ, areas, items, recipes }, saved = null) {
     this.econ = econ; this.areas = areas; this.items = items; this.recipes = recipes;
     this.index = new Map(areas.map((a, i) => [a.id, i]));
+    // The income ladder: every yard is one step (x2.2), except a yard marked `ladder: false` (the Port: no machine and
+    // no workers), which stands on the step of the yard before it and adds nothing to what the company is built for.
+    let step = -1;
+    this.step = new Map(areas.map(a => [a.id, a.ladder === false ? Math.max(step, 0) : ++step]));
 
     // Which recipe a yard runs, and which yard makes each item: both read from the yard data.
     this.yardRecipe = {}; this.maker = {};
@@ -112,6 +122,10 @@ export class Company {
     this.marketYards = areas.filter(a => trading.has(a.location)).map(a => a.id);
     const marketGoods = this.marketYards.map(id => recipes[this.yardRecipe[id]]?.output).filter(Boolean);
     this.metroYards = areas.filter(a => a.location === 'metropolis').map(a => a.id);   // the ninth rank asks for these, fully built
+    this.regionYards = areas.filter(a => a.location === 'region').map(a => a.id);
+    // Goods made where ships load: they can go overseas (js/sim/port.js).
+    const exporting = new Set(PORT.locations);
+    const exportGoods = areas.filter(a => exporting.has(a.location)).map(a => recipes[this.yardRecipe[a.id]]?.output).filter(Boolean);
     // A truck route exists wherever one yard's product is another yard's input.
     this.routeDefs = [];
     for (const a of areas) {
@@ -158,6 +172,7 @@ export class Company {
     this.legacy = { stars: num(s?.legacy?.stars), sales: num(s?.legacy?.sales) };   // from selling the company: kept for good
     this.away = { day: num(s?.away?.day), used: num(s?.away?.used) };               // seconds of today's time-away allowance already paid
     this.market = new Market(marketGoods, s?.market);                               // seed, clock and held goods; absent in older saves
+    this.port = new Port(exportGoods, s?.port);                                     // ships, holds, marks and the refit; absent in older saves
     // Records: what the company keeps count of for good. `partial` marks a game that was already running when
     // records were added, whose time played and goods are therefore counted from that day only.
     this.records = { goods: {}, peakMinute: num(s?.records?.peakMinute), played: num(s?.records?.played),
@@ -171,7 +186,7 @@ export class Company {
     // Things that happen once: the three first-time hints, and the Metropolis fully built (the ninth rank asks for it).
     // A game saved before the hints existed is not told about a market it has traded on, or a sale it has made.
     this.seen = { market: s?.seen ? !!s.seen.market : this.market.t > 300, sale: s?.seen ? !!s.seen.sale : this.legacy.sales > 0,
-      rush: !!s?.seen?.rush, metropolis: !!s?.seen?.metropolis, site: !!s?.seen?.site };
+      rush: !!s?.seen?.rush, metropolis: !!s?.seen?.metropolis, site: !!s?.seen?.site, port: !!s?.seen?.port };
     this.site = readSite(s?.site);                                                  // the building site (js/data/builds.js); absent in older saves
     // The credits store (js/sim/store.js): the receipts already applied, the boosts that run and the flags that wait.
     // Absent in older saves, and written only once something was bought. What is owned for good is not in the save:
@@ -209,6 +224,11 @@ export class Company {
     // milestones it already meets without a celebration for each.
     if (!s) this.stats.income = econ.cash + Object.values(econ.paid).reduce((a, b) => a + num(b), 0);
     this.costTable = []; this.costPerSec = 0; this.salaryPerSec = 0;
+    // A refit that has all its parts already (a hand-made save, or a refit whose parts were lowered since) finishes now,
+    // through the code that finishes one when its last part arrives; and the fleet is made what the plots and refits
+    // say before the achievements are counted, so that a ship a save has too many earns nothing.
+    this.giveRefit(0);
+    this.port.ensure(this.shipCount());
     this.sync(true);
     this.refreshCosts();
     for (const c of this.active) if (this.ready(c)) this.readyIds.add(c.id);
@@ -224,6 +244,7 @@ export class Company {
       team: this.team, settings: this.settings, badges: this.badges, goals: this.goals,
       legacy: this.legacy, away: { day: this.away.day, used: Math.round(this.away.used) },
       ...(this.market.open ? { market: this.market.toJSON() } : {}),   // only once the market has opened: older saves stay as they were
+      ...(this.port.open ? { port: this.port.toJSON() } : {}),   // only once a ship is bought: older saves stay as they were
       records: { goods: this.records.goods, peakMinute: Math.round(this.records.peakMinute), played: Math.round(this.records.played), partial: this.records.partial },
       streak: this.streak, clients: this.clients, seen: this.seen, rushIn: Math.round(this.rushIn),
       ...(this.name ? { name: this.name } : {}),
@@ -261,6 +282,7 @@ export class Company {
   /** Fold every researched effect into plain numbers, and hand price and speed to the Economy. */
   applyMods() {
     const m = { price: 1, speed: 1, workerSpeed: 1, wage: 1, upkeep: 1, storage: 1, routeRate: 1, contractPay: 1, contractSlots: 0, offlineShare: null, offlineCap: null, routes: false,
+      hold: 1, voyage: 1, premium: 0, autoSail: false,   // the port: the hold's size, the voyage's time, the premium added, a ship that sails by itself when full
       autoDeliver: false, autoAccept: false, autoBuy: false, researchCost: 1, truckFee: 1, clientBonus: 1, forecast: false,
       capacity: 1, crew: 0,     // these two are the store's: what the player carries, and extra workers in every yard
       dailyGoals: 0, familyYard: 0,   // and these: daily goals beyond the usual three, and (above 0) the first yard kept through a sale
@@ -281,10 +303,14 @@ export class Company {
       else if (e.type === 'set') Object.assign(m, e.values);
     }
     m.price *= 1 + PRESTIGE.starBonus * this.legacy.stars;   // legacy stars from companies sold
+    // The price without the timed boosts, for a ship's sum: the same fold with the store's boosts left out. No division: a factor
+    // that is zero or odd cannot break it. (No event changes a price: EVENTS in js/data/company.js; one an Event ticket started is a boost, timed.)
+    const kept = { ...m };
+    storeMods(kept, { store: { boosts: [] } }, this.owns, this.wall(), this.catalog, this.storeLevel);
     storeMods(m, this, this.owns, this.wall(), this.catalog, this.storeLevel);   // the credits store: what is owned for good, at its level, and the boosts that run
     for (const event of this.eventsNow()) apply(event.effect);   // today's event, and those an Event ticket of the credits store started
     this.mods = m;
-    this.econ.boost = { price: m.price, speed: m.speed, capacity: m.capacity };
+    this.econ.boost = { price: m.price, kept: kept.price, speed: m.speed, capacity: m.capacity };
   }
   /**
    * Who says what is owned in the credits store: (itemId) => boolean, the server's answer in this visit. Anything else: nothing is owned.
@@ -320,6 +346,8 @@ export class Company {
     if (next?.needs && !this.seen[next.needs]) next = { ...next, name: `${next.name}, ${next.needsText}` };
     return { index: i, name: cur.name, icon: cur.icon, xp: this.xp, next, progress: next ? Math.min(1, (this.xp - cur.xp) / (next.xp - cur.xp)) : 1 };
   }
+  /** How many truck routes the company owns: only ids of real routes count (a save may list others; they are kept, not counted). */
+  routesOwned() { return this.routeDefs.reduce((n, d) => n + (d.id in this.routes ? 1 : 0), 0); }
   measure(name) {
     switch (name) {
       case 'yards': return this.econ.areas.length;
@@ -327,12 +355,13 @@ export class Company {
       case 'income': return this.stats.income;
       case 'contracts': return this.stats.contracts;
       case 'research': return Object.values(this.research).reduce((a, b) => a + b, 0);
-      case 'routes': return Object.keys(this.routes).length;
+      case 'routes': return this.routesOwned();
       case 'market': return this.stats.marketSold;
       case 'goodPrice': return this.stats.marketGood;
       case 'sold': return this.stats.sold;
       case 'peak': return this.records.peakMinute;
       case 'rush': return this.stats.rush;
+      case 'exported': return this.stats.exported;
       default: return 0;
     }
   }
@@ -381,6 +410,10 @@ export class Company {
       seen.site = true;
       this.events.push({ type: 'site' });   // the game shows the plot, and words the card
     }
+    if (this.port.open && !seen.port) {
+      seen.port = true;
+      this.notice('The Port', 'Your ship is at the quay', 'Mark a good for export on the Port tab, let the hold fill, and send the ship. It pays more than the shops when it is back.', 'expansion');
+    }
     if (!seen.rush && this.offers.some(o => o.limit)) {
       seen.rush = true;
       this.notice('Contract', 'A rush order came in', `It pays more, but the goods must be in the warehouse in time. Running out costs ${RUSH.repLoss} reputation.`, 'clock');
@@ -417,13 +450,14 @@ export class Company {
   }
   /** Wages and upkeep per second for every open yard. Nothing is charged before the founding. */
   refreshCosts() {
+    this.port.ensure(this.shipCount());
     this._staff = null;
     const staff = this.staff();
     this.costTable = []; this.costPerSec = 0; this.salaryPerSec = 0;
     for (const a of this.areas) {
       const s = staff.yards[a.id];
       if (!s) continue;
-      const ref = this.founded ? refIncome(this.index.get(a.id)) : 0;
+      const ref = this.founded ? refIncome(this.step.get(a.id)) : 0;
       const row = { id: a.id, wages: s.workers * ref * FINANCE.wageShare * this.mods.wage, upkeep: s.machines * ref * FINANCE.upkeepShare * this.mods.upkeep };
       this.costTable.push(row);
       this.costPerSec += row.wages + row.upkeep;
@@ -461,6 +495,7 @@ export class Company {
     }
     if (this.founded && this.costPerSec > 0) this.charge(this.costPerSec * dt);
     if (this.market.open && this.marketOpen()) this.market.tick(dt);   // the market's clock is play time: it stands still while the player is away
+    if (this.port.open) this.shipsHome(this.port.tick(dt));   // a voyage is play time, like the market's clock
     this.clock += dt;
     if (this.clock < SLOW_TICK) return;
     const t = this.clock; this.clock = 0;
@@ -478,6 +513,7 @@ export class Company {
     if (tickStore(this, this.wall())) this.applyMods();   // a boost of the credits store ran out
     seasonStep(this);                                     // the month turned: the season closes, and a new one begins
     this.manage();
+    this.pilot();
     this.sync();
   }
 
@@ -487,14 +523,12 @@ export class Company {
    * and pays nothing now; otherwise it is sold. A good the player holds back goes to the warehouse too.
    * `price` is what the item sells for now, market included. Pay for time away must not be measured with it
    * but with the normal price (econ.price), or leaving the game at a high price would pay that price for hours.
-   * @returns {{ price: number, cash: number, stocked: boolean, site?: boolean }}  site: it went to the building site
+   * @returns {{ price: number, cash: number, stocked: boolean, site?: boolean, loaded?: boolean, refit?: boolean }}
+   *   site: it went to the building site; loaded: it went aboard the ship at the quay; refit: it went into the running refit
    */
   sale(item, areaId, byPlayer = false) {
     const normal = this.econ.price(item), price = normal * this.market.factor(item);
-    this.stats.sold++; if (byPlayer) this.stats.byHand++;
-    this.records.goods[item] = (this.records.goods[item] || 0) + 1;
-    if (!this.shopFlow.has(item)) this.shopFlow.set(item, new RateMeter(0, FINANCE.rateMemory));
-    this.shopFlow.get(item).add(1);
+    this.counted(item, byPlayer);
     // The building site takes what its stage needs, before goods the player holds back for the market (those are held
     // back to be sold later). A rush order comes first: its clock runs. Any other contract that needs the same good
     // shares it with the site, one good each, so that neither stands still for as long as the other takes.
@@ -502,6 +536,20 @@ export class Company {
       this.book(areaId).site.add(normal);   // not sold: booked at the normal price, like a good stocked for a contract
       this.give(item, 1);
       return { price, cash: 0, stocked: true, site: true };
+    }
+    // A running contract comes first (the site's branch above shares with it). Then a refit, then the ship, then a market good the player keeps (wanted() below).
+    const forOrder = this.founded && this.contractsShort(item) > 0;
+    if (!forOrder && this.refitWants(item) > 0) {
+      this.book(areaId).stocked.add(normal);   // not sold: booked at the normal price, like a good stocked for a contract
+      this.giveRefit(1);
+      return { price, cash: 0, stocked: true, refit: true };
+    }
+    if (!forOrder && this.exportWants(item)) {
+      this.port.load(item, this.holdSize());
+      const kept = this.econ.keptPrice(item);   // a ship's cargo counts without a timed boost, where the ship's sum does (holdValue)
+      this.book(areaId).stocked.add(kept);   // not sold yet: booked like a good stocked for a contract, at the price the ship will pay
+      this.aboard(kept);
+      return { price, cash: 0, stocked: true, loaded: true };
     }
     if (this.founded && this.wanted(item) > 0) {
       this.stock[item] = (this.stock[item] || 0) + 1;
@@ -517,10 +565,174 @@ export class Company {
     if (this.market.trades(item)) this.stats.marketSold++;
     return { price, cash: price, stocked: false };
   }
-  /** Something was sold: a good at a shop, goods from the warehouse, a contract. The piggy bank of the credits store gets its share on top (js/sim/store.js, bankAdd). */
+  // --- the port ------------------------------------------------------------------------
+  /** One good reached a shop or the quay: the counters every such good moves. */
+  counted(item, byPlayer) {
+    this.stats.sold++; if (byPlayer) this.stats.byHand++;
+    this.records.goods[item] = (this.records.goods[item] || 0) + 1;
+    if (!this.shopFlow.has(item)) this.shopFlow.set(item, new RateMeter(0, FINANCE.rateMemory));
+    this.shopFlow.get(item).add(1);
+  }
+  /** Ships the company owns: one with the Port's first plot, two after the Second ship refit. */
+  shipCount() { return this.econ.unlockedEffects('ship').length ? (this.port.refit.done.includes('second') ? 2 : 1) : 0; }
+  /** Goods one hold takes: the largest the plots and refits give, times what research adds. */
+  holdSize() {
+    const plots = this.econ.unlockedEffects('hold').map(e => e.value);
+    const refits = PORT.refits.filter(r => r.effect.hold && this.port.refit.done.includes(r.id)).map(r => r.effect.hold);
+    return Math.round(Math.max(PORT.hold, ...plots, ...refits) * this.mods.hold);
+  }
+  /** Every destination as it stands for this company: [{ id, name, seconds, premium, open }]. */
+  seaRoutes() {
+    const charts = new Set(this.econ.unlockedEffects('searoute').map(e => e.route));
+    const faster = this.econ.unlockedEffects('shipspeed').reduce((m, e) => m * e.mult, 1)
+      * PORT.refits.filter(r => r.effect.speed && this.port.refit.done.includes(r.id)).reduce((m, r) => m * r.effect.speed, 1) * this.mods.voyage;
+    return PORT.routes.map((r, i) => ({ id: r.id, name: r.name, seconds: Math.max(30, Math.round(r.seconds * faster)),
+      premium: Math.round((r.premium + this.mods.premium) * 1000) / 1000, open: this.port.open && (i === 0 || charts.has(r.id)) }));
+  }
+  /**
+   * What is in a hold at the normal price, without a timed price boost of the credits store (econ.keptPrice): what unloading
+   * pays, and what a premium is added to. A boost multiplies the shops' sales, never a ship's cargo (the owner's ruling of 20 November 2026).
+   */
+  holdValue(ship) { let v = 0; for (const item in ship.hold) v += ship.hold[item] * this.econ.keptPrice(item); return v; }
+  /** 1 when one more of a marked `item` would go aboard now. */
+  exportWants(item) { return this.port.marks[item] && this.port.berth(this.holdSize()) ? 1 : 0; }
+  /** The quay takes `item` from someone's hands: a good ships carry, and a ship at the quay with room. */
+  quayTakes(item) { return this.port.takes(item) && !!this.port.berth(this.holdSize()); }
+  setExport(item, on) { return this.port.open && this.port.mark(item, on); }
+  /** Refits can be started: there is a ship, and the yard that makes ship parts is open. */
+  refitOpen() { const yard = this.maker[PORT.part]; return this.port.open && !!yard && this.econ.areaOpen(yard); }
+  /** What starting a refit costs: minutes of the income this company is built for, as it is now. */
+  refitCost(refit) { return Math.round(refit.minutes * 60 * this.goalRef()); }
+  /** Every refit with where it stands: done, running, ready (it can be started now) or later. */
+  refitList() {
+    const at = this.port.refit.at, free = this.refitOpen() && !at;
+    return PORT.refits.map(refit => ({ refit, cost: this.refitCost(refit), given: at === refit.id ? this.port.refit.given : 0,
+      state: this.port.refit.done.includes(refit.id) ? 'done' : at === refit.id ? 'running' : free ? 'ready' : 'later' }));
+  }
+  /** Start a refit and pay for it. One runs at a time. @returns whether it started */
+  startRefit(id) {
+    const row = this.refitList().find(r => r.refit.id === id);
+    if (!row || row.state !== 'ready' || !this.econ.spend(row.cost)) return false;
+    this.spent += row.cost;
+    Object.assign(this.port.refit, { at: id, given: 0 });
+    return true;
+  }
+  /** How many more of `item` the running refit takes from the shops. */
+  refitWants(item) {
+    const r = item === PORT.part ? PORT.refits.find(x => x.id === this.port.refit.at) : null;
+    return r ? r.parts - this.port.refit.given : 0;
+  }
+  /** `n` ship parts reach the refit. With all of them it is done, and the fleet is what the refit makes it. */
+  giveRefit(n) {
+    const r = PORT.refits.find(x => x.id === this.port.refit.at);
+    if (!r) return;
+    this.port.refit.given += n;
+    if (this.port.refit.given < r.parts) return;
+    this.port.refit.done.push(r.id);
+    Object.assign(this.port.refit, { at: null, given: 0 });
+    this.port.ensure(this.shipCount());
+    this.gainXp(r.xp);
+    this.events.push({ type: 'refit', refit: r });
+  }
+  /** The player put one `item` down at the quay. @returns whether it went aboard */
+  loadByHand(item, areaId) {
+    if (!this.quayTakes(item)) return false;
+    this.counted(item, true);
+    this.port.load(item, this.holdSize());
+    const kept = this.econ.keptPrice(item);   // as in sale(): the price a ship's sum is made of
+    this.book(this.maker[item] || areaId).stocked.add(kept);
+    this.aboard(kept);
+    return true;
+  }
+  /** What `ship` would bring home from destination `route` (one of seaRoutes()), sailing now. */
+  voyagePay(ship, route) { return this.holdValue(ship) * (1 + route.premium); }
+  /** Send ship `i` to a destination that is open. The premium is fixed now. */
+  sendShip(i, routeId) {
+    const r = this.seaRoutes().find(x => x.id === routeId && x.open), ship = this.port.ships[i];
+    return !!r && !!ship && this.port.send(i, r.id, r.seconds, this.voyagePay(ship, r));
+  }
+  /** Sell what is in ship `i` at the quay, at the normal price. @returns the cash */
+  unloadShip(i) {
+    const ship = this.port.ships[i];
+    if (!ship) return 0;
+    const cash = this.holdValue(ship);
+    if (!this.port.unload(i)) return 0;
+    this.earn(cash);   // earn, not income: a hold emptied at once must not be "the most earned in one minute", and its goods were in the shown income as they went aboard (aboard)
+    return cash;
+  }
+  /**
+   * Ships came home: each is paid its sum and counted.
+   * @param told  the player is told of them another way (the welcome-back sheet): no card of their own
+   * @returns the cash
+   */
+  shipsHome(list, told = false) {
+    let cash = 0;
+    for (const h of list) {
+      this.earn(h.pay); cash += h.pay;
+      this.stats.exported += h.goods; this.stats.voyages++;
+      if (h.route === PORT.routes.at(-1).id) this.stats.voyagesFar++;
+      if (!told) this.events.push({ type: 'ship', ...h });
+    }
+    return cash;
+  }
+  /**
+   * Time out of sight: every ship at sea moves `seconds` of voyage (the caller has applied the share).
+   * @param told  the welcome-back sheet will say which ships came home: they get no card or toast of their own as well
+   */
+  shipsAway(seconds, told = false) {
+    const home = this.port.tick(seconds);
+    return { ships: home.length, cash: this.shipsHome(home, told) };
+  }
+  /**
+   * Everything the Port tab shows, as figures: the tab holds no rules of its own.
+   * A ship's `pays` is what it would bring home from each destination if it sailed now; `pay` is what one at sea sailed with.
+   * A refit's `afford` says whether the cash covers its price now.
+   */
+  portReport() {
+    const size = this.holdSize(), routes = this.seaRoutes();
+    return {
+      routes,
+      boosted: !!this.mods.timed?.price,   // a timed price boost of the credits store runs: it reaches the shops, never a ship's cargo (holdValue)
+      ships: this.port.ships.map((ship, index) => ({ index, atSea: this.port.atSea(ship), left: ship.left, total: ship.total, route: ship.route, next: ship.next,
+        aboard: this.port.aboard(ship), size, value: this.holdValue(ship), pay: ship.pay,
+        pays: Object.fromEntries(routes.map(r => [r.id, this.voyagePay(ship, r)])) })),
+      goods: this.port.goods.map(item => ({ item, label: this.items[item].label, marked: !!this.port.marks[item], open: this.econ.areaOpen(this.maker[item]), price: this.econ.keptPrice(item) })),   // what a ship pays (not the shops' boosted price), so the rows agree with the hold's value and the pays
+      refits: this.refitList().map(r => ({ ...r, afford: this.econ.cash >= r.cost })), refitOpen: this.refitOpen(),
+      steps: [['Buy the cargo ship', 'It lies at the quay of the Port.', this.port.open],
+        ['Mark a good for export', 'It goes aboard instead of being sold.', this.port.open && (Object.keys(this.port.marks).length > 0 || this.stats.voyages > 0)],
+        ['Send the ship', 'It pays more than the shops when it is back.', this.stats.voyages > 0 || this.port.ships.some(s => s.left > 0)]],
+    };
+  }
+  /** The Harbour pilot: a ship whose hold is full sails by itself, to where it sailed last. */
+  pilot() {
+    if (!this.mods.autoSail) return;
+    this.port.ships.forEach((ship, i) => { if (!this.port.atSea(ship) && this.port.aboard(ship) >= this.holdSize()) this.sendShip(i, ship.next); });
+  }
+
+  // Three meters of what comes in, kept apart:
+  //   - stats.income, what the company earned: every dollar of cash that comes in (income and earn). The goals, the
+  //     milestones and the ranking bound's test read it.
+  //   - flow.income, the shown income: a rate over the last minute that summary() reads (the profit beside the cash,
+  //     Finance, the Overview, the company's value). Sales (income) and goods that go aboard (aboard) feed it.
+  //   - minute.sum, "earned in one minute" (records.peakMinute): sales only (income).
+  /** Something was sold: a good at a shop, goods from the warehouse, a contract. All three meters; the piggy bank of the credits store gets its share on top (js/sim/store.js, bankAdd). */
   income(amount) { this.econ.addCash(amount); this.stats.income += amount; this.flow.income.add(amount); this.minute.sum += amount; bankAdd(this, amount); }
-  /** Income that should not move the per-minute figures (pay for time away). */
+  /**
+   * Cash that is not a sale of this moment: pay for time away, a goal's reward, a finished build, a ship home, a hold
+   * unloaded. It is earned (stats.income) and moves neither the shown income nor "earned in one minute", and puts
+   * nothing in the piggy bank. A ship's goods were in the shown income as they went aboard (aboard); its premium shows
+   * where the ship's sum does (the Port tab, the ship's card), not as a lump in a one-minute meter.
+   */
   earn(amount) { this.econ.addCash(amount); this.stats.income += amount; }
+  /**
+   * A good went aboard a ship: it counts in the shown income at its normal price now (`amount`: econ.keptPrice, the price without a timed boost of the credits store, as the ship's sum has it; never the
+   * market's, never a premium), as a worker's good counts in the pay for time away, sold or loaded
+   * (js/game/feedback.js). Nothing else moves: no cash, no stats.income, no "earned in one minute", no piggy bank; the
+   * cash comes through earn() when the ship is home or the hold is unloaded, and neither counts the goods again here.
+   * A hold thrown away by a sale of the company was counted here and never paid: the meter is a one-minute rate, and
+   * the sale sets its rate to nothing (sell).
+   */
+  aboard(amount) { this.flow.income.add(amount); }
   /** A machine finished `n` batches: book the inputs another yard made as its income and this yard's materials. */
   batch(areaId, recipeId, n = 1) {
     if (!this.founded) return;
@@ -714,7 +926,7 @@ export class Company {
     let value = 0, tier = 0;
     for (const [item, qty] of contract.needs) {
       value += this.econ.price(item) * qty;
-      tier = Math.max(tier, this.index.get(this.maker[item]) || 0);
+      tier = Math.max(tier, this.step.get(this.maker[item]) || 0);
     }
     const repBonus = 1 + Math.min(this.rep, CONTRACTS.repCap) * CONTRACTS.repBonus;
     const loyal = 1 + this.clientBonus(contract.client);   // a regular client pays a little more
@@ -917,7 +1129,8 @@ export class Company {
     let lock = null;
     if (!this.mods.routes) lock = 'Research Trucking first';
     else if (!this.econ.areaOpen(def.from) || !this.econ.areaOpen(def.to)) lock = 'Open both yards first';
-    return { owned: !!this.routes[def.id], lock, affordable: this.econ.cash >= def.cost, perMinute: (this.trips.get(def.id)?.rate || 0) * 60 };
+    // held: why an owned route stands still for the building site (routeHeld), or null
+    return { owned: !!this.routes[def.id], lock, affordable: this.econ.cash >= def.cost, perMinute: (this.trips.get(def.id)?.rate || 0) * 60, held: this.routeHeld(def) };
   }
   buyRoute(id) {
     const def = this.routeDefs.find(d => d.id === id);
@@ -934,6 +1147,9 @@ export class Company {
     if (!this.mods.routes) return;
     for (const d of this.routeDefs) {
       if (!this.routes[d.id]) continue;
+      // A running build comes first (routeHeld): the truck stands, with what it had towards its next load and no more,
+      // so that once released it carries at its rate and not in a burst. No fee, no trip.
+      if (this.holds(d)) { this.acc[d.id] = Math.min(1, this.acc[d.id] || 0); continue; }
       let acc = (this.acc[d.id] || 0) + ROUTES.rate * this.mods.routeRate * dt;
       while (acc >= 1) {
         if (!move(d)) { acc = 1; break; }   // the truck waits, loaded
@@ -946,6 +1162,43 @@ export class Company {
       this.acc[d.id] = acc;
     }
   }
+  /**
+   * A running build comes first (the owner's rule of 20 November 2026, chosen from three that were measured): while a
+   * stage of the building site still asks for a good, the trucks into the International Region leave that good at the
+   * shops, where the site takes it; the rest of the time the region runs at full. The region's machines are 1 : 1 on
+   * chairs and cars and took every one that was made, so a build that asked for them never finished. Routes into the
+   * city and the Metropolis are never held. The rule reads the site's own state (saved already), so nothing is saved
+   * for it, and the game and the simulators share it because both run their trucks through runRoutes().
+   * holds(d) is the rule; routeHeld(d) says it for the screen.
+   */
+  holds(d) { return !!this.routes[d.id] && this.regionYards.includes(d.to) && this.siteWants(d.item) > 0; }
+  /** @returns why an owned route does not carry now, in the player's words, or null when it carries */
+  routeHeld(d) { return this.holds(d) ? `Waiting: the building site needs ${this.items[d.item].label}` : null; }
+  /**
+   * What the rule holds back now, for the screens: the routes that stand, the goods of the stage they wait for (in the
+   * stage's order), and the yards of the region that stand still for it: those the held routes go into, and those
+   * whose material comes from one of them (the Aircraft Factory takes the processors Advanced Technology makes).
+   * because: per yard that stands still, the held goods that stop it (its own held routes', or those of the yard it is fed from).
+   */
+  siteHolds() {
+    const routes = this.routeDefs.filter(d => this.holds(d)), order = this.siteNeeds().map(g => g.item);
+    const because = new Map();
+    for (const d of routes) because.set(d.to, new Set([...(because.get(d.to) || []), d.item]));
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const d of this.routeDefs) {
+        if (!this.routes[d.id] || !because.has(d.from) || !this.regionYards.includes(d.to)) continue;
+        const had = because.get(d.to) || new Set(), now = new Set([...had, ...because.get(d.from)]);
+        if (now.size > had.size) { because.set(d.to, now); grew = true; }
+      }
+    }
+    const inOrder = set => order.filter(item => set.has(item));
+    return { routes: routes.map(d => d.id), items: order.filter(item => routes.some(d => d.item === item)),
+      yards: this.regionYards.filter(id => because.has(id)),
+      because: Object.fromEntries(this.regionYards.filter(id => because.has(id)).map(id => [id, inOrder(because.get(id))])) };
+  }
+  /** A machine of yard `areaId` waits for `item` because the building site comes first: its route into the yard is held. */
+  heldForSite(areaId, item) { return this.routeDefs.some(d => d.to === areaId && d.item === item && this.holds(d)); }
 
   // --- reports (dollars per second) ------------------------------------------------------
   invested() { return this.spent + Object.values(this.econ.paid).reduce((a, b) => a + num(b), 0); }
@@ -974,10 +1227,10 @@ export class Company {
    */
   companyRef() {
     let sum = 0;
-    this.areas.forEach((a, i) => {
-      if (!this.econ.areaOpen(a.id)) return;
+    this.areas.forEach(a => {
+      if (a.ladder === false || !this.econ.areaOpen(a.id)) return;
       const built = a.upgrades.filter(u => this.econ.has(u.id)).length / Math.max(1, a.upgrades.length);
-      sum += refIncome(i) * built;
+      sum += refIncome(this.step.get(a.id)) * built;
     });
     return sum;
   }
@@ -988,21 +1241,26 @@ export class Company {
    * equal share of that yard's reference income, at today's prices. A gate earns nothing by itself, so it stands for
    * the whole yard behind it: `cost` is the gate and every purchase of that yard, `gain` that yard's reference income,
    * and `opens` its name.
+   * A yard off the ladder (`ladder: false`: the Port) is built to earn nothing by itself, so a purchase in it and the
+   * gate into it carry a gain of 0 and, instead, `does`: what they do, in the player's words (the plot's own text, or
+   * that the goods can go overseas, for the gate). The gate out of it opens a yard that earns, and is reckoned as any gate.
    */
   nextPurchases() {
     const out = [], price = this.mods.price;
-    this.areas.forEach((a, i) => {
+    this.areas.forEach(a => {
       if (!this.econ.areaOpen(a.id)) return;
       const u = this.econ.nextUpgrade(a.id);
-      if (!u) return;
+      if (!u || this.econ.lockOf(u.id)) return;   // a gate that needs a rank the company has not got is not an advice
       if (u.effect.type !== 'area') {
-        out.push({ id: u.id, yard: a.id, name: a.name, label: u.label, cost: this.econ.remaining(u.id), gain: refIncome(i) / Math.max(1, a.upgrades.length) * price, opens: null });
+        if (a.ladder === false) { out.push({ id: u.id, yard: a.id, name: a.name, label: u.label, cost: this.econ.remaining(u.id), gain: 0, opens: null, does: u.desc }); return; }
+        out.push({ id: u.id, yard: a.id, name: a.name, label: u.label, cost: this.econ.remaining(u.id), gain: refIncome(this.step.get(a.id)) / Math.max(1, a.upgrades.length) * price, opens: null });
         return;
       }
       const j = this.index.get(u.effect.area), next = this.areas[j];
       if (!next) return;
       const cost = next.upgrades.reduce((sum, x) => sum + this.econ.remaining(x.id), this.econ.remaining(u.id));
-      out.push({ id: u.id, yard: a.id, name: a.name, label: u.label, cost, gain: refIncome(j) * price, opens: next.name });
+      if (next.ladder === false) { out.push({ id: u.id, yard: a.id, name: a.name, label: u.label, cost, gain: 0, opens: next.name, does: 'Your goods can go overseas by ship' }); return; }
+      out.push({ id: u.id, yard: a.id, name: a.name, label: u.label, cost, gain: refIncome(this.step.get(u.effect.area)) * price, opens: next.name });
     });
     return out;
   }
@@ -1082,7 +1340,7 @@ export class Company {
     const within = this.econ.cash + this.goalRef() * earnSeconds;
     switch (kind) {
       case 'upgrades': return this.econ.upgrades.filter(u => !this.econ.has(u.id)).length >= n;
-      case 'trucked': return Object.keys(this.routes).length > 0;
+      case 'trucked': return this.routesOwned() > 0;
       case 'research': return !this.tabLock('research') && RESEARCH.filter(r => { const st = this.researchState(r); return !st.done && !st.lock && st.cost <= within; }).length >= n;
       default: return true;
     }
@@ -1273,7 +1531,7 @@ export class Company {
    * done there is nothing left to take it off (measured: tools/credits/measure.mjs --offers).
    */
   ticketUseless(event) {
-    if (event.effect?.stat === 'truckFee' && !Object.keys(this.routes).length) return `You have no truck routes yet: ${event.name} would save you nothing.`;
+    if (event.effect?.stat === 'truckFee' && !this.routesOwned()) return `You have no truck routes yet: ${event.name} would save you nothing.`;
     if (event.effect?.stat === 'researchCost' && RESEARCH.every(r => this.researchState(r).done)) return `Nothing is left to research: ${event.name} would give you nothing.`;
     return null;
   }
@@ -1362,7 +1620,12 @@ export class Company {
       case 'marketGood': case 'marketTop': case 'rush': case 'trucked': return this.stats[measure];
       case 'metroOpen': return this.metroYards.filter(id => this.econ.areaOpen(id)).length;
       case 'metroBuilt': return this.built(this.metroYards);
-      case 'routes': return Object.keys(this.routes).length;
+      case 'regionOpen': return this.regionYards.filter(id => this.econ.areaOpen(id)).length;
+      case 'regionBuilt': return this.built(this.regionYards);
+      case 'voyages': return this.stats.voyages;
+      case 'voyagesFar': return this.stats.voyagesFar;
+      case 'ships': return this.port.ships.length;
+      case 'routes': return this.routesOwned();
       case 'streakBest': return this.streak.best;
       case 'clientTop': return Math.max(0, ...Object.keys(this.clients).map(name => this.clientLevel(name)));
       case 'peakMinute': return this.records.peakMinute;
@@ -1370,8 +1633,8 @@ export class Company {
       case 'sales': return this.legacy.sales;
       case 'houseBuilt': return this.site.done.includes('house') ? 1 : 0;
       case 'builds': return this.site.done.length;
-      case 'allProfit': {   // the number of open yards, once every one of them earns more than it costs
-        const open = this.areas.filter(a => this.econ.areaOpen(a.id));
+      case 'allProfit': {   // the number of open yards, once every one of them earns more than it costs; a yard off the ladder (the Port) is built to earn nothing and is left out
+        const open = this.areas.filter(a => a.ladder !== false && this.econ.areaOpen(a.id));
         return this.age > 60 && open.every(a => this.yardReport(a.id).profit > 0) ? open.length : 0;
       }
       default: return 0;
@@ -1409,7 +1672,8 @@ export class Company {
     const a = this.areas.find(x => x.gate && this.econ.areaOpen(x.id) && !this.econ.areaOpen(x.gate.next)), id = a ? 'gate:' + a.id : '';
     const behind = a && this.areas.find(x => x.id === a.gate.next);
     if (!a || !behind || !this.econ.get(id)) return null;
-    return { id, yard: a.id, from: a.name, next: behind.id, name: behind.name, cost: Math.max(0, this.econ.remaining(id)), due: this.econ.nextUpgrade(a.id)?.id === id };
+    const locked = !!this.econ.lockOf(id);   // a gate may need a rank of the company
+    return { id, yard: a.id, from: a.name, next: behind.id, name: behind.name, cost: Math.max(0, this.econ.remaining(id)), locked, due: !locked && this.econ.nextUpgrade(a.id)?.id === id };
   }
   /** Fully built yards a sale needs: more with every company sold, up to every yard there is. */
   minYards() { return Math.min(this.areas.length, PRESTIGE.minYards + PRESTIGE.minYardsPerSale * this.legacy.sales); }
@@ -1458,6 +1722,7 @@ export class Company {
     e.cash = 0; e.unlocked = {}; e.paid = {}; e.areas = [this.areas[0].id]; e.workerRate = 0;
     for (const [id, paid] of kept) { e.unlocked[id] = true; if (paid > 0) e.paid[id] = paid; }
     this.routes = {}; this.stock = {}; this.offers = []; this.active = []; this.readyIds.clear(); this.acc = {};
+    this.port.reset();       // the ships, their holds and a voyage at sea go with the company: nothing is paid later
     this.market.hold = {};   // the market itself goes on: its seed and clock stay, and it waits until the Metropolis is open again
     this.books.clear(); this.shopFlow.clear(); this.trips.clear();
     for (const m of Object.values(this.flow)) m.rate = 0;
@@ -1586,8 +1851,9 @@ export class Company {
    * What the Advisor needs to know about one yard (see advise() in js/sim/advice.js): its books, what its
    * machines did in the last minute, and which of the usual remedies are still open to the player.
    * @param watched { starved, blocked, missing, seconds } from a YardWatch, or nothing while it has not been watched yet
+   * @param holds   Company.siteHolds(), worked out once for a screen that asks about every yard
    */
-  yardFacts(id, watched = null) {
+  yardFacts(id, watched = null, holds = this.siteHolds()) {
     const area = this.areas.find(a => a.id === id), r = this.yardReport(id), w = watched || { starved: 0, blocked: 0, missing: null, seconds: 0 };
     const open = d => !this.routes[d.id] && !this.routeState(d).lock;
     const routeIn = w.missing ? this.routeDefs.find(d => d.to === id && d.item === w.missing) || null : null;
@@ -1600,6 +1866,8 @@ export class Company {
       // grows: the yard it comes from still has upgrades to buy, so it can be made to send more
       routeIn: routeIn && { from: this.areas.find(a => a.id === routeIn.from).name, owned: !!this.routes[routeIn.id], buyable: open(routeIn),
         grows: this.areas.find(a => a.id === routeIn.from).upgrades.some(u => !this.econ.has(u.id)) },
+      // the yard stands still because a running build comes first (routeHeld): the goods of the stage the trucks leave for it, or null
+      siteHold: holds.because[id] ? holds.because[id].map(item => this.items[item].label) : null,
       routeOut: this.routeDefs.some(d => d.from === id && open(d)),
       canHire: area.upgrades.some(u => u.effect.type === 'worker' && !this.econ.has(u.id)),
       payroll: can('payroll'), efficient: can('efficient'), training: can('training'),

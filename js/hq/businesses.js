@@ -41,8 +41,25 @@ export class HqBusinesses {
     const controls = h('div', { class: 'hq-controls' },
       this.choice('yards-by', 'Order the yards by', [['built', 'Build order'], ['profit', 'Profit'], ['name', 'Name']], p.yards, v => this.setPref('yards', v)),
       this.switch_('Losing money only', 'yards-losing', p.losing, () => this.setPref('losing', !this.prefs.losing)));
+    const nextRow = a => {
+      const next = econ.nextUpgrade(a.id), lock = next && econ.lockOf(next.id);
+      return next ? h('div', { class: 'hq-next' },
+        h('span', { text: `Next: ${next.label}` + (lock ? ` (${lock})` : '') }),   // a gate that needs a rank says which
+        bar((next.cost - econ.remaining(next.id)) / next.cost),
+        h('b', {}, amount(next.cost))) : h('div', { class: 'hq-next done' }, icon('check'), h('span', { text: 'Fully built' }));
+    };
+    // A yard off the ladder (the Port) has no workers, no machines and no sales of its own: its card says what it is.
+    const harbour = a => {
+      const many = (n, one) => `${n.toLocaleString('en-US')} ${one}${n === 1 ? '' : 's'}`;
+      return h('article', { class: 'hq-card' },
+        h('header', {}, h('h4', { text: a.name }), h('span', { class: 'hq-chip', text: 'Harbour' })),
+        h('div', { class: 'hq-sub', text: `${many(c.port.ships.length, 'ship')} · ${many(c.stats.voyages, 'voyage')} · ${c.stats.exported.toLocaleString('en-US')} goods exported` }),
+        note('The Port earns nothing by itself: its ships sell what your yards make, and what they bring home is on the Port tab.'),
+        nextRow(a));
+    };
     const cards = shown.map(({ a, r }) => {
-      const next = econ.nextUpgrade(a.id), trend = this.trend(a.id);
+      if (a.ladder === false) return harbour(a);
+      const trend = this.trend(a.id);
       const idle = r.income < 0.01, loss = r.profit < 0 && !measuring;
       const status = measuring ? ['Measuring…', ''] : idle && r.total < 0.01 ? ['Starting up', ''] : loss ? ['Losing money', 'bad'] : ['Profitable', 'good'];
       const costName = { materials: 'materials', wages: 'wages', upkeep: 'machine upkeep' }[r.biggest];
@@ -64,10 +81,7 @@ export class HqBusinesses {
           h('span', {}, 'Upkeep: ', rate(r.costs.upkeep))),
         loss && !idle ? note(`This yard costs more than it brings in. Its largest cost is ${costName}.`) : null,
         loss && idle && r.total > 0.01 ? note('Nothing sold here in the last minute, but wages and upkeep are still paid.') : null,
-        next ? h('div', { class: 'hq-next' },
-          h('span', { text: `Next: ${next.label}` }),
-          bar((next.cost - econ.remaining(next.id)) / next.cost),
-          h('b', {}, amount(next.cost))) : h('div', { class: 'hq-next done' }, icon('check'), h('span', { text: 'Fully built' })));
+        nextRow(a));
     });
     const locked = AREAS.length - open.length;
     return [controls, ...cards,

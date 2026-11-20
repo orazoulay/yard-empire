@@ -20,6 +20,7 @@ import { HqResearch } from './hq/research.js';
 import { HqLogistics } from './hq/logistics.js';
 import { HqFinance } from './hq/finance.js';
 import { HqMarket } from './hq/market.js';
+import { HqPort } from './hq/port.js';
 import { HqBuild } from './hq/build.js';
 import { HqRecords } from './hq/records.js';
 import { HqAdvisor } from './hq/advisor.js';
@@ -35,7 +36,8 @@ const TOP_AFTER = 400;                            // pixels scrolled before "bac
 // The icon in front of a line of feedback, by the action (act) or the company event (main.js, celebrate) it is about.
 const TOAST_ICON = { deliver: 'contracts', delivered: 'contracts', ready: 'contracts', research: 'research', route: 'logistics', hire: 'team',
   goal: 'goals', sell: 'coin', founded: 'hq', milestone: 'award', achievement: 'award', rank: 'star',
-  build: 'construction', send: 'construction', site: 'construction', stage: 'construction', built: 'construction' };
+  build: 'construction', send: 'construction', site: 'construction', stage: 'construction', built: 'construction',
+  sail: 'port', unload: 'port', export: 'port', refit: 'port', ship: 'port' };   // the Port tab's actions, and a ship home and a refit done
 
 function readPrefs() {
   try { return cleanPrefs(JSON.parse(localStorage.getItem(PREFS_KEY))); } catch { return cleanPrefs(null); }   // private mode, or nothing stored
@@ -303,4 +305,4 @@ export class Headquarters {
   }
 }
 
-mix(Headquarters, HqHelp, HqOverview, HqGoals, HqPeople, HqBusinesses, HqContracts, HqResearch, HqLogistics, HqFinance, HqMarket, HqBuild, HqRecords, HqAdvisor);
+mix(Headquarters, HqHelp, HqOverview, HqGoals, HqPeople, HqBusinesses, HqContracts, HqResearch, HqLogistics, HqFinance, HqMarket, HqPort, HqBuild, HqRecords, HqAdvisor);

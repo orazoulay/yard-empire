@@ -6,12 +6,14 @@
 //   - Everything stands in the strip along a fence (its far edge at most REACH from the fence line) or in a corner at
 //     the back of the yard. Nobody has a reason to walk there, and the things have no bodies of their own.
 //   - Nothing stands in a gate, on a signpost, in a lamp post, in the opening to the building site, behind a shop's
-//     sign, where customers come in, on a machine's ground (with the step people and trucks keep from it), on a pile,
-//     or on a plot: bought or not, every plot of the yard's data is kept free.
+//     sign, where customers come in, on a machine's ground (with the step people and trucks keep from it), on the deck
+//     of a quay, on a pile, or on a plot: bought or not, every plot of the yard's data is kept free.
 //   - The camera looks north from the south. On the south side only low things stand; tall ones go to the back, and
 //     not so tall where another yard lies behind (they would stand in front of its shop).
 //   - A yard's layout is drawn from a run of numbers seeded by its id: the same yard looks the same on every device.
 //   - A yard's dressing stays inside a budget of triangles (BUDGET), counted from the catalogue below.
+//   - A yard leaves free ground for a decoration of the credits store (js/sim/decor.js): where its things would leave
+//     none, a small thing that is not of its trade gives way.
 import { mulberry } from './site.js';
 import { fenceSpots } from './yard.js';
 import { lookOf } from '../data/looks.js';
@@ -174,6 +176,10 @@ export function yardKeepouts(cfg, { areas = AREAS, lamps = null, gateHalf = GATE
       rects.push({ minX: s.x - 3.4, maxX: s.x + 3.4, minZ: s.z - 2.2, maxZ: s.z + 3.7 });
       if (b.maxZ - s.z < 7) gaps.push({ side: 's', at: s.x, half: 3.6 });   // behind the shop's sign
       for (const side of ['w', 'e']) gaps.push({ side, at: s.z + 2.3, half: 1.3 });   // customers come in along the counter's row, from either edge
+    } else if (s.type === 'quay') {
+      // the deck of the Port's quay, 12 wide and 5 deep, from the station out through the south fence to the ship
+      // (js/gfx/harbour.js), with the room around it and where the player stands to put goods down
+      rects.push({ minX: s.x - 6.6, maxX: s.x + 6.6, minZ: s.z - 1.6, maxZ: s.z + 6 });
     } else if (s.type === 'source') {
       rounds.push({ x: s.x, z: s.z, r: s.pile === 'field' ? 2.95 : 2.75 });   // the pile itself: people take from it on the side they come from, the yard's side
       if (s.prop === 'mound') rects.push({ minX: s.x - 4.2, maxX: s.x + 4.2, minZ: s.z - 5, maxZ: s.z });
@@ -185,6 +191,39 @@ export function yardKeepouts(cfg, { areas = AREAS, lamps = null, gateHalf = GATE
   if (cfg.workerSpawn) rounds.push({ x: cfg.workerSpawn[0] + 0.75, z: cfg.workerSpawn[1], r: 1.8 });
   const north = areas.some(o => o !== cfg && Math.abs(o.bounds.maxZ - b.minZ) < 0.01 && Math.min(b.maxX, o.bounds.maxX) - Math.max(b.minX, o.bounds.minX) > 0.01);
   return { gaps, rects, rounds, openings, parks, north };
+}
+
+// ------------------------------------------------------------------------------------------ room for a decoration
+/** The ground a decoration of the credits store takes at its full size (along the fence, into the yard) and how tall it then is. */
+export const DECOR = { w: 1.2, d: 1.2, h: 2.5 };
+
+/**
+ * Every place along a yard's fences where a decoration could stand: in the strip where the yard's own things stand, on
+ * ground free of what the yard keeps clear and of every thing of its dressing. The best first: where it can stand at
+ * its full size before where it must be built smaller, and then as far back as there is room. js/sim/decor.js chooses
+ * from these, and the dressing below makes sure there is one.
+ * @param keep   what yardKeepouts() returned for the yard
+ * @param props  the things of its dressing
+ * @returns [{ x, z, turn, side, rect, scale }]  (x, z): the middle of its back; scale: how large it is built there
+ */
+export function decorGround(cfg, keep, props) {
+  const b = cfg.bounds;
+  const blocked = keep.gaps.map(g => { const f = sideOf(b, g.side), t = f.t(g.at); return stripRect(f, t - g.half, t + g.half, 0, g.deep ?? CORNER); });
+  const free = [];
+  for (const side of ['w', 'e', 'n', 's']) {
+    const f = sideOf(b, side);
+    for (let t = DECOR.w / 2 + 0.3; t <= f.len - DECOR.w / 2 - 0.3 + 1e-9; t += 0.1) {
+      const rect = stripRect(f, t - DECOR.w / 2, t + DECOR.w / 2, INSET, INSET + DECOR.d);
+      if (blocked.some(r => overlap(rect, r)) || keep.rects.some(r => overlap(rect, r)) || keep.parks.some(r => overlap(rect, r)) || keep.rounds.some(c => touches(rect, c))) continue;
+      if (props.some(o => overlap(rect, o.rect, 0.14))) continue;
+      const [x, z] = f.at(t, INSET);
+      // how tall a thing may be here, by the dressing's own rule: low toward the camera, taller toward the back
+      const fromSouth = side === 'w' ? t : f.len - t;
+      const roof = side === 's' ? FRONT : side === 'n' ? (keep.north ? 3.6 : 9) : fromSouth < f.len * 0.42 ? LOW : 2.9;
+      free.push({ x, z, turn: f.turn, side, rect, scale: Math.min(1, Math.round(roof / DECOR.h * 100) / 100) });
+    }
+  }
+  return free.sort((p, q) => q.scale - p.scale || p.z - q.z || p.x - q.x);
 }
 
 // ------------------------------------------------------------------------------------------ the plan
@@ -283,6 +322,15 @@ export function yardDressing(cfg, opts = {}) {
       props.push({ kind, side: s.side, x, z, turn: rnd() * 6.283, flip: false, tint: tints ? pick(tints) : null, rect, h: p.h, scale: 0.8 + rnd() * 0.5 });
       tris += p.tris;
     }
+  }
+
+  // Room for a decoration of the credits store (js/sim/decor.js), which stands where the things leave free ground. In a
+  // yard whose things leave none anywhere along its fences, the small things that are not of its trade and carry no
+  // lamp give way where a decoration would stand best: the things of the trade stay, and so do the lights.
+  if (!decorGround(cfg, keep, props).length) {
+    const small = o => !trade.includes(o.kind) && !(dress.hero || []).includes(o.kind) && !size(o.kind).flags.includes('l');
+    const best = decorGround(cfg, keep, props.filter(o => !small(o)))[0];
+    for (let i = props.length - 1; best && i >= 0; i--) if (small(props[i]) && overlap(best.rect, props[i].rect, 0.14)) { tris -= size(props[i].kind).tris; props.splice(i, 1); }
   }
 
   // Lamps among the things throw a pool of light at night: three to a yard at most, none close to another.

@@ -21,6 +21,9 @@ export const reloadLine = name => `${name} is open and saved. Reload the game to
 /** Said once when the store's part of the game stopped for the visit (storeStop). */
 export const STOPPED_LINE = 'The credits store stopped working in this visit. Reload the game to start it again: nothing you bought is lost.';
 
+/** A yard whose workers have nothing to carry (the Port: its job lists no goods). Extra workers would stand at its spawn point. */
+const idleYard = a => a.cfg?.workerJob?.items?.length === 0;
+
 /** The credits store of the Game. */
 export class StoreMethods {
   /** Once, when the game starts: the company asks the server's answer what is owned, and follows it when it changes. */
@@ -233,10 +236,13 @@ export class StoreMethods {
     if (!c.offered || !c.account?.user || c.ready) return 'none';
     return c.status === 'off' && !this.storeAnswered ? 'none' : 'unknown';
   }
-  /** The Bigger crew: every open yard has as many extra workers as the company's modifiers say (js/area.js, setCrew). */
+  /**
+   * The Bigger crew: every open yard has as many extra workers as the company's modifiers say (js/area.js, setCrew);
+   * none in a yard whose workers have no goods to carry (the Port: its job lists none, so a worker would stand there).
+   */
   syncCrew() {
     const n = this.company.mods.crew || 0;
-    for (const a of this.areas) if (a.open) a.setCrew(n);
+    for (const a of this.areas) if (a.open) a.setCrew(idleYard(a) ? 0 : n);
   }
   /** The Mechanic: every machine's output pad holds its own size (js/data/tuning.js) times what the company's modifiers say. */
   syncPads() {
@@ -252,7 +258,7 @@ export class StoreMethods {
     const load = this.company.mods.runner || 0;
     for (const a of this.areas) {
       if (!a.open) continue;
-      const want = a === this.playerArea ? load : 0;
+      const want = a === this.playerArea && !idleYard(a) ? load : 0;   // none in the Port, as for the Bigger crew
       if (a.runner && !want) runnerReturn(a.runner.carry, this.stationViews(), a.id);
       a.setRunner(want);
     }

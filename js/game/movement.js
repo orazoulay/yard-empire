@@ -35,13 +35,14 @@ export class MovementMethods {
   }
   areaAt(p) { return this.areas.find(a => a.open && a.contains(p)) || null; }
   /** Next point to walk toward to reach `target`, going through a door when it is in another area. */
-  /** The footprints nobody walks through: every machine with its belt, and the shop counters, of the open yards. */
+  /** The footprints nobody walks through: every machine with its belt, the shop counters and the Port's quay, of the open yards. */
   blocks() {
     if (this._blocks) return this._blocks;
     const out = [];
     for (const a of this.areas) if (a.open) for (const s of a.stations) {
       if (s.type === 'processor') out.push({ minX: s.x - 3.5, maxX: s.x + 3.5, minZ: s.z - 1.4, maxZ: s.z + 3.9 });   // the body, the belt in front of it, and a step of clear ground
       else if (s.type === 'shop') out.push({ minX: s.x - 2.75, maxX: s.x + 2.75, minZ: s.z + 1.45, maxZ: s.z + 3.35 });
+      else if (s.type === 'quay') out.push({ minX: s.x - 6, maxX: s.x + 6, minZ: s.z + 0.9, maxZ: s.z + 5.9 });   // its deck (js/gfx/harbour.js): the player stands in front of it
     }
     out.push(...this.siteRects);   // on the building site: finished buildings, and the walls of the one in work
     return (this._blocks = out);

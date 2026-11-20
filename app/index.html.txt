@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#55c267">
-  <meta name="description" content="Saw logs, sell planks, open 20 yards and run the company behind them.">
+  <meta name="description" content="Saw logs, sell planks, open 24 yards and run the company behind them.">
   <title>Yard Empire</title>
   <!-- install on a phone: manifest for Android and desktop, the apple-* tags for iPhone and iPad -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -234,6 +234,7 @@
         <div><dt>Paid at</dt><dd id="off-share"></dd></div>
         <div><dt>Left today</dt><dd id="off-left"></dd></div>
       </dl>
+      <div class="off-text" id="off-ships" hidden></div>
       <button id="off-collect" class="sheet-btn primary">Collect</button>
     </div>
   </div>

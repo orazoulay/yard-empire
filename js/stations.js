@@ -1,4 +1,4 @@
-// 3D stations built from data: Source, ProcessorStation, Shop, Plot.
+// 3D stations built from data: Source, ProcessorStation, Shop, Quay, Plot.
 import * as THREE from 'three';
 import { box, cyl, paintOf, GLOW } from './world.js';
 import { glowing, release } from './engine/materials.js';
@@ -7,7 +7,7 @@ import { addPallet, makeItem, Stack, stackBase } from './items3d.js';
 import { Processor } from './sim/processor.js';
 import { RECIPES, ITEMS, AREAS } from './data/areas.js';
 import { fmt } from './format.js';
-import { plotTag } from './ui-logic.js';
+import { plotTag, waitLabel } from './ui-logic.js';
 import { lookOf, SKINS, SHOP_BODY } from './data/looks.js';
 import { icon, EFFECT_ICON } from './icons.js';
 import { TUNING } from './data/tuning.js';
@@ -17,6 +17,7 @@ import { buildMachine } from './gfx/machines.js';
 import { productShape } from './gfx/products.js';
 import { buildMine, buildDerrick } from './gfx/sources.js';
 import { buildShop, COUNTER_TOP, SAMPLE_AT, TILL_AT } from './gfx/shops.js';
+import { buildQuay, DECK } from './gfx/harbour.js';
 import { bake, moving } from './engine/bake.js';
 
 const PICK_RATE = TUNING.pickRate, DROP_RATE = TUNING.dropRate, PZ = TUNING.procZone;
@@ -284,8 +285,9 @@ export class ProcessorStation extends Station {
     // City machines get their materials from far away, so they say which one they are waiting for:
     // at once when they already hold the other one, otherwise after standing still for a while.
     const holdsOne = this.inStack2 && this.sim.inputs + this.sim.inputs2 > 0;
+    // A machine of the region whose material the trucks leave for the building site says so (Company.heldForSite): "CHAIRS GO TO THE SITE".
     const waiting = this.inCity && !this.sim.busy && (holdsOne || this.idle > 6) ? this.sim.missing : null;
-    const status = waiting ? 'NEEDS ' + ITEMS[waiting].label.toUpperCase() : this.sim.inputFull && (!this.inStack2 || this.sim.input2Full) ? 'FULL' : '';
+    const status = waiting ? waitLabel(ITEMS[waiting].label, game.company.heldForSite(this.area, waiting)) : this.sim.inputFull && (!this.inStack2 || this.sim.input2Full) ? 'FULL' : '';
     if (status !== this.status) { this.status = status; this.statusLabel.el.textContent = status; }
   }
   /** What shows that the machine is running: it runs up and down, hums, moves its belt, throws dust, and thumps on a batch. */
@@ -441,6 +443,44 @@ export class Shop extends Station {
   dispose() { super.dispose(); this.game.labels.remove(this.label); }
 }
 
+// ------------------------------------------------------------------ the quay
+/**
+ * The quay of the Port: goods a ship carries are put down here by the player and go into the hold of a ship at
+ * the quay (Company.loadByHand). Workers do not come here: what they bring to the shops goes aboard there, if marked.
+ */
+export class Quay extends Station {
+  constructor(game, area, cfg) {
+    super(game, area, cfg);
+    this.zones = [new Zone(cfg.x, cfg.z, TUNING.shopRadius, 'give', this)];
+    this.group.add(dashedPad(3.2, 2.6));
+    this.crane = buildQuay(this.group);
+    this.aboard = Infinity; this.work = 0;   // what the ships at it held last frame, and how long the crane goes on swinging
+    addLightPool(game.scene, cfg.x, cfg.z + 1.4, 7.5);   // found after dark, like a shop's counter
+    for (const s of [-1, 1]) addLightPool(game.scene, cfg.x + s * (DECK.half - 0.35), cfg.z + DECK.from + 1.2, 5);   // and under the deck's two lamps
+    this.label = game.labels.add('zone', cfg.name.toUpperCase(), () => ({ x: cfg.x, y: 0.3, z: cfg.z - 0.3 }));
+    game.quay = this;
+  }
+  accepts(item) { return this.game.company.quayTakes(item) ? 999 : 0; }
+  wants(item) { return this.game.company.port.open && this.game.company.port.takes(item); }
+  update(dt, game) {
+    this.show(game.seen(this.x, this.z + 3, 8));
+    // the crane works while goods go aboard: it swings each one over a ship, and settles a moment after the last
+    const port = game.company.port, aboard = port.ships.reduce((n, s) => n + (port.atSea(s) ? 0 : port.aboard(s)), 0);
+    if (aboard > this.aboard) this.work = 1.5;
+    this.aboard = aboard; this.work = Math.max(0, this.work - dt);
+    if (this.seen) this.crane.animate(dt, this.work > 0);
+  }
+  interact(ch, dt, game) {
+    ch.actionTimer -= dt;
+    if (ch.actionTimer > 0 || ch.isWorker) return;
+    const item = ch.carry.type;
+    if (!item || !game.company.quayTakes(item) || !ch.carry.drop(item)) return;
+    ch.actionTimer = game.padWait(ch, DROP_RATE);
+    game.onLoad(item, ch, this);
+  }
+  dispose() { if (this.game.quay === this) this.game.quay = null; super.dispose(); this.game.labels.remove(this.label); }
+}
+
 // ------------------------------------------------------------------ plots
 const RING_R = 22, RING_C = 2 * Math.PI * RING_R;
 
@@ -477,10 +517,13 @@ export class Plot extends Zone {
     if (r.paid > 0) game.onPay(this, r);
   }
   refresh(econ) {
-    const u = this.upgrade, rem = econ.remaining(u.id);
+    const u = this.upgrade, rem = econ.remaining(u.id), lock = econ.lockOf(u.id);
     this.ringFg.style.strokeDashoffset = RING_C * (rem / u.cost);
-    this.costEl.textContent = plotTag({ remaining: rem, cost: u.cost });   // "$60 left" once a part is paid
-    this.label.el.classList.toggle('affordable', econ.cash >= rem);
+    // "$60 left" once a part is paid. A gate that needs a rank keeps its price, greyed, and is never shown as one to pay:
+    // the note under it says what it needs (plotNote, js/yard-ui.js)
+    this.costEl.textContent = plotTag({ remaining: rem, cost: u.cost });
+    this.label.el.classList.toggle('locked', !!lock);
+    this.label.el.classList.toggle('affordable', !lock && econ.cash >= rem);
   }
   update() {}
   dispose() { this.game.scene.remove(this.pad); this.game.labels.remove(this.label); }
@@ -491,6 +534,7 @@ export function createStation(game, area, cfg) {
     case 'source': return new Source(game, area, cfg);
     case 'processor': return new ProcessorStation(game, area, cfg);
     case 'shop': return new Shop(game, area, cfg);
+    case 'quay': return new Quay(game, area, cfg);
     default: throw new Error('unknown station type ' + cfg.type);
   }
 }

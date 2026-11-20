@@ -99,8 +99,12 @@ export class YardLife {
     return false;
   }
 
-  /** True where trees grow: outside the open yards, and off the asphalt around the cities. */
+  /**
+   * True where trees grow: outside the open yards, off the asphalt around the cities, and off the beach and the sea.
+   * Every yard outside Lumber Town is built-up land the forest keeps away from, as js/world.js grows it.
+   */
   inForest(x, z) {
+    if (this.game.seaZ != null && z > this.game.seaZ - 2) return false;
     for (const a of this.game.areas) {
       const b = a.bounds;
       if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) return !a.open;   // a yard that is still forest, or one that is not

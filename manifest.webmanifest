@@ -1,7 +1,7 @@
 {
   "name": "Yard Empire",
   "short_name": "Yard Empire",
-  "description": "An idle tycoon game. Collect logs, saw planks and sell them, open new yards across three places, and run the company behind them. Plays without a connection once installed.",
+  "description": "An idle tycoon game. Collect logs, saw planks and sell them, open new yards across four places, and run the company behind them. Plays without a connection once installed.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "./",

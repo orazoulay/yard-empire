@@ -1,6 +1,6 @@
 // The game loop. One frame runs the rules in even steps (step), then draws once (present); FrameClock times the
 // frames, and STEP and CATCH_UP say how long a step may be and how much time one frame may catch up.
-import { OFFLINE_MIN_SECONDS } from '../sim/offline.js';
+import { OFFLINE_MIN_SECONDS, OFFLINE_EFFICIENCY } from '../sim/offline.js';
 import { SITE } from '../data/builds.js';
 import { TUNING } from '../data/tuning.js';
 import { groundAt } from '../sim/site.js';
@@ -37,12 +37,17 @@ export class LoopMethods {
    * that draws 20 frames a second plays at the same speed as a screen that draws 120. Up to a quarter of a second is
    * caught up at once; a longer gap is a pause (time away pays for anything past a minute). Then the picture is drawn
    * once (present), with the animation timed by the real time between frames, so it moves at the same speed everywhere.
+   * Out of sight the yards slow right down. A hidden page is usually not drawn at all, and what it missed is paid on
+   * return as time away, at OFFLINE_EFFICIENCY of what the workers earn. Where frames still arrive while the page is
+   * hidden (a window inside another program), the rules run at that same share of the time that passed, so being
+   * hidden pays the same either way and the return has nothing to pay back.
    */
   frame() {
     const began = performance.now();
     const raw = this.clock.getDelta();
     if (raw > OFFLINE_MIN_SECONDS && !this.awayHeld) this.checkOffline();   // the tab slept: treat the gap as time away (not while the page load's absence is held: it is paid once)
-    const total = Math.min(raw, CATCH_UP), steps = Math.max(1, Math.ceil(total / STEP - 1e-6)), dt = total / steps;
+    const pace = document.hidden ? OFFLINE_EFFICIENCY : 1;
+    const total = Math.min(raw * pace, CATCH_UP), steps = Math.max(1, Math.ceil(total / STEP - 1e-6)), dt = total / steps;
     for (let i = 0; i < steps; i++) this.step(dt);
     if (!this.paused && this.company.founded) this.hud.setCash(this.econ.cash);   // wages and upkeep drain it all the time
     this.present(Math.min(raw, 0.1));
@@ -84,6 +89,7 @@ export class LoopMethods {
       this.company.tick(dt);
       this.company.runRoutes(dt, route => this.truck(route));
       this.trucks.update(dt);
+      this.ships.update();
       this.builders.update(dt);
       this.chores -= dt;
       if (this.chores <= 0) { this.chores = 1; this.companyChores(); }

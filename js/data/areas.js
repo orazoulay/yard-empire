@@ -38,6 +38,10 @@ export const ITEMS = {
   car:     { label: 'cars',        price: 150000000,  icon: '🚗', mesh: { shape: 'box', size: [0.8, 0.26, 0.4], color: 0xe23d3d, finish: 'metal' } },
   robot:   { label: 'robots',      price: 400000000,  icon: '🤖', mesh: { shape: 'box', size: [0.34, 0.48, 0.3], color: 0xcfd8e3, finish: 'metal' } },
   giftset: { label: 'gift sets',   price: 1500000000, icon: '🎁', mesh: { shape: 'box', size: [0.44, 0.32, 0.44], color: 0xc74bd6, finish: 'plastic' } },
+  // International Industrial Region: with the Metropolis goods, these can go overseas by ship (js/sim/port.js)
+  shippart: { label: 'ship parts', price: 1000000000,  icon: '⚓', mesh: { shape: 'box', size: [0.7, 0.24, 0.36], color: 0x3b6ea5, finish: 'metal' } },
+  chip:     { label: 'processors', price: 3000000000,  icon: '🧠', mesh: { shape: 'box', size: [0.42, 0.08, 0.42], color: 0x7d4bd6, finish: 'plastic' } },
+  aircraft: { label: 'aircraft',   price: 9000000000,  icon: '✈️', mesh: { shape: 'box', size: [0.9, 0.2, 0.5], color: 0xf2f4f7, finish: 'metal' } },
 };
 
 // look: which machine model to build; colors tint it so every area reads differently.
@@ -65,13 +69,19 @@ export const RECIPES = {
   carline:     { input: 'engine',  inCount: 1, input2: 'glass', inCount2: 1, output: 'car',     outCount: 1, time: 2.4, name: 'Car line',      look: 'saw',     colors: { body: 0xc8342f, accent: 0x2b3440 } },
   robotline:   { input: 'circuit', inCount: 1, input2: 'gem',   inCount2: 1, output: 'robot',   outCount: 1, time: 2.4, name: 'Robot line',    look: 'tank',    colors: { body: 0xdfe6ee, accent: 0x3aa0ff } },
   giftcounter: { input: 'robot',   inCount: 1, input2: 'ring',  inCount2: 1, output: 'giftset', outCount: 1, time: 2.6, name: 'Gift counter',  look: 'house',   colors: { body: 0xf2e6d0, accent: 0xc74bd6 } },
+  // International Industrial Region. No material is shared between two of these machines. Chairs, bricks and cars are
+  // used by no other machine; glass and gems are, and trucks are served in the order of the yards, so the Metropolis
+  // is served first and the region gets what is left (docs/superpowers/specs/2026-11-20-international-region-design.md).
+  slipway:   { input: 'chair', inCount: 1, input2: 'brick', inCount2: 1, output: 'shippart', outCount: 1, time: 2.2, name: 'Slipway',         look: 'furnace', colors: { body: 0x35506b, accent: 0xf2b134 } },
+  cleanroom: { input: 'glass', inCount: 1, input2: 'gem',   inCount2: 1, output: 'chip',     outCount: 1, time: 2.4, name: 'Clean room',      look: 'tank',    colors: { body: 0xeef2f6, accent: 0x7d4bd6 } },
+  hangar:    { input: 'chip',  inCount: 1, input2: 'car',   inCount2: 1, output: 'aircraft', outCount: 1, time: 2.6, name: 'Assembly hangar', look: 'house',   colors: { body: 0xcfd6dd, accent: 0xe2483d } },
 };
 
 export const BASE_CAPACITY = 6;
 
 // ---- grid: areas snake through 4 columns, row after row, so each new yard touches the previous one ----
 const COLS = [[-12, 12], [12, 38], [38, 64], [64, 90]];
-const ROWS = [[-15, 13], [13, 41], [41, 69], [69, 97], [97, 125]];   // the fourth row is Industrial City, the fifth Commercial Metropolis
+const ROWS = [[-15, 13], [13, 41], [41, 69], [69, 97], [97, 125], [125, 153]];   // the fourth row is Industrial City, the fifth Commercial Metropolis, the sixth the coast of the International Region
 const rect = (col, row) => ({ minX: COLS[col][0], maxX: COLS[col][1], minZ: ROWS[row][0], maxZ: ROWS[row][1] });
 const round2 = n => { const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(n)) - 1)); return Math.round(n / p) * p; };
 
@@ -107,7 +117,7 @@ function makeArea({ id, name, col, row, ground, source, recipe, cost, perk, gate
     workerJob: { items: fetch ? [product, R.input, R.input2].filter(Boolean) : [product] },
     workerSpawn: [cx - 1, cz + 3],
     upgrades,
-    gate: gate ? { cost: round2(cost * 8), next: gate.next, side: gate.side, at: gate.side === 's' || gate.side === 'n' ? cx + 9.5 : cz + 5, label: 'Expand: ' + gate.name, icon: '🏗️', desc: gate.desc || 'Open the ' + gate.name.toLowerCase() } : null,
+    gate: gate ? { cost: round2(cost * 8), rank: gate.rank, next: gate.next, side: gate.side, at: gate.side === 's' || gate.side === 'n' ? cx + 9.5 : cz + 5, label: 'Expand: ' + gate.name, icon: '🏗️', desc: gate.desc || 'Open the ' + gate.name.toLowerCase() } : null,
   };
 }
 const cap = s => s[0].toUpperCase() + s.slice(1);
@@ -179,7 +189,28 @@ export const AREAS = [
   makeArea({ id: 'engineplant', name: 'Engine Plant', col: 0, row: 4, ground: 0xb9b2a6, recipe: 'engineline', cost: 120000000, gate: { next: 'autofactory', side: 'e', name: 'Automobile factory' }, shopName: 'Engines', location: 'metropolis', fetch: false }),
   makeArea({ id: 'autofactory', name: 'Automobile Factory', col: 1, row: 4, ground: 0xc4bba9, recipe: 'carline', cost: 260000000, perk: { capacity: 60 }, gate: { next: 'robotics', side: 'e', name: 'Robotics factory' }, shopName: 'Dealership', location: 'metropolis', fetch: false }),
   makeArea({ id: 'robotics', name: 'Robotics Factory', col: 2, row: 4, ground: 0xb3aca0, recipe: 'robotline', cost: 570000000, gate: { next: 'store', side: 'e', name: 'Department store' }, shopName: 'Robots', location: 'metropolis', fetch: false }),
-  makeArea({ id: 'store', name: 'Department Store', col: 3, row: 4, ground: 0xcfc6b4, recipe: 'giftcounter', cost: 1250000000, gate: null, shopName: 'Store', location: 'metropolis', fetch: false }),
+  makeArea({ id: 'store', name: 'Department Store', col: 3, row: 4, ground: 0xcfc6b4, recipe: 'giftcounter', cost: 1250000000, gate: { next: 'port', side: 's', name: 'International Region', desc: 'Build the road to the coast', rank: 6 }, shopName: 'Store', location: 'metropolis', fetch: false }),
+  // row 5, east -> west: the International Industrial Region, on the coast. The Port comes first: its ship sells
+  // finished goods overseas. It has no machine and no workers, and takes no step of the income ladder (ladder: false).
+  {
+    id: 'port', name: 'Port', ground: 0xc9c2ae, bounds: rect(3, 5), location: 'region', ladder: false,
+    overview: { south: 6 },   // the view from above keeps this far south of the yard in sight: the moored ship (js/sim/yard.js, overviewBox)
+    view: { z: 8 },   // view only: the camera looks this far south of the player, out over the quay to the ship (js/game/camera.js)
+    stations: [{ id: 'port:quay', type: 'quay', x: 77, z: 148, name: 'Quay' }],
+    workerJob: { items: [] }, workerSpawn: [76, 141],
+    upgrades: [
+      { id: 'port:ship',    label: 'Cargo ship',      cost: 2700000000,  icon: '🚢', desc: 'A ship that sells your goods overseas',  plot: [81, 129],   effect: { type: 'ship' } },
+      { id: 'port:ocean',   label: 'Ocean charts',    cost: 4000000000,  icon: '🧭', desc: 'Opens the route across the ocean',       plot: [71, 136],   effect: { type: 'searoute', route: 'ocean' } },
+      { id: 'port:hold',    label: 'Larger hold',     cost: 6000000000,  icon: '📦', desc: 'The ship carries 600 goods',             plot: [72, 142],   effect: { type: 'hold', value: 600 } },
+      { id: 'port:engines', label: 'Faster engines',  cost: 8100000000,  icon: '⚡', desc: 'Every voyage is a quarter shorter',      plot: [81, 137],   effect: { type: 'shipspeed', mult: 0.75 } },
+      { id: 'port:east',    label: 'Far East charts', cost: 10000000000, icon: '🧭', desc: 'Opens the route to the Far East',        plot: [71, 129],   effect: { type: 'searoute', route: 'east' } },
+      { id: 'port:pack',    label: 'Bigger backpack', cost: 13000000000, icon: '🎒', desc: 'Carry 70 items at once',                 plot: [81, 143],   effect: { type: 'capacity', value: 70 } },
+    ],
+    gate: { cost: 22000000000, next: 'shipyard', side: 'w', at: 144, label: 'Expand: Shipyard', icon: '🏗️', desc: 'Open the shipyard' },
+  },
+  makeArea({ id: 'shipyard', name: 'Shipyard', col: 2, row: 5, ground: 0xb7c0c4, recipe: 'slipway', cost: 6000000000, gate: { next: 'advtech', side: 'w', name: 'Advanced technology' }, shopName: 'Ship parts', location: 'region', fetch: false }),
+  makeArea({ id: 'advtech', name: 'Advanced Technology', col: 1, row: 5, ground: 0xc2c6d0, recipe: 'cleanroom', cost: 13000000000, gate: { next: 'aircraft', side: 'w', name: 'Aircraft factory' }, shopName: 'Processors', location: 'region', fetch: false }),
+  makeArea({ id: 'aircraft', name: 'Aircraft Factory', col: 0, row: 5, ground: 0xbfc8c2, recipe: 'hangar', cost: 29000000000, gate: null, shopName: 'Aircraft', location: 'region', fetch: false }),
 ];
 
 for (const a of AREAS) a.location ||= 'town';
@@ -209,7 +240,7 @@ export function allUpgrades(areas = AREAS) {
     if (a.gate) {
       const g = a.gate;
       out.push({ id: 'gate:' + a.id, label: g.label, cost: g.cost, icon: g.icon, desc: g.desc, area: a.id,
-        gate: true, effect: { type: 'area', area: g.next } });
+        gate: true, rank: g.rank, effect: { type: 'area', area: g.next } });
     }
   }
   return out;

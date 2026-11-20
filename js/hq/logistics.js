@@ -3,7 +3,7 @@
 import { h, empty, money, bar, label, yardName, chip, marked, section, note, row } from './kit.js';
 import { fmt } from '../format.js';
 import { FINANCE } from '../data/company.js';
-import { routesWithin } from '../sim/hqview.js';
+import { routesWithin, LET_RUN } from '../sim/hqview.js';
 
 export class HqLogistics {
   // --- Logistics ------------------------------------------------------------------------
@@ -42,12 +42,14 @@ export class HqLogistics {
     const fold = hidden > 0 || every
       ? this.button_(every ? 'Show fewer routes' : `Show all ${defs.length} routes (${hidden} more, locked for now)`, 'routes-fold',
         () => { (this.unfold ||= {}).routes = !every; this.render(); }, { cls: 'quiet small' }) : null;
+    // A route into the region that waits while the building site's stage asks for its good says so, and how to let it run.
     const routes = shown.map(({ d, st }) => {
-      return h('article', { class: 'hq-card research ' + (st.owned ? 'done' : st.lock ? 'locked' : st.affordable ? 'ready' : '') },
+      return h('article', { class: 'hq-card research ' + (st.held ? '' : st.owned ? 'done' : st.lock ? 'locked' : st.affordable ? 'ready' : '') },
         h('div', { class: 'hq-research-text' },
           h('h4', { text: `${yardName(d.from)} → ${yardName(d.to)}` }),
-          h('div', { class: 'hq-sub', text: st.owned ? `Carrying ${label(d.item)}: ${st.perMinute.toFixed(0)} a minute` : `Carries ${label(d.item)} to the machines, nobody has to walk` })),
-        st.owned ? chip('Running', 'good', 'check')
+          h('div', { class: 'hq-sub', text: st.held ? `${st.held}. ${LET_RUN}` : st.owned ? `Carrying ${label(d.item)}: ${st.perMinute.toFixed(0)} a minute` : `Carries ${label(d.item)} to the machines, nobody has to walk` })),
+        st.held ? chip('Waiting', '', 'clock')
+          : st.owned ? chip('Running', 'good', 'check')
           : st.lock ? chip(st.lock, '', 'lock')
             : this.button_(money(d.cost), 'route-' + d.id, () => this.act('route', () => c.buyRoute(d.id) && d), { cls: 'primary', disabled: !st.affordable, exact: d.cost }));
     });

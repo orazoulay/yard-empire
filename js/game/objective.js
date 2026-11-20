@@ -41,7 +41,8 @@ export class ObjectiveMethods {
       const dest = playerDest({ area: here, x: p.pos.x, z: p.pos.z }, views, item);
       return dest ? { mode: 'give', item, station: dest.station, zone: dest.station.zoneFor('give', item) } : null;
     }
-    const plots = this.areas.filter(a => a.open && a.plot && this.econ.cash >= this.econ.remaining(a.plot.upgrade.id)).map(a => a.plot).sort(byDist);
+    // a plot that can be paid; a gate that needs a rank takes no money (Economy.lockOf), so the arrow never leads there
+    const plots = this.areas.filter(a => a.open && a.plot && this.econ.cash >= this.econ.remaining(a.plot.upgrade.id) && !this.econ.lockOf(a.plot.upgrade.id)).map(a => a.plot).sort(byDist);
     if (plots[0]) return { mode: 'pay', plot: plots[0], zone: plots[0] };
     // What a worker of this yard would fetch; if this yard has nothing to do (its supplier
     // next door is empty), fall back to the job of the yard before it, and so on.
@@ -66,6 +67,7 @@ export class ObjectiveMethods {
     if (o.mode === 'pay') return { symbol: EFFECT_ICON[o.plot.upgrade.effect.type] || 'upgrade', text: purchaseName(o.plot.upgrade.label).action };
     const it = ITEMS[o.item];
     if (o.mode === 'take') return { symbol: 'collect', text: 'Collect ' + it.label };
+    if (o.station.type === 'quay') return { symbol: 'deliver', text: `Bring ${it.label} to the ship` };   // it goes into a ship's hold, not sold
     if (o.station.type === 'shop') return { symbol: 'coin', text: 'Sell the ' + it.label };
     return { symbol: 'deliver', text: `Bring ${it.label} to the ${o.station.recipe.name.toLowerCase()}` };
   }
@@ -74,7 +76,7 @@ export class ObjectiveMethods {
     // The purchase the card counts toward: the one the arrows lead to, this yard's next, or the nearest in price in another open yard.
     const plot = this.tutorial.active ? null : cardPlot({
       pay: o?.mode === 'pay' ? o.plot : null, here: this.playerArea.plot,
-      plots: this.areas.filter(a => a.open && a.plot).map(a => ({ plot: a.plot, remaining: this.econ.remaining(a.plot.upgrade.id) })),
+      plots: this.areas.filter(a => a.open && a.plot).map(a => ({ plot: a.plot, remaining: this.econ.remaining(a.plot.upgrade.id), locked: !!this.econ.lockOf(a.plot.upgrade.id) })),
     });
     if (plot) {
       const u = plot.upgrade;   // how far the money for this yard's next purchase is, as a bar and in words

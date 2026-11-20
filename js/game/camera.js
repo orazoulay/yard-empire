@@ -11,6 +11,23 @@ const _focus = new THREE.Vector3(), _to = new THREE.Vector3();   // used again e
 // the frame's work. Machines, shops and trucks ask with more and stay.
 const PERSON = 4;
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+/**
+ * How far a yard's data shifts the camera's focus from the player, in metres: `view` of the yard (view only: the Port
+ * looks out over its quay to the ship), or nothing. A yard without it gets exactly the focus it always had.
+ */
+const NONE = Object.freeze({ x: 0, z: 0 }), views = new WeakMap();   // made once for each yard: the camera makes no garbage
+export function viewOf(cfg) {
+  if (!cfg?.view) return NONE;
+  let v = views.get(cfg);
+  if (!v) views.set(cfg, v = Object.freeze({ x: cfg.view.x ?? 0, z: cfg.view.z ?? 0 }));
+  return v;
+}
+/** One frame of the shift eased toward `want` at `ease` (0..1), as the look-ahead is; it settles exactly on nothing. */
+export function easeView(view, want, ease) {
+  view.x += (want.x - view.x) * ease; view.z += (want.z - view.z) * ease;
+  if (!want.x && !want.z && Math.abs(view.x) < 1e-3 && Math.abs(view.z) < 1e-3) view.x = view.z = 0;
+  return view;
+}
 
 /** The camera of the Game. */
 export class CameraMethods {
@@ -47,7 +64,10 @@ export class CameraMethods {
     else if (pace > p.speed) { vx *= p.speed / pace; vz *= p.speed / pace; }         // a frame that caught up on several steps
     const ahead = (calm ? 0.9 : 1.8) / p.speed, ease = 1 - Math.exp(-dt * 3.5);
     lead.x += (vx * ahead - lead.x) * ease; lead.z += (vz * ahead - lead.z) * ease;
-    const focus = _focus.set(p.pos.x + lead.x, 0, p.pos.z + lead.z);
+    // A yard may ask the camera to look a little past the player (the Port: out to its quay and the ship); walking in or
+    // out eases it like the look-ahead, and the view from above and a reveal take it away with the rest of the focus.
+    const view = easeView(this.camView ||= { x: 0, z: 0 }, viewOf(this.playerArea?.cfg), ease);
+    const focus = _focus.set(p.pos.x + lead.x + view.x, 0, p.pos.z + lead.z + view.z);
     // Zoomed out past the usual limit, the camera leaves the player for the middle of the company, all the way at the
     // zoom where every open yard fits (js/sim/yard.js, overviewBlend). this.far says the view is from above: the labels
     // of machines and plots give way to the yards' names (js/labels.js, js/game/overview.js).

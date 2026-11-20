@@ -1,6 +1,8 @@
 // The trucks of the truck routes, made visible. Each route the company owns has one truck that drives
 // from the machine that makes the goods to the machine that needs them, waits a moment and drives
 // back empty. They are for show: how much a route carries is decided by the rules in js/sim/company.js.
+// A route the running-build rule holds (Company.holds: the building site takes its good at the shops) carries nothing,
+// and its truck shows it: it turns back empty and stands at the machine it loads at until the hold ends.
 // The credits store can paint every cab in one paint (Truck paint) and put the company's emblem on its roof and doors.
 import * as THREE from 'three';
 import { box, cyl, mat, paintOf, GLOW, LIGHT, METAL } from './world.js';
@@ -10,6 +12,7 @@ import { ITEMS } from './data/areas.js';
 import { bend, pace, wayAround } from './sim/yard.js';
 
 const SPEED = 6.5, WAIT = 1.4;
+const HELD_EVERY = 0.25;   // seconds between two looks at whether a route is held: the rule changes with the site's stages, not every frame
 const PAINT = [0xd63a2f, 0x2f7fd6, 0xe0a52f, 0x3aa35a, 0x8e5bd6];
 const CAB = { roughness: 0.35, metalness: 0.3 };   // the finish of a cab, in whatever paint
 const STOP = { x: 5.4, z: 2.6 };   // where a truck stops, from the middle of a machine: beside the end of its belt, a truck's nose away from it, clear of whoever works there
@@ -116,7 +119,7 @@ export class Trucks {
     if (!road) return null;
     const own = PAINT[n % PAINT.length], m = model(own, ITEMS[def.item].mesh?.color ?? 0xb5742f);
     this.game.scene.add(m.g);
-    const t = { ...m, ...road, def, own, badge: null, s: 0, dir: 1, wait: 0, heading: Math.atan2(road.legs[0].nx, road.legs[0].nz) };
+    const t = { ...m, ...road, def, own, badge: null, s: 0, dir: 1, wait: 0, heading: Math.atan2(road.legs[0].nx, road.legs[0].nz), held: false, heldIn: 0 };
     if (this.paint != null || this.emblem) this.dress(t);
     return t;
   }
@@ -142,11 +145,18 @@ export class Trucks {
       if (!on) { if (t) { game.scene.remove(t.g); this.list.delete(def.id); } return; }
       if (t === undefined) { t = this.make(def, n); this.list.set(def.id, t); }   // null is remembered: no way through yet
       if (!t) { if ((this.retry = (this.retry || 0) + dt) > 5) { this.retry = 0; this.list.delete(def.id); } return; }
+      if ((t.heldIn -= dt) <= 0) { t.heldIn = HELD_EVERY; t.held = c.holds(def); }
       this.drive(t, dt);
     });
   }
 
   drive(t, dt) {
+    if (t.held) {
+      // held: a truck driving in loaded turns back (its goods stay at the shops, for the site), and one back at the
+      // machine it loads at stands there, empty, until the hold ends; then its wait runs out and it sets off loaded
+      if (t.wait <= 0 && t.dir > 0) { t.dir = -1; t.cargo.visible = false; }
+      if (t.s <= 0) t.wait = WAIT;
+    }
     let i = t.legs.findIndex(l => t.s <= l.start + l.len);
     if (i < 0) i = t.legs.length - 1;
     let leg = t.legs[i], along = t.s - leg.start;

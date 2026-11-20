@@ -92,6 +92,15 @@ export const HELP = {
     ],
     terms: ['value'],
   },
+  port: {
+    title: 'How the port works',
+    steps: [
+      ['Mark a good.', 'A marked good goes aboard the ship at the quay instead of being sold, while the hold has room. You can also carry goods to the quay yourself.'],
+      ['Send the ship.', 'The farther the destination, the longer the voyage and the more it pays over the shops. The sum is paid when the ship is back.'],
+      ['Out of sight.', 'A voyage runs on time you play. While the game is hidden or closed a ship sails on much more slowly, on the same daily allowance as the pay for time away.'],
+    ],
+    terms: [],
+  },
 };
 
 /** The tour a company gets the first time its Headquarters opens. Each card may lead to a tab. */

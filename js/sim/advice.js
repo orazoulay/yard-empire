@@ -7,6 +7,7 @@
 // what would fix it. A yard that runs well gets no advice, and neither does a yard nothing more can be done
 // for: in a finished yard the machines wait for material most of the time, because machines outrun carriers,
 // and saying so on every card would bury the advice that matters.
+import { andList, LET_RUN } from './hqview.js';
 
 export const ADVICE = {
   every: 5,          // seconds of play between two readings of the machines
@@ -60,18 +61,20 @@ export class YardWatch {
 
 /**
  * The Advisor Pro of the credits store: of the purchases the company can make next, the one that pays back soonest.
- * @param options  what Company.nextPurchases() gives: [{ id, yard, name, label, cost, gain, opens }], cost in dollars still
- *                 to pay, gain in dollars a second
- * @returns the best of them with `seconds`, how long its gain takes to earn its cost; null when nothing can be bought or nothing bought would earn
+ * @param options  what Company.nextPurchases() gives: [{ id, yard, name, label, cost, gain, opens, does? }], cost in dollars
+ *                 still to pay, gain in dollars a second; `does` on a purchase that earns nothing by itself (the Port's)
+ * @returns the best of them with `seconds`, how long its gain takes to earn its cost. When none pays back, the first that
+ *          says what it does, with `seconds: null` (it has no payback to name). null when nothing can be bought.
  */
 export function bestPurchase(options) {
-  let best = null;
+  let best = null, other = null;
   for (const o of Array.isArray(options) ? options : []) {
-    if (!o || !(o.cost > 0) || !(o.gain > 0)) continue;
+    if (!o || !(o.cost > 0)) continue;
+    if (!(o.gain > 0)) { if (!other && o.does) other = { ...o, seconds: null }; continue; }
     const seconds = o.cost / o.gain;
     if (!best || seconds < best.seconds) best = { ...o, seconds };
   }
-  return best;
+  return best || other;
 }
 
 /** How long a purchase takes to pay back, in words: "about 12 min", "about 3 hours", "about 5 days". */
@@ -89,7 +92,7 @@ const COST_NAME = { materials: 'materials', wages: 'wages', upkeep: 'machine upk
  * Name the bottleneck of one yard, if it has one.
  * @param y  the facts of the yard, as Company.yardFacts gives them
  * @returns {{ kind, problem, fix, go }|null}  kind: carriers, blocked, starved or loss. problem and fix are sentences for
- *          the player. go: where the fix is made: 'logistics' or 'research' (a Headquarters tab), or 'yard' (on the ground there).
+ *          the player. go: where the fix is made: 'logistics', 'research' or 'construction' (a Headquarters tab), or 'yard' (on the ground there).
  */
 export function advise(y) {
   if (!y || !y.machines) return null;
@@ -108,6 +111,12 @@ export function advise(y) {
     if (y.routeOut) return { kind: 'blocked', problem: 'Finished goods pile up at the machines.', fix: 'A truck route out of this yard would take them away.', go: 'logistics' };
     if (y.training) return { kind: 'blocked', problem: 'Finished goods pile up at the machines.', fix: 'Research the Training program: workers walk faster.', go: 'research' };
     return { kind: 'blocked', problem: 'Finished goods pile up at the machines.', fix: 'Carry some to the shop yourself.', go: 'yard' };
+  }
+  // A yard of the region that stands still because a running build comes first: the trucks leave the stage's goods at the
+  // shops for the site (Company.siteHolds). Nothing is wrong with the yard; the player's switch for the site decides.
+  if (y.siteHold && (starved || (y.age >= ADVICE.window && y.profit < 0))) {
+    return { kind: 'starved', problem: `The machines wait for ${what}: the building site comes first.`,
+      fix: `The trucks leave the ${andList(y.siteHold)} for the stage that is being built. ${LET_RUN}`, go: 'construction' };
   }
   // Machines starved of input: a truck route to buy, a worker to hire, or a supplier that can still grow.
   if (starved) {

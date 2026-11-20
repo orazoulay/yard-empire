@@ -126,6 +126,9 @@ export class CompanyChoresMethods {
     } else if (kind === 'sell') this.hq.toast(`Sold from the warehouse: +$${fmt(result)}`);
     else if (kind === 'build') this.hq.toast(`Building started: ${result.name}`);
     else if (kind === 'send') this.hq.toast(`Sent to the site: ${fmt(result)} goods`);
+    else if (kind === 'sail') this.hq.toast('Your ship has sailed');   // the Port tab (js/hq/port.js); 'send' is the building site's
+    else if (kind === 'unload') { this.hud.bumpCash(); this.hq.toast(`Unloaded: +$${fmt(result)}`); }
+    else if (kind === 'refit') this.hq.toast('The refit has begun');
     else if (kind === 'season') {
       // A step of the season (js/game/store.js, collectSeason): its gift, then a pass holder's boost in the words of a
       // purchase, each a line of its own, one after the other: the Headquarters' line is half a phone wide. A boost

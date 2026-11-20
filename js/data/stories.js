@@ -272,6 +272,18 @@ export const STORIES = {
     "giftset": [
       "A company is thanking its staff at the end of a good year. It ordered {needs}.",
       "The big hotel greets its guests with a present over the holidays. It wants {needs}."
+    ],
+    "shippart": [
+      "A ferry line is building a new boat for the island run. Its yard needs {needs}.",
+      "The harbour tugs have worked hard all season. Their engineers asked for {needs}."
+    ],
+    "chip": [
+      "A weather station is watching every cloud that comes in from the sea. It runs on {needs}.",
+      "The library is putting a computer on every reading desk. It ordered {needs}."
+    ],
+    "aircraft": [
+      "A small island wants its own air link to the mainland. It starts with {needs}.",
+      "The mountain rescue team wants to reach the high villages faster. They asked for {needs}."
     ]
   }
 };

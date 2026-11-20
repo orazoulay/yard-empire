@@ -4,11 +4,12 @@
 //
 // A build goes up in stages. Each stage needs goods, and takes them where goods are sold: at the shops.
 // So a build may only ask for goods that reach a shop. In a finished company planks, iron bars, steel,
-// plastic, circuits and engines never do: the next factory or a truck takes every one. Bricks, chairs, bread,
-// cars and gift sets always do, because no machine uses them; of glass, gems and rings a surplus does
+// plastic, circuits and engines never do: the next factory or a truck takes every one. Bread and gift sets always
+// do, because no machine uses them; of glass, gems, rings, bricks, chairs and cars a surplus does
 // (SITE.surplus). tests/construction.test.mjs fails for a build that asks for any other good, and
 // tests/simulate.test.mjs measures every good a build asks for in four finished companies, from Trucking alone to
-// every manager fully trained: at least 5 a minute must reach the shops in each.
+// every manager fully trained: at least 5 a minute must reach the shops in each, or, of a good the region's
+// trucks take, the site while a stage asks for it (SITE.surplus below).
 // Tools and power cells are not on the list. The builds asked for them until 18 November 2026, after a measurement
 // in one company only, the one with the fastest trucks; in every other the trucks take them all, and the house
 // stood still at "200 tools". Glass took the tools' place, and the foundations are of bricks alone.
@@ -21,13 +22,21 @@
 // finished stage adds to the picture, so the building grows with the stages.
 
 export const SITE = {
-  yards: 20,     // the site opens when this many yards are open: all of them
+  yards: 20,     // the site opens when this many yards are open: the yards up to the Department Store
   floor: 1.5,    // a build pays at least this many times the normal price of the goods it was given
   none: 0.5,     // fewer than this many of a good a minute at the shops counts as "none reaches the shops"
   // Goods a machine uses, of which more is made than the machines and trucks take: a surplus reaches the shops.
   // The least measured a minute over the four finished companies of tests/simulate.test.mjs, with nobody playing:
   // glass 34, gems 34, rings 17 (the game in a browser gave 28, 45 and 18).
-  surplus: ['glass', 'gem', 'ring'],
+  // Bricks, chairs and cars have been materials of the region since November 2026 (the Shipyard and the Aircraft
+  // Factory), so they are on this list for the builds to keep asking for them. The region's machines take every chair
+  // and every car that is made, and with every manager nearly all the glass and gems; so, by the owner's rule of
+  // 20 November 2026, a running build comes first: while a stage asks for one of these goods the trucks into the
+  // region leave it at the shops for the site (Company.routeHeld), and the region's yards that need it stand still.
+  // tests/simulate.test.mjs measures what reaches the site with a stage running that asks for it: 24 to 85 a minute
+  // of each, in the four companies. With no build running the region takes them; at the shops only bread, rings and
+  // gift sets are measured then.
+  surplus: ['glass', 'gem', 'ring', 'brick', 'chair', 'car'],
   // The plot, east of the Department Store. The camera looks north, so ground south of a yard is behind it.
   plot: { minX: 92, maxX: 116, minZ: 99, maxZ: 123 },
   // The way in: an opening in the east fence of the Department Store (the fence stands at x) and one opposite it in the

@@ -15,13 +15,15 @@ export class HqAdvisor {
   advisor() {
     const c = this.company, econ = this.game.econ, watch = this.game.watch;
     const KIND = { carriers: 'Nobody carrying', blocked: 'Goods pile up', starved: 'Waiting for material', loss: 'Losing money' };
-    const tips = AREAS.filter(a => econ.areaOpen(a.id)).map(a => ({ a, tip: advise(c.yardFacts(a.id, watch?.read(a.id))) })).filter(x => x.tip);
+    const holds = c.siteHolds();   // once for every yard: what a running build holds back
+    const tips = AREAS.filter(a => econ.areaOpen(a.id)).map(a => ({ a, tip: advise(c.yardFacts(a.id, watch?.read(a.id), holds)) })).filter(x => x.tip);
     const settling = c.age < ADVICE.window;
     const cards = tips.map(({ a, tip }) => {
       const lock = tip.go === 'research' || tip.go === 'logistics' ? c.tabLock(tip.go) : null;
       const action = tip.go === 'logistics' ? this.button_('Logistics', 'advice-' + a.id, () => this.go('logistics'), { cls: 'primary' })
         : tip.go === 'research' && !lock ? this.button_('Open lab', 'advice-' + a.id, () => this.go('research'), { cls: 'primary' })
-          : tip.go === 'yard' ? this.button_('Go there', 'advice-' + a.id, () => { if (this.game.travel(a.id)) this.close(); }) : null;
+          : tip.go === 'construction' ? this.button_('Construction', 'advice-' + a.id, () => this.go('construction'))
+            : tip.go === 'yard' ? this.button_('Go there', 'advice-' + a.id, () => { if (this.game.travel(a.id)) this.close(); }) : null;
       return h('article', { class: 'hq-card advice' },
         h('header', {}, h('h4', { text: a.name }), h('span', { class: 'hq-chip ' + (tip.kind === 'loss' ? 'bad' : ''), text: KIND[tip.kind] })),
         h('div', { class: 'hq-goal-text', text: tip.problem }),
@@ -47,11 +49,21 @@ export class HqAdvisor {
     if (!c.mods.advisorPro) return null;
     const best = bestPurchase(c.nextPurchases());
     if (!best) return section('Best next purchase', note('Every yard is fully built. Nothing is left to buy in the yards.'));
+    const go = () => h('div', { class: 'hq-actions' }, this.button_('Go there', 'pro-' + best.yard, () => { if (this.game.travel(best.yard)) this.close(); }, { cls: 'primary' }));
+    if (best.seconds == null) {   // the Port: it earns nothing by itself, so it is named by what it does, after every purchase that pays back
+      const does = best.does.charAt(0).toLowerCase() + best.does.slice(1);
+      return section('Best next purchase', h('article', { class: 'hq-card advice' },
+        h('header', {}, h('h4', { text: best.name }), h('span', { class: 'hq-chip', text: 'For export' })),
+        h('div', { class: 'hq-goal-text', text: best.opens ? `Open the ${best.opens}: ${does}.` : `${best.label}: ${does}.` }),
+        h('div', { class: 'hq-sub', text: `$${fmt(Math.ceil(best.cost))} still to pay${best.opens ? ', the gate and every purchase behind it' : ''}. It earns nothing by itself, so it has no payback to reckon.` }),
+        go()),
+        note('The Port earns nothing by itself: its ships sell what your yards make. It comes after every purchase that pays back.'));
+    }
     return section('Best next purchase', h('article', { class: 'hq-card advice' },
       h('header', {}, h('h4', { text: best.name }), h('span', { class: 'hq-chip good', text: `Pays back in ${paybackText(best.seconds)}` })),
       h('div', { class: 'hq-goal-text', text: best.opens ? `Open the ${best.opens} and build it up.` : `${best.label}.` }),
       h('div', { class: 'hq-sub', text: `$${fmt(Math.ceil(best.cost))} still to pay${best.opens ? ', the gate and every purchase behind it' : ''}. It adds about $${fmt(Math.round(best.gain * 60))} a minute.` }),
-      h('div', { class: 'hq-actions' }, this.button_('Go there', 'pro-' + best.yard, () => { if (this.game.travel(best.yard)) this.close(); }, { cls: 'primary' }))),
+      go()),
       note('Reckoned by what each yard is built to earn, the figure your goals are sized by. Of the next purchases of all your yards, this one earns its price back soonest.'));
   }
   /** Rush orders, offered and running: what is asked, how much time there is, and whether the yards will make it at their pace. */

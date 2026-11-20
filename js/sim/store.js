@@ -341,6 +341,7 @@ export const EFFECTS = {
     worth(company) {
       const g = company.nextGate();
       if (!g) return { why: 'Every yard is open.' };
+      if (g.locked) return { why: company.econ.lockOf(g.id) }   // kept, not lost: the credits were paid, and the gate opens once the rank is there;
       if (!g.due) return { why: `Buy every upgrade of ${g.from} first: its gate comes last.` };
       return { cash: Math.ceil(g.cost), note: `Opens ${g.name}` };
     },

@@ -439,7 +439,8 @@ export class Hud {
 
   // --- welcome back card ----------------------------------------------------
   /**
-   * @param o {{ earned, seconds, capped, away, share, afterCosts, left, allowance }}  the pay and its terms, in dollars and seconds
+   * @param o {{ earned, seconds, capped, away, share, afterCosts, left, allowance, ships? }}  the pay and its terms, in dollars and
+   *   seconds, and the ships that came home in that time ({ ships, cash }: already paid)
    */
   showOffline(o, onCollect) {
     const sheet = $('offline'), btn = $('off-collect'), facts = awayFacts(o);
@@ -448,6 +449,7 @@ export class Hud {
     $('off-time').textContent = facts.paid;
     $('off-share').textContent = facts.rate;
     $('off-left').textContent = facts.left;
+    $('off-ships').textContent = facts.ships; $('off-ships').hidden = !facts.ships;   // a ship of the Port that came home meanwhile
     sheet.hidden = false;
     btn.focus({ preventScroll: true });
     btn.onclick = () => { sheet.hidden = true; btn.onclick = null; onCollect(); };

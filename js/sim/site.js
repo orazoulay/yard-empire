@@ -69,23 +69,37 @@ const PAINT = { white: 0xf2f2f2, yellow: 0xf2c230, bay: 0x4b5058, drain: 0x2c303
 const boundsOf = rects => ({ minX: Math.min(...rects.map(r => r.minX)), maxX: Math.max(...rects.map(r => r.maxX)), minZ: Math.min(...rects.map(r => r.minZ)), maxZ: Math.max(...rects.map(r => r.maxZ)) });
 /** The location of a yard given as a rectangle: its own, or that of the yard with these bounds in the data. */
 const locationOf = r => r.location || AREAS.find(a => a.bounds.minX === r.minX && a.bounds.minZ === r.minZ && a.bounds.maxX === r.maxX && a.bounds.maxZ === r.maxZ)?.location || 'city';
+/**
+ * The yards the city's edge goes around: those of a location with buildings of its own (KINDS), so Industrial City and
+ * the Metropolis. Every yard outside Lumber Town is built-up land the forest keeps away from (js/world.js, js/yardlife.js),
+ * but the International Region lies south of the Metropolis on the coast and has no street or buildings of the edge.
+ * This is the one place that decides it: js/gfx/cityedge.js picks the yards with it, and cityEdge() goes around those it is given.
+ */
+export const edgeYards = rects => rects.filter(r => KINDS[locationOf(r)]);
 /** The most a thing may reach up, standing with its north edge at zNorth (SIGHT). */
 const sightTop = (b, zNorth) => (zNorth >= b.maxZ ? Math.min(SIGHT.top, SIGHT.slope * (zNorth - b.maxZ + SIGHT.inside)) : SIGHT.side);
 
 /**
- * What stands around Industrial City and the Metropolis. A street runs along the yards' fences on three sides, and
- * behind it stand the buildings: factories, warehouses and two striped chimneys beside the city; offices, shops and
- * flats around the Metropolis, with what belongs on their roofs and on the pavement in front of them.
+ * What stands around Industrial City and the Metropolis. A street runs along the yards' fences on three sides (two
+ * when a row of yards lies to the south: `south: false`), and behind it stand the buildings: factories, warehouses
+ * and two striped chimneys beside the city; offices, shops and flats around the Metropolis, with what belongs on their
+ * roofs and on the pavement in front of them.
  *
  * Everything is plain numbers drawn from fixed seeds, so the map is the same on every device. The buildings come
  * from the same run of numbers as before the building site existed, each is dressed from a run of its own, and those
  * on a `clear` rectangle are left out afterwards: the others stay exactly as they were. A chimney that would stand in
  * front of a `clear` rectangle moves to the north end of its side. The street and what stands along it are laid out
  * last, around the buildings that are left, and keep off the `clear` ground.
- * @param rects  the yards the edge goes around ({ minX, maxX, minZ, maxZ }, and `location` if it is not a yard of the data)
+ *
+ * With `south: false` the yards' south side faces more yards (the coast row of the International Region): nothing of
+ * the edge lies south of them. The south row of buildings is still drawn from the run of numbers and then left out, so
+ * the buildings of the other two sides are exactly those of the whole edge; both chimneys stand at the north end; and
+ * the streets at the ends stop short of the row, closed like their north ends.
+ * @param rects  the yards the edge goes around (edgeYards): { minX, maxX, minZ, maxZ }, and `location` if it is not a yard of the data
  * @param clear  rectangles of ground to keep free (the building site's plot)
+ * @param o      south: false when a row of yards lies along the south side
  * @returns {{ slabs, buildings, chimneys, roads, paving, kerbs, marks, covers, props, rims }}
- *   slabs     [x0, x1, z0, z1] the asphalt under it all: south, west, east
+ *   slabs     [x0, x1, z0, z1] the asphalt under it all: south (unless `south: false`), west, east
  *   buildings { x, z, w, d, h, wall, roof, vx, vz, side, where, kind, tint, tier?, wing?, kit, top }
  *             side: its row ('s', 'w', 'e'); where: 'city' or 'metropolis'; wall, roof, tint: which of five colours;
  *             tier: a smaller block on top; wing: a lower one at its end (each { x, z, w, d, h });
@@ -99,11 +113,14 @@ const sightTop = (b, zNorth) => (zNorth >= b.maxZ ? Math.min(SIGHT.top, SIGHT.sl
  *   props     { kind, x, z, turn, tint, where } what stands along the street (EDGE_THINGS)
  *   rims      [x0, x1, z0, z1, where] the outer edge of the paving, in pieces: a hedge (the Metropolis) or a wall (the city), RIM_TOP high at most
  */
-export function cityEdge(rects, clear = []) {
+export function cityEdge(rects, clear = [], { south = true } = {}) {
   const rnd = mulberry(41);
   const b = boundsOf(rects);
   const W = STREET.band;   // width of the asphalt band
-  const slabs = [[b.minX - W, b.maxX + W, b.maxZ, b.maxZ + W], [b.minX - W, b.minX, b.minZ, b.maxZ], [b.maxX, b.maxX + W, b.minZ, b.maxZ]];   // south, west, east
+  // the slabs by side, shared with streetPlan: a side that is not there is a missing key, never a shifted place in a list
+  const slab = { s: [b.minX - W, b.maxX + W, b.maxZ, b.maxZ + W], w: [b.minX - W, b.minX, b.minZ, b.maxZ], e: [b.maxX, b.maxX + W, b.minZ, b.maxZ] };
+  if (!south) delete slab.s;
+  const slabs = Object.values(slab);
   const all = [];
   const building = (side, x, z, w, d, h) => {
     const wall = Math.floor(rnd() * 5), roof = Math.floor(rnd() * 5);
@@ -131,9 +148,10 @@ export function cityEdge(rects, clear = []) {
   // A chimney that would stand between the camera and a `clear` rectangle (just south of it: the camera looks north) is put
   // at the north end of its side instead. A chimney and its smoke in front of the building site hid the house being built.
   const inFront = (x, z) => clear.some(r => x > r.minX - 2 && x < r.maxX + 2 && z > r.maxZ && z - r.maxZ < 10);
-  const chimneys = [[b.minX - 9.5, b.maxZ + 3], [b.maxX + 9.5, b.maxZ + 3]].map(([x, z]) => (inFront(x, z) ? [x, b.minZ - 3] : [x, z]));
-  const buildings = all.filter(o => !clear.some(r => stands(o, r)));
-  return { slabs, buildings, chimneys, ...streetPlan({ b, rects, clear, slabs, buildings, chimneys, whereAt }) };
+  const chimneys = [[b.minX - 9.5, b.maxZ + 3], [b.maxX + 9.5, b.maxZ + 3]].map(([x, z]) => (!slab.s || inFront(x, z) ? [x, b.minZ - 3] : [x, z]));
+  // a building of the south row has no ground without the south slab; the others keep their places and their looks
+  const buildings = all.filter(o => slab[o.side] && !clear.some(r => stands(o, r)));
+  return { slabs, buildings, chimneys, ...streetPlan({ b, rects, clear, slab, slabs, buildings, chimneys, whereAt }) };
 }
 
 /**
@@ -225,14 +243,18 @@ function runs(a, b, cuts, piece = 13) {
  * kerbs, paint, covers, and the lamps, trees, benches and parked vehicles. Each side is laid out in the street's own
  * measures (u along it, v out from the far edge of the carriageway) and then turned into the world.
  */
-function streetPlan({ b, rects, clear, slabs, buildings, chimneys, whereAt }) {
+function streetPlan({ b, rects, clear, slab, slabs, buildings, chimneys, whereAt }) {
   const { verge: V, road: RW, kerb: K, band: W } = STREET;
   const x1 = b.minX - V, x0 = x1 - RW, z0 = b.maxZ + V, z1 = z0 + RW, e0 = b.maxX + V, e1 = e0 + RW, zN = b.minZ + 0.6, east = b.maxX + W;
+  // With no south street the streets at the ends stop as far short of the south side as they start from the north
+  // side, and are closed there the same way.
+  const hasSouth = !!slab.s, zS = b.maxZ - 0.6, wEnd = hasSouth ? z1 : zS;
   // the road east of the yards stops short of ground that is kept free
-  let eEnd = z1;
-  for (const r of clear) if (r.maxX > e0 - 1 && r.minX < e1 + 1 && r.maxZ > zN && r.minZ < z1) eEnd = Math.min(eEnd, r.minZ - 1.6);
-  const joined = eEnd >= z0, hasEast = eEnd - zN > 6;
-  const roads = [[x0, x1, zN, z1], [x0, east, z0, z1]];
+  let eEnd = wEnd;
+  for (const r of clear) if (r.maxX > e0 - 1 && r.minX < e1 + 1 && r.maxZ > zN && r.minZ < wEnd) eEnd = Math.min(eEnd, r.minZ - 1.6);
+  const joined = hasSouth && eEnd >= z0, hasEast = eEnd - zN > 6;
+  const roads = [[x0, x1, zN, wEnd]];
+  if (hasSouth) roads.push([x0, east, z0, z1]);
   if (hasEast) roads.push([e0, e1, zN, joined ? z1 : eEnd]);
 
   const rnd = mulberry(977);
@@ -250,9 +272,9 @@ function streetPlan({ b, rects, clear, slabs, buildings, chimneys, whereAt }) {
   // The sides, each with its own measures: u runs along the street, v out from the carriageway's far edge (so the
   // carriageway is v from -RW to 0, and the buildings stand at v > 0). `turn` faces a thing toward the road.
   const sides = [
-    { id: 's', from: x0, to: east, turn: 0, rect: (ua, ub, va, vb) => [ua, ub, z1 + va, z1 + vb], at: (u, v) => [u, z1 + v], local: o => ({ u0: o.x - o.w / 2, u1: o.x + o.w / 2, v0: o.z - o.d / 2 - z1, wing: o.wing ? o.wing.w : 0 }) },
-    { id: 'w', from: zN, to: z1, turn: -Math.PI / 2, rect: (ua, ub, va, vb) => [x0 - vb, x0 - va, ua, ub], at: (u, v) => [x0 - v, u], local: o => ({ u0: o.z - o.d / 2, u1: o.z + o.d / 2, v0: x0 - (o.x + o.w / 2), wing: o.wing ? o.wing.d : 0 }) },
-  ];
+    hasSouth && { id: 's', from: x0, to: east, turn: 0, rect: (ua, ub, va, vb) => [ua, ub, z1 + va, z1 + vb], at: (u, v) => [u, z1 + v], local: o => ({ u0: o.x - o.w / 2, u1: o.x + o.w / 2, v0: o.z - o.d / 2 - z1, wing: o.wing ? o.wing.w : 0 }) },
+    { id: 'w', from: zN, to: wEnd, turn: -Math.PI / 2, rect: (ua, ub, va, vb) => [x0 - vb, x0 - va, ua, ub], at: (u, v) => [x0 - v, u], local: o => ({ u0: o.z - o.d / 2, u1: o.z + o.d / 2, v0: x0 - (o.x + o.w / 2), wing: o.wing ? o.wing.d : 0 }) },
+  ].filter(Boolean);
   if (hasEast) sides.push({ id: 'e', from: zN, to: joined ? z0 : eEnd, turn: Math.PI / 2, rect: (ua, ub, va, vb) => [e1 + va, e1 + vb, ua, ub], at: (u, v) => [e1 + v, u], local: o => ({ u0: o.z - o.d / 2, u1: o.z + o.d / 2, v0: o.x - o.w / 2 - e1, wing: o.wing ? o.wing.d : 0 }) });
 
   const lowBehind = [...rects, ...clear];
@@ -381,7 +403,7 @@ function streetPlan({ b, rects, clear, slabs, buildings, chimneys, whereAt }) {
     }
 
     // --- paint on the carriageway
-    const dashFrom = south ? x1 + 1 : side.from + 1.6, dashTo = south ? side.to - 3 : (side.id === 'w' || joined ? z0 - 0.6 : side.to - 1.4);
+    const dashFrom = south ? x1 + 1 : side.from + 1.6, dashTo = south ? side.to - 3 : ((side.id === 'w' && hasSouth) || joined ? z0 - 0.6 : side.to - 1.4);
     for (let u = dashFrom; u + 1 < dashTo; u += 2) if (!zebra(u + 0.5)) mark(side, u + 0.5, -RW / 2, 1, 0.09, PAINT.white);
     for (const [a, c] of runs(dashFrom - 0.8, dashTo, crossings.map(u => [u - 1, u + 1]), 6.5)) if (cityAt((a + c) / 2)) for (const v of [-0.16, -RW + 0.16]) mark(side, (a + c) / 2, v, c - a, 0.07, PAINT.yellow);   // the city's roads are lined in yellow
     for (let u = dashFrom + 5 + rnd() * 4, k = 0; u < dashTo - 2; u += 13 + rnd() * 7, k++) {
@@ -392,12 +414,13 @@ function streetPlan({ b, rects, clear, slabs, buildings, chimneys, whereAt }) {
 
     // --- kerbs: along the pavement, along the verge by the fence, and across the ends
     for (const [a, c] of runs(side.from - K, side.to, cuts.outer)) kerbs.push(side.rect(a, c, 0, K));
-    for (const [a, c] of runs(south ? x1 : side.from - K, south ? (joined && hasEast ? e0 : east) : z0, cuts.inner)) kerbs.push(side.rect(a, c, -RW - K, -RW));
+    // (with no south street a side street's kerb along the fence ends where the street does)
+    for (const [a, c] of runs(south ? x1 : side.from - K, south ? (joined && hasEast ? e0 : east) : hasSouth ? z0 : side.to + K, cuts.inner)) kerbs.push(side.rect(a, c, -RW - K, -RW));
     if (south && joined && hasEast) for (const [a, c] of runs(e1, east, cuts.inner)) kerbs.push(side.rect(a, c, -RW - K, -RW));
     if (!south) {   // the end of a side street: a kerb and a barrier across it
       kerbs.push(side.rect(side.from - K, side.from, -RW - K, K));
       place(side, 'barrier', side.from + 0.55, -RW / 2, { free: true, quarter: true });
-      if (side.id === 'e' && !joined) { kerbs.push(side.rect(side.to, side.to + K, -RW - K, K)); place(side, 'barrier', side.to - 0.55, -RW / 2, { free: true, quarter: true }); }
+      if (side.id === 'e' ? !joined : !hasSouth) { kerbs.push(side.rect(side.to, side.to + K, -RW - K, K)); place(side, 'barrier', side.to - 0.55, -RW / 2, { free: true, quarter: true }); }
     } else {   // the south street ends by the building site's gate: a hatched box, cones, and a kerb to close it
       kerbs.push(side.rect(side.to - K, side.to, -RW - K, K));
       hatch(side, side.to - 2.5, side.to - 0.45, -RW + 0.2, -0.2);
@@ -406,7 +429,7 @@ function streetPlan({ b, rects, clear, slabs, buildings, chimneys, whereAt }) {
   }
 
   // --- around the outside of it all, where the paving ends: a clipped hedge around the Metropolis, a works wall beside the city
-  const rims = [], RIM = 0.4, IN = 0.08, outer = b.maxZ + W - IN;
+  const rims = [], RIM = 0.4, IN = 0.08, outer = hasSouth ? b.maxZ + W - IN : zS + RIM;
   const rim = (xa, xb, za, zb) => {
     const alongX = xb - xa > zb - za, strip = [xa, xb, za, zb];
     const stops = taken.filter(t => touch(strip, t, 0.15)).map(t => (alongX ? [t[0] - 0.25, t[1] + 0.25] : [t[2] - 0.25, t[3] + 0.25]));   // it parts for a building, a road, a tree
@@ -415,7 +438,7 @@ function streetPlan({ b, rects, clear, slabs, buildings, chimneys, whereAt }) {
       if (q - p >= 1 && kept(piece)) rims.push([...piece, whereAt((piece[0] + piece[1]) / 2, (piece[2] + piece[3]) / 2)]);
     }
   };
-  rim(b.minX - W + IN, east - IN, outer - RIM, outer);                    // south
+  if (hasSouth) rim(b.minX - W + IN, east - IN, outer - RIM, outer);      // south
   rim(b.minX - W + IN, b.minX - W + IN + RIM, zN, outer - RIM);           // west
   rim(east - IN - RIM, east - IN, zN, outer - RIM);                       // east
 
