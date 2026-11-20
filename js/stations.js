@@ -285,7 +285,7 @@ export class ProcessorStation extends Station {
     // City machines get their materials from far away, so they say which one they are waiting for:
     // at once when they already hold the other one, otherwise after standing still for a while.
     const holdsOne = this.inStack2 && this.sim.inputs + this.sim.inputs2 > 0;
-    // A machine of the region whose material the trucks leave for the building site says so (Company.heldForSite): "CHAIRS GO TO THE SITE".
+    // A machine whose material the trucks leave for the building site says so (Company.heldForSite): "CHAIRS GO TO THE SITE".
     const waiting = this.inCity && !this.sim.busy && (holdsOne || this.idle > 6) ? this.sim.missing : null;
     const status = waiting ? waitLabel(ITEMS[waiting].label, game.company.heldForSite(this.area, waiting)) : this.sim.inputFull && (!this.inStack2 || this.sim.input2Full) ? 'FULL' : '';
     if (status !== this.status) { this.status = status; this.statusLabel.el.textContent = status; }

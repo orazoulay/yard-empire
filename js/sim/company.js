@@ -1164,20 +1164,27 @@ export class Company {
   }
   /**
    * A running build comes first (the owner's rule of 20 November 2026, chosen from three that were measured): while a
-   * stage of the building site still asks for a good, the trucks into the International Region leave that good at the
-   * shops, where the site takes it; the rest of the time the region runs at full. The region's machines are 1 : 1 on
-   * chairs and cars and took every one that was made, so a build that asked for them never finished. Routes into the
-   * city and the Metropolis are never held. The rule reads the site's own state (saved already), so nothing is saved
-   * for it, and the game and the simulators share it because both run their trucks through runRoutes().
+   * stage of the building site still asks for a good, no truck takes that good: it stays at its maker's shop, where the
+   * site takes it; the rest of the time every yard runs at full. The region's machines are 1 : 1 on chairs and cars and
+   * took every one that was made, so a build that asked for them never finished, and the rule was first made for the
+   * trucks into the region alone. The owner widened it to every truck the same day: what is left at the shops of a good
+   * a truck takes depends on which routes a company owns, and one with the ring truck to the Department Store and
+   * without the gold truck to the Jewelry got one ring in an hour for the tower's lobby. In the first twenty yards
+   * three routes carry a good a build asks for: glass to the Automobile Factory, gems to Robotics and rings to the
+   * Department Store. No stage asks for a good together with something made of it (tests/construction.test.mjs), so a
+   * truck that waits never stops the stage it waits for. The rule reads the site's own state (saved already), so
+   * nothing is saved for it, and the game and the simulators share it because both run their trucks through runRoutes().
    * holds(d) is the rule; routeHeld(d) says it for the screen.
    */
-  holds(d) { return !!this.routes[d.id] && this.regionYards.includes(d.to) && this.siteWants(d.item) > 0; }
+  holds(d) { return !!this.routes[d.id] && this.siteWants(d.item) > 0; }
   /** @returns why an owned route does not carry now, in the player's words, or null when it carries */
   routeHeld(d) { return this.holds(d) ? `Waiting: the building site needs ${this.items[d.item].label}` : null; }
   /**
    * What the rule holds back now, for the screens: the routes that stand, the goods of the stage they wait for (in the
-   * stage's order), and the yards of the region that stand still for it: those the held routes go into, and those
-   * whose material comes from one of them (the Aircraft Factory takes the processors Advanced Technology makes).
+   * stage's order), and the yards that stand still for it, in the order of the yards: those the held routes go into,
+   * and those whose material comes from one of them over a route the company owns (the Aircraft Factory takes the
+   * processors Advanced Technology makes, the Department Store the robots of Robotics). A yard has one recipe, so a
+   * yard without one of its materials makes nothing.
    * because: per yard that stands still, the held goods that stop it (its own held routes', or those of the yard it is fed from).
    */
   siteHolds() {
@@ -1187,15 +1194,15 @@ export class Company {
     for (let grew = true; grew;) {
       grew = false;
       for (const d of this.routeDefs) {
-        if (!this.routes[d.id] || !because.has(d.from) || !this.regionYards.includes(d.to)) continue;
+        if (!this.routes[d.id] || !because.has(d.from)) continue;
         const had = because.get(d.to) || new Set(), now = new Set([...had, ...because.get(d.from)]);
         if (now.size > had.size) { because.set(d.to, now); grew = true; }
       }
     }
-    const inOrder = set => order.filter(item => set.has(item));
+    const inOrder = set => order.filter(item => set.has(item)), yards = this.areas.filter(a => because.has(a.id));
     return { routes: routes.map(d => d.id), items: order.filter(item => routes.some(d => d.item === item)),
-      yards: this.regionYards.filter(id => because.has(id)),
-      because: Object.fromEntries(this.regionYards.filter(id => because.has(id)).map(id => [id, inOrder(because.get(id))])) };
+      yards: yards.map(a => a.id),
+      because: Object.fromEntries(yards.map(a => [a.id, inOrder(because.get(a.id))])) };
   }
   /** A machine of yard `areaId` waits for `item` because the building site comes first: its route into the yard is held. */
   heldForSite(areaId, item) { return this.routeDefs.some(d => d.to === areaId && d.item === item && this.holds(d)); }

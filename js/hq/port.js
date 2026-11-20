@@ -29,7 +29,8 @@ export class HqPort {
   }
   /**
    * One line, only while a good the Port waits for is not being made because a running build comes first: ship parts
-   * for the refit that runs, or a good marked for export, made by a yard of the region that stands still for the site.
+   * for the refit that runs, or a good marked for export, made by a yard that stands still for the site (cars, robots and
+   * gift sets are made in the Metropolis, whose yards wait for glass, gems and rings as the region's do).
    */
   portHold(r) {
     const c = this.company, holds = c.siteHolds();

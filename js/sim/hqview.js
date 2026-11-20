@@ -153,16 +153,16 @@ export function modRows(mods, { capacity, slots }) {
 export function andList(names) { return names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' and ' + names.at(-1); }
 
 // --- a running build comes first (Company.routeHeld) ----------------------------------------------------
-// While a stage of the building site asks for a good, the trucks into the region leave it at the shops. The player's
-// switch for the site is then the choice "build now, or let the region run", and every screen that shows a held route
-// or a yard standing still for it says so, and names the switch.
-export const LET_RUN = 'Switch off Deliveries to the site to let the region run.';
-/** The Construction tab: the goods the trucks leave for this stage, and the yards of the region that stand still meanwhile. */
-export const siteHoldText = (goods, yards) => `The trucks into the region leave the ${andList(goods)} for this stage. Standing still until it has them: ${yards.join(', ')}. ${LET_RUN}`;
+// While a stage of the building site asks for a good, the trucks leave it at the shops, whichever yard they go to. The
+// player's switch for the site is then the choice "build now, or let the trucks run", and every screen that shows a
+// held route or a yard standing still for it says so, and names the switch.
+export const LET_RUN = 'Switch off Deliveries to the site to let the trucks run.';
+/** The Construction tab: the goods the trucks leave for this stage, and the yards that stand still meanwhile. */
+export const siteHoldText = (goods, yards) => `The trucks leave the ${andList(goods)} for this stage. Standing still until it has them: ${yards.join(', ')}. ${LET_RUN}`;
 /** The Port tab, when a good it waits for is made by a yard that stands still for the site (products: their names). */
 export const portHoldText = (products, goods) => {
   const what = andList(products);
-  return `${what[0].toUpperCase() + what.slice(1)} are not being made: the building site takes the ${andList(goods)} first. Switch off Deliveries to the site, on the Construction tab, to let the region run.`;
+  return `${what[0].toUpperCase() + what.slice(1)} are not being made: the building site takes the ${andList(goods)} first. Switch off Deliveries to the site, on the Construction tab, to let the trucks run.`;
 };
 
 // --- truck routes -----------------------------------------------------------------------------------

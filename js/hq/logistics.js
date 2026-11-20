@@ -42,7 +42,7 @@ export class HqLogistics {
     const fold = hidden > 0 || every
       ? this.button_(every ? 'Show fewer routes' : `Show all ${defs.length} routes (${hidden} more, locked for now)`, 'routes-fold',
         () => { (this.unfold ||= {}).routes = !every; this.render(); }, { cls: 'quiet small' }) : null;
-    // A route into the region that waits while the building site's stage asks for its good says so, and how to let it run.
+    // A route that waits while the building site's stage asks for its good says so, and how to let it run.
     const routes = shown.map(({ d, st }) => {
       return h('article', { class: 'hq-card research ' + (st.held ? '' : st.owned ? 'done' : st.lock ? 'locked' : st.affordable ? 'ready' : '') },
         h('div', { class: 'hq-research-text' },

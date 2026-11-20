@@ -112,7 +112,7 @@ export function advise(y) {
     if (y.training) return { kind: 'blocked', problem: 'Finished goods pile up at the machines.', fix: 'Research the Training program: workers walk faster.', go: 'research' };
     return { kind: 'blocked', problem: 'Finished goods pile up at the machines.', fix: 'Carry some to the shop yourself.', go: 'yard' };
   }
-  // A yard of the region that stands still because a running build comes first: the trucks leave the stage's goods at the
+  // A yard that stands still because a running build comes first: the trucks leave the stage's goods at the
   // shops for the site (Company.siteHolds). Nothing is wrong with the yard; the player's switch for the site decides.
   if (y.siteHold && (starved || (y.age >= ADVICE.window && y.profit < 0))) {
     return { kind: 'starved', problem: `The machines wait for ${what}: the building site comes first.`,

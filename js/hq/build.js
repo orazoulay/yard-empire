@@ -47,8 +47,9 @@ export class HqBuild {
       h('h4', {}, i < at ? icon('check') : null, h('span', { text: st.name })),
       i === at ? null : h('div', { class: 'hq-sub', text: i < at ? 'Finished' : st.needs.map(needText).join(' and ') })));
     const sendable = c.siteSendable();
-    // A running build comes first: the trucks into the region wait for this stage's goods, and its yards stand still (Company.siteHolds)
-    const holds = c.siteHolds(), regionRuns = c.regionYards.some(id => c.routeDefs.some(d => d.to === id && c.routes[d.id]));
+    // A running build comes first: the trucks wait for this stage's goods, and the yards they go to stand still (Company.siteHolds).
+    // trucks: the company owns a route that carries a good some stage asks for, so a stage can hold a yard of it back
+    const holds = c.siteHolds(), trucks = c.routeDefs.some(d => c.routes[d.id] && BUILDS.some(b => b.stages.some(st => st.needs.some(n => n[0] === d.item))));
     return [
       section(running.name, note(`Stage ${at + 1} of ${running.stages.length}: ${running.stages[at].name}`),
         ...goods, time ? row('This stage', time) : null,
@@ -58,9 +59,9 @@ export class HqBuild {
           this.button_(sendable ? `Send ${fmt(sendable)} from the warehouse` : 'Send from the warehouse', 'site-send', () => this.act('send', () => c.sendToSite()), { disabled: !sendable }),
           go, show),
         note('The building rises as the goods arrive. Go to the site to watch, and to walk into it while it has no roof.'),
-        // time away pays at the pace the yards earn, which is lower while a stage holds the region's yards (Company.routeHeld)
-        note(c.site.on ? `Goods arrive while you play. A rush order is served first, and a contract that needs the same good shares it with the site; time away pays cash at the pace your yards earn${regionRuns ? ', which is lower while the region stands still for the site' : ''}.`
-          : `Deliveries are stopped: every good is sold as usual${regionRuns ? ', the trucks into the region run' : ''}, and the site keeps what it has. Goods arrive while you play.`)),
+        // time away pays at the pace the yards earn, which is lower while a stage holds yards back (Company.routeHeld)
+        note(c.site.on ? `Goods arrive while you play. A rush order is served first, and a contract that needs the same good shares it with the site; time away pays cash at the pace your yards earn${trucks ? ', which is lower while yards stand still for the site' : ''}.`
+          : `Deliveries are stopped: every good is sold as usual${trucks ? ', every truck runs' : ''}, and the site keeps what it has. Goods arrive while you play.`)),
       section('Stages', ...stages),
       section('What to build', ...cards),
     ];

@@ -7,9 +7,11 @@
 // plastic, circuits and engines never do: the next factory or a truck takes every one. Bread and gift sets always
 // do, because no machine uses them; of glass, gems, rings, bricks, chairs and cars a surplus does
 // (SITE.surplus). tests/construction.test.mjs fails for a build that asks for any other good, and
-// tests/simulate.test.mjs measures every good a build asks for in four finished companies, from Trucking alone to
-// every manager fully trained: at least 5 a minute must reach the shops in each, or, of a good the region's
-// trucks take, the site while a stage asks for it (SITE.surplus below).
+// tests/simulate-site.test.mjs measures every good a build asks for in four finished companies, from Trucking alone to
+// every manager fully trained: at least 5 a minute must reach the shops in each, or, of a good a truck carries,
+// the site while a stage asks for it (SITE.surplus below).
+// A stage may not ask for a good together with something made of it (glass and cars, rings and gift sets): the truck
+// that waits for the stage would stop the yard the stage waits for. tests/construction.test.mjs fails for such a stage.
 // Tools and power cells are not on the list. The builds asked for them until 18 November 2026, after a measurement
 // in one company only, the one with the fastest trucks; in every other the trucks take them all, and the house
 // stood still at "200 tools". Glass took the tools' place, and the foundations are of bricks alone.
@@ -31,11 +33,14 @@ export const SITE = {
   // Bricks, chairs and cars have been materials of the region since November 2026 (the Shipyard and the Aircraft
   // Factory), so they are on this list for the builds to keep asking for them. The region's machines take every chair
   // and every car that is made, and with every manager nearly all the glass and gems; so, by the owner's rule of
-  // 20 November 2026, a running build comes first: while a stage asks for one of these goods the trucks into the
-  // region leave it at the shops for the site (Company.routeHeld), and the region's yards that need it stand still.
-  // tests/simulate.test.mjs measures what reaches the site with a stage running that asks for it: 24 to 85 a minute
-  // of each, in the four companies. With no build running the region takes them; at the shops only bread, rings and
-  // gift sets are measured then.
+  // 20 November 2026, a running build comes first: while a stage asks for one of these goods no truck takes it, it
+  // stays at the shops for the site (Company.routeHeld), and the yards that need it stand still. The rule was first
+  // for the trucks into the region alone; the surplus above was measured in companies that own every route, and one
+  // that owned the ring truck to the Department Store and not the gold truck to the Jewelry had no ring left for the
+  // tower's lobby, so the owner widened it to every truck the same day.
+  // tests/simulate-site.test.mjs measures what reaches the site with a stage running that asks for it: 24 to 85 a
+  // minute of each, in the four companies (rings 20 to 31 without the gold truck). With no build running the trucks
+  // take them; at the shops only bread, rings and gift sets are measured then.
   surplus: ['glass', 'gem', 'ring', 'brick', 'chair', 'car'],
   // The plot, east of the Department Store. The camera looks north, so ground south of a yard is behind it.
   plot: { minX: 92, maxX: 116, minZ: 99, maxZ: 123 },
