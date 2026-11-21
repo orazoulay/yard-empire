@@ -268,6 +268,7 @@ export class Hud {
     bindVolume('sound'); bindVolume('music');
     bindToggle('btn-haptics', 'haptics', 'Vibration');
     bindToggle('btn-text', 'largeText', 'Larger text');
+    bindToggle('btn-saver', 'batterySaver', 'Battery saver');   // fewer pictures a second: js/engine/pace.js
     const motion = $('btn-motion');
     renders.push(() => {
       // When the device itself asks for less motion the game follows, and the switch has nothing left to decide.

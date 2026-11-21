@@ -30,7 +30,7 @@ export function debugWanted() {
 
 /** The graphics diagnostics: a corner of text over the game, refreshed twice a second. */
 export class DebugPanel {
-  /** @param game  reads game.renderer, game.stats, game.quality and game.autoQuality */
+  /** @param game  reads game.renderer, game.stats, game.pace, game.quality and game.autoQuality */
   constructor(game) {
     this.game = game; this.age = 0;
     const el = this.el = document.createElement('pre');
@@ -50,6 +50,7 @@ export class DebugPanel {
     this.el.textContent = [
       `${s.fps.toFixed(0)} fps  frame ${s.frameMs.toFixed(1)} ms (p95 ${s.frameP95.toFixed(1)})`,
       `script ${s.workMs.toFixed(1)} ms (p95 ${s.workP95.toFixed(1)})`,
+      g.pace ? `pace: ${g.pace.describe(performance.now())}` : '',
       `draws ${info.render.calls}  tris ${(info.render.triangles / 1000).toFixed(0)}k`,
       `geometries ${info.memory.geometries}  textures ${info.memory.textures}  shaders ${info.programs?.length ?? '?'}`,
       `shared: ${share.materials} materials, ${share.shapes} shapes`,

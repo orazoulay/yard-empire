@@ -25,6 +25,7 @@ export function readSettings(saved) {
     soundVolume: unit(s.soundVolume, 1), musicVolume: unit(s.musicVolume, 1),   // 1 is as loud as the game was before it had sliders
     graphics: GRAPHICS.includes(s.graphics) ? s.graphics : 'auto',
     reduceMotion: s.reduceMotion === true, largeText: s.largeText === true,
+    batterySaver: s.batterySaver === true,   // fewer pictures a second (js/engine/pace.js): off until the player asks
     moveHintSeen: s.moveHintSeen === true,
   };
 }

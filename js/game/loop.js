@@ -20,7 +20,8 @@ export class LoopMethods {
     this.stats.add(gapMs, workMs);
     if (this.settings.graphics !== 'auto') return;
     if (document.hidden || this.paused) { this.autoQuality.rest(); return; }   // a pause, or a sheet over a still yard, is no measure
-    if (this.autoQuality.frame(gapMs, workMs)) this.applyGraphics();
+    // less the part of the gap that is the pace (the Battery saver, a rest), so drawing less often on purpose is not read as a slow device
+    if (this.autoQuality.frame(gapMs - this.pace.slack, workMs)) this.applyGraphics();
   }
   get paused() { return this.settingsOpen || this.offlineOpen || this.account.open; }
 

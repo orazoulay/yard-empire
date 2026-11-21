@@ -5,6 +5,7 @@ import { createWorld, skyLight } from './world.js';
 import { setAnisotropy } from './textures.js';
 import { createRenderer } from './engine/renderer.js';
 import { AutoQuality } from './engine/quality.js';
+import { FramePace } from './engine/pace.js';
 import { FrameStats, DebugPanel, debugWanted } from './engine/perf.js';
 import { Input } from './input.js';
 import { Labels } from './labels.js';
@@ -160,6 +161,11 @@ class Game {
     // how fast this device draws (js/engine/perf.js), and the automatic graphics level that follows it (js/engine/quality.js)
     this.stats = new FrameStats();
     this.autoQuality = new AutoQuality({ start: 'high' });
+    // how often it draws (js/engine/pace.js): every refresh while somebody plays, fewer after a minute with no touch, and with the Battery saver
+    this.pace = new FramePace({ saver: this.settings.batterySaver });
+    this.pace.touch(performance.now());
+    this.settings.onChange(() => { this.pace.saver = this.settings.batterySaver; });
+    for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel']) addEventListener(type, () => this.pace.touch(performance.now()), { capture: true, passive: true });
     this.debug = debugWanted() ? new DebugPanel(this) : null;
     this.applyGraphics();
     this.reveal = null;
@@ -200,9 +206,9 @@ class Game {
     this.clock = new FrameClock();
     this.resize();
     addEventListener('resize', () => this.resize());
-    addEventListener('visibilitychange', () => { if (document.hidden) this.save(); this.autoQuality.rest(); });
+    addEventListener('visibilitychange', () => { if (document.hidden) this.save(); else this.pace.touch(performance.now()); this.autoQuality.rest(); });   // coming back to the game is a touch
     this.awayAtLoad();   // time away: paid now, or once the store has answered (js/game/saving.js); before the first save overwrites the last-seen time
-    this.renderer.setAnimationLoop(() => this.frame());
+    this.renderer.setAnimationLoop(t => { if (this.input.steering) this.pace.touch(t); if (this.pace.due(t)) this.frame(); });   // a finger held on the stick sends no events, and is no rest
 
     let sold = 0;
     try { sold = Number(sessionStorage.getItem(SOLD_KEY)) || 0; sessionStorage.removeItem(SOLD_KEY); } catch { /* private mode */ }
