@@ -75,6 +75,7 @@ export class CameraMethods {
     const k = overviewBlend(own, over.fit);
     if (k > 0) { focus.lerp(_to.set(over.box.cx, 0, over.box.cz), k); zoom *= 1 + (1 / this.camZoom - 1) * k; }
     this.setFar(k > 0.35);
+    this.labels.zoom = own;   // past twice the usual distance the small labels step aside (js/sim/yard.js, labelView)
     if (this.reveal) {
       const r = this.reveal; r.t += dt;
       const x = r.t / r.dur, k = smooth(0, 0.25, x) * (1 - smooth(0.78, 1, x));

@@ -119,7 +119,7 @@ export class LoopMethods {
     let hum = 0;
     if (!this.paused) for (const s of this.playerArea.stations) if (s.type === 'processor' && s.power > 0.05) hum = Math.max(hum, s.power * (1 - Math.hypot(s.x - p.pos.x, s.z - p.pos.z) / 16));
     this.sfx.hum(hum); this.sfx.music();
-    this.sky.update(dt, this.camFocus); this.sfx.rain(this.sky.rain);
+    this.sky.update(dt, this.camFocus, this.zoom.value); this.sfx.rain(this.sky.rain);
     this.life.update(dt, this.paused);
 
     // yard interface: the carry bubble, the labels in the yard, the income and save status, being shown the way

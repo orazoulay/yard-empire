@@ -352,7 +352,7 @@ export class Shop extends Station {
     this.slides = []; this.coins = []; this.selling = false;   // goods sliding over the counter and coins out of the till (see showSale)
     this.tillAt = { x: cfg.x + TILL_AT.x, z: cfg.z + TILL_AT.z };   // where the till stands in the world: a Sale effect starts there
     // (the station's group is never turned: a station stands at its place, facing the camera, so this is the till's place)
-    this.label = game.labels.add('zone', cfg.name.toUpperCase(), () => ({ x: cfg.x, y: 0.3, z: cfg.z - 0.3 }));
+    this.label = game.labels.add('zone', cfg.name.toUpperCase(), () => ({ x: cfg.x, y: 0.3, z: cfg.z - 0.3 }), { wide: true });   // one to a yard: it reads from afar
   }
   /**
    * Build the shop's body (js/gfx/shops.js) in a group of its own, in the yard's colours, and join its still parts. The
@@ -457,7 +457,7 @@ export class Quay extends Station {
     this.aboard = Infinity; this.work = 0;   // what the ships at it held last frame, and how long the crane goes on swinging
     addLightPool(game.scene, cfg.x, cfg.z + 1.4, 7.5);   // found after dark, like a shop's counter
     for (const s of [-1, 1]) addLightPool(game.scene, cfg.x + s * (DECK.half - 0.35), cfg.z + DECK.from + 1.2, 5);   // and under the deck's two lamps
-    this.label = game.labels.add('zone', cfg.name.toUpperCase(), () => ({ x: cfg.x, y: 0.3, z: cfg.z - 0.3 }));
+    this.label = game.labels.add('zone', cfg.name.toUpperCase(), () => ({ x: cfg.x, y: 0.3, z: cfg.z - 0.3 }), { wide: true });   // one to a yard: it reads from afar
     game.quay = this;
   }
   accepts(item) { return this.game.company.quayTakes(item) ? 999 : 0; }

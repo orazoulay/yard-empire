@@ -134,7 +134,7 @@ class Game {
     this.paintEmblem = paintEmblem;   // the company's emblem on its one picture (js/gfx/emblem.js), for js/game/looks.js
     this.saleFx = ''; this.burstAt = 0; this.shopBurstAt = new WeakMap();   // the Sale effect that is chosen ('' for the game's own sparks), and when the player's last good, and the workers' last at each counter, was sold
     this.playerArea = this.areas[0];
-    this.bubble = this.labels.add('bubble', '', () => this.player.headPos);
+    this.bubble = this.labels.add('bubble', '', () => this.player.headPos, { wide: true });   // far out, it is what shows where the player stands
     this.guide = new Guide(scene);
     this.pulse = new Pulse(scene);
     this.tutorial = new Tutorial(this);

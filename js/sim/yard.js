@@ -234,7 +234,17 @@ export function cameraFrame(aspect, zoom = 1) {
   return { vFov: v, dist };
 }
 
-export const ZOOM = { min: 0.62, max: 1.5, normal: 1 };   // 1 = the usual distance, below it closer, above it further
+// 1 = the usual distance, below it closer, above it further. max: the usual limit, past which the camera starts to
+// leave the player for the view from above. labels: past this the small labels are too many to read (labelView, below).
+export const ZOOM = { min: 0.62, max: 1.5, normal: 1, labels: 2 };
+
+const PINCH = 10, LINE = 33;   // a trackpad's pinch, against the same fingers scrolling; and a mouse that reports lines, in pixels
+/**
+ * What a step of a wheel is worth to the zoom, in pixels (a positive number moves away). A browser reports a trackpad's
+ * pinch as wheel steps with the Ctrl key down, each a few pixels small: left as they are, thirty steps of a pinch moved the
+ * zoom from 1 to 1.2. Ten times is what map libraries give a pinch.
+ */
+export function wheelDelta({ deltaY, deltaMode = 0, ctrlKey = false }) { return deltaY * (deltaMode === 1 ? LINE : 1) * (ctrlKey ? PINCH : 1); }
 
 /**
  * The player's own zoom: a wish that is set at once and a value that eases toward it. It goes out as far as `max`:
@@ -376,6 +386,27 @@ export function overviewBlend(zoom, fit) {
   const t = clamp((zoom - ZOOM.max) / (fit - ZOOM.max), 0, 1);
   return t * t * (3 - 2 * t);
 }
+
+// On the way out, between the usual limit and the view from above. With every yard open that is a long way (the zoom
+// that fits is 7 on a phone and nearly 11 on a wide screen), and the yards' names take over only a third of the way
+// there. A label is as large on the screen far out as it is up close, so every machine in sight kept its name and what
+// it waits for: 60 labels on a phone at zoom 3.3, 81 on a laptop at 5, one over the other.
+/**
+ * What the labels show at the player's zoom: 'near' everything (machines, what they wait for, plots, shops), 'wide'
+ * what reads from afar (the shops' names, one to a yard; the building site's sign; the player's bubble), 'far' the
+ * yards' names (the view from above, which begins where the camera says: before ZOOM.labels with few yards open).
+ */
+export function labelView(zoom, far) { return far ? 'far' : zoom > ZOOM.labels ? 'wide' : 'near'; }
+/** Whether a label is shown in a view. label.far: made for the view from above; label.wide: reads from afar too. */
+export function labelShows(label, view) { return label.far ? view === 'far' : view === 'near' || (view === 'wide' && !!label.wide); }
+
+const CLOUDS = { full: 2.5, gone: 4.5 };
+/**
+ * How dark the clouds' shadows are at the player's zoom, 0..1. They are drawn on one sheet of 260 m under the camera
+ * (js/sky.js); from above more ground than that is in sight, the sheet's edge crossed the grass as a straight line and
+ * its pattern repeated across the company. They fade out before that.
+ */
+export function cloudShade(zoom) { return 1 - clamp((zoom - CLOUDS.full) / (CLOUDS.gone - CLOUDS.full), 0, 1); }
 
 // ------------------------------------------------------------------ weather
 /** How wet the ground is, 0..1: it soaks within seconds of rain and takes far longer to dry. */

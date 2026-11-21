@@ -81,7 +81,7 @@ export class SiteSign {
   constructor(labels) {
     const el = (tag, cls) => { const e = document.createElement(tag); e.className = cls; return e; };
     this.at = { x: 0, y: 0, z: 0 };
-    this.label = labels.add('site-sign', '', () => this.at);
+    this.label = labels.add('site-sign', '', () => this.at, { wide: true });
     this.label.visible = false;
     this.title = el('div', 'ss-title'); this.sub = el('div', 'ss-sub'); this.bar = el('div', 'ss-bar'); this.fill = el('i', ''); this.goods = el('div', 'ss-goods');
     this.bar.append(this.fill);

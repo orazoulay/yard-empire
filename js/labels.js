@@ -4,6 +4,7 @@
 // that reaches the top bar or a side of the screen fades out over half its own size instead of being cut in two or
 // lying under the bar's buttons. Sizes come from a ResizeObserver, so the frame never reads the layout.
 import * as THREE from 'three';
+import { labelView, labelShows } from './sim/yard.js';
 
 const v = new THREE.Vector3();
 const STAY = { x: 0.55, low: -0.35, high: 0.5 };   // where a label that stays in sight is held: clear of the top bar, the cards at the bottom and the sides
@@ -17,6 +18,7 @@ export class Labels {
   constructor(container, camera, { avoid = typeof document !== 'undefined' ? document.getElementById('topbar') : null } = {}) {
     this.container = container; this.camera = camera; this.items = [];
     this.far = false;   // the camera looks from above, at the whole company (js/game/overview.js)
+    this.zoom = 1;      // the player's own zoom (js/game/camera.js): far out, the small labels step aside (yard.js, labelView)
     this.top = 0;   // px: where the bar at the top ends
     const RO = typeof ResizeObserver === 'function' ? ResizeObserver : null;
     if (avoid && RO) new RO(() => { this.top = avoid.getBoundingClientRect().bottom; }).observe(avoid);
@@ -29,13 +31,17 @@ export class Labels {
       }
     }) : null;
   }
-  /** @param o  far: the label belongs to the view from above (a yard's name), and is shown only while `this.far` is true; every other label only while it is false */
-  add(className, html, getWorldPos, { yOffset = 0, far = false } = {}) {
+  /**
+   * @param o  far: the label belongs to the view from above (a yard's name), and is shown only while `this.far` is true;
+   *   every other label only while it is false. wide: the label reads from afar (a shop's name, one to a yard), and stays
+   *   when the zoom is past where the small ones are too many to read.
+   */
+  add(className, html, getWorldPos, { yOffset = 0, far = false, wide = false } = {}) {
     const el = document.createElement('div');
     el.className = 'label ' + className; el.innerHTML = html;
     this.container.appendChild(el);
     // shown, x, y, o: what was last written, so that nothing is written again while it stays the same
-    const item = { el, getWorldPos, yOffset, far, visible: true, shown: true, x: NaN, y: NaN, o: 1, hw: 0, hh: 0 };
+    const item = { el, getWorldPos, yOffset, far, wide, visible: true, shown: true, x: NaN, y: NaN, o: 1, hw: 0, hh: 0 };
     el.labelItem = item;
     this.sizes?.observe(el);
     this.items.push(item);
@@ -43,10 +49,10 @@ export class Labels {
   }
   remove(item) { this.sizes?.unobserve(item.el); item.el.remove(); this.items = this.items.filter(i => i !== item); }
   update(width, height) {
-    const top = this.top;
+    const top = this.top, view = labelView(this.zoom, this.far);
     for (const it of this.items) {
-      // the view from above shows the yards' names and nothing smaller; up close, no yard's name
-      let show = it.visible && it.far === this.far, x = 0, y = 0, fade = 1;
+      // the view from above shows the yards' names and nothing smaller; up close, no yard's name; on the way out, what reads from afar
+      let show = it.visible && labelShows(it, view), x = 0, y = 0, fade = 1;
       if (show) {
         const p = it.getWorldPos();
         v.set(p.x, p.y + it.yOffset, p.z).project(this.camera);

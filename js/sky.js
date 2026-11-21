@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { GLOW, LIGHT, WET, sunAt, wind } from './world.js';
 import { cloudShadow, glowMap } from './textures.js';
-import { Storm, wetness } from './sim/yard.js';
+import { Storm, wetness, cloudShade } from './sim/yard.js';
 
 const DAY = 540;          // seconds for a whole day and night
 const SHOWER = [45, 75];  // a shower lasts between these many seconds
@@ -90,8 +90,11 @@ export class Sky {
   /** How dark it is at fraction f of the day: day until 0.6, dusk until 0.7, night until 0.9, then dawn. */
   static nightAt(f) { return f < 0.6 ? 0 : f < 0.7 ? smooth(0.6, 0.7, f) : f < 0.9 ? 1 : 1 - smooth(0.9, 1, f); }
 
-  /** @param focus  what the camera looks at: the clouds and the rain stay around it */
-  update(dt, focus) {
+  /**
+   * @param focus  what the camera looks at: the clouds and the rain stay around it
+   * @param zoom   the player's own zoom: far out the clouds' shadows fade, before their sheet shows its edge (yard.js, cloudShade)
+   */
+  update(dt, focus, zoom = 1) {
     this.t = (this.t + dt) % DAY;
     const f = HELD[this.mode] ?? this.t / DAY, n = this.night = Sky.nightAt(f), low = 4 * n * (1 - n);   // low: 1 halfway through dusk and dawn
 
@@ -146,7 +149,7 @@ export class Sky {
     this.drift.x += dt * 0.004; this.drift.y += dt * 0.0015;
     this.clouds.position.x = focus.x; this.clouds.position.z = focus.z;
     this.cloudMap.offset.set(focus.x / 260 * 2.4 + this.drift.x, -focus.z / 260 * 2.4 + this.drift.y);
-    this.clouds.material.opacity = 0.2 * (1 - 0.6 * n) + 0.08 * this.rain;
+    this.clouds.material.opacity = (0.2 * (1 - 0.6 * n) + 0.08 * this.rain) * cloudShade(zoom);
 
     // rain
     const wet = this.rain > 0.02;

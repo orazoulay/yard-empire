@@ -1,11 +1,11 @@
 // @ts-check
-// The player's own zoom: the wheel of a mouse (or two fingers on a trackpad), a pinch on a touch
+// The player's own zoom: the wheel of a mouse (or two fingers on a trackpad, scrolling or pinching), a pinch on a touch
 // screen, and a double tap, a double click or the Home key to go back to normal.
 // The rules (limits, easing) are in js/sim/yard.js; this file only listens.
 // How far out it goes is set by the game each frame (setMax): past the usual limit, as far as every open yard fits on
 // the screen (js/game/overview.js). It multiplies the camera's own distance, so the small zooms the camera makes by itself (closer when
 // the player stands, further when they run, the pan over a new yard) go on as before on top of it.
-import { Zoom } from './sim/yard.js';
+import { Zoom, wheelDelta } from './sim/yard.js';
 
 const TAP_MS = 260, TAP_MOVE = 14;     // a touch this short that moved this little is a tap
 const DOUBLE_MS = 340, DOUBLE_MOVE = 44;   // two taps this close together, in time and place, are a double tap
@@ -21,7 +21,7 @@ export class ZoomControl {
 
     canvas.addEventListener('wheel', e => {
       e.preventDefault();   // the page itself must not scroll or zoom
-      this.zoom.wheel(e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY);   // some mice report lines, not pixels
+      this.zoom.wheel(wheelDelta(e));   // some mice report lines, not pixels; a trackpad's pinch comes as small steps with Ctrl down
     }, { passive: false });
     canvas.addEventListener('dblclick', () => this.zoom.reset());
     addEventListener('keydown', e => { if (e.code === 'Home' && !typing(e)) { e.preventDefault(); this.zoom.reset(); } });
