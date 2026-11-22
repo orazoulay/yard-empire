@@ -5,13 +5,14 @@
 // The company sits beside the Economy: it reads cash, upgrades and open yards from it, changes cash only
 // through addCash / spend, and is saved inside the Economy's save as `company`.
 import { FINANCE, RANKS, MILESTONES, WAREHOUSE, CONTRACTS, ROUTES, RESEARCH, TABS, STAFF, STAFF_RULES, GOALS, ACHIEVEMENTS, PRESTIGE, EVENTS, EVENT_GOAL, LOCATIONS, RUSH, CLIENTS, STREAK, MARKET, PORT } from '../data/company.js';
-import { BUILDS, SITE } from '../data/builds.js';
+import { BUILDS, SITE, MOTIVATION } from '../data/builds.js';
 import { RateMeter, OFFLINE_CAP_SECONDS, OFFLINE_EFFICIENCY } from './offline.js';
 import { Market } from './market.js';
 import { Port } from './port.js';
 import { CREDITS } from '../data/credits.js';
 import { UNCHECKED } from './sync.js';
-import { MAX_FLAGS, MAX_BOOSTS, seasonState, loadStore, storeJSON, storeMods, tickStore, useFlag, flagValue, itemDoing, bankAdd, bankCap, bankNow, seasonStep, seasonPoints, startEvent } from './store.js';
+import { MAX_FLAGS, MAX_BOOSTS, seasonState, loadStore, storeJSON, storeMods, tickStore, useFlag, flagValue, itemDoing, bankAdd, bankCap, bankNow, seasonStep, seasonPoints, startEvent, timedFactor, rushing } from './store.js';
+import { readMotivation, stateOf, paceOf, wear, canRun, after, priceOf } from './motivation.js';
 import { fmt } from '../format.js';
 
 const num = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
@@ -188,6 +189,12 @@ export class Company {
     this.seen = { market: s?.seen ? !!s.seen.market : this.market.t > 300, sale: s?.seen ? !!s.seen.sale : this.legacy.sales > 0,
       rush: !!s?.seen?.rush, metropolis: !!s?.seen?.metropolis, site: !!s?.seen?.site, port: !!s?.seen?.port };
     this.site = readSite(s?.site);                                                  // the building site (js/data/builds.js); absent in older saves
+    this.motivation = readMotivation(s?.motivation);                               // worker motivation (js/sim/motivation.js); runs once the Workers' Park is finished
+    // The income the activities are priced by: slow, without timed boosts, at the pace of steady workers. The rate is saved only once the park
+    // stands, so a save without one starts from the income kept for time away (econ.workerRate: the calm rate, at the pace the workers had), with that pace divided out.
+    const parkPace = this.site.done.includes('park') ? paceOf(this.motivation.level) : 1;
+    this.priceMeter = new RateMeter(this.motivation.rate || econ.workerRate / parkPace, MOTIVATION.priceMemory);
+    this.paceNow = 1;                                                               // the pace applyMods() last folded in
     // The credits store (js/sim/store.js): the receipts already applied, the boosts that run and the flags that wait.
     // Absent in older saves, and written only once something was bought. What is owned for good is not in the save:
     // the server says so in each visit, and the game hands its answer over with setOwns().
@@ -250,6 +257,8 @@ export class Company {
       ...(this.name ? { name: this.name } : {}),
       // the building site, only once something was built or started: older saves, and those of players who never get there, stay as they were
       ...(this.site.at || this.site.done.length ? { site: { done: this.site.done, at: this.site.at, stage: this.site.stage, given: this.site.given, value: Math.round(this.site.value), on: this.site.on } } : {}),
+      // worker motivation, only once the park is finished: the level in hundredths of a point (rounded up, as the meter is read), the hold in whole seconds of work, the price's rate in dollars a second
+      ...(this.site.done.includes('park') ? { motivation: { level: Math.ceil(this.motivation.level * 100), hold: Math.round(this.motivation.hold), rate: Math.round(this.priceMeter.rate) } } : {}),
       // the credits store, only once something was bought: a save from before it is written back as it was
       ...(storeJSON(this.store) ? { store: this.storeBlock() } : {}),
     };
@@ -281,7 +290,7 @@ export class Company {
   level(id) { return this.research[id] || 0; }
   /** Fold every researched effect into plain numbers, and hand price and speed to the Economy. */
   applyMods() {
-    const m = { price: 1, speed: 1, workerSpeed: 1, wage: 1, upkeep: 1, storage: 1, routeRate: 1, contractPay: 1, contractSlots: 0, offlineShare: null, offlineCap: null, routes: false,
+    const m = { price: 1, pace: 1, speed: 1, workerSpeed: 1, wage: 1, upkeep: 1, storage: 1, routeRate: 1, contractPay: 1, contractSlots: 0, offlineShare: null, offlineCap: null, routes: false,
       hold: 1, voyage: 1, premium: 0, autoSail: false,   // the port: the hold's size, the voyage's time, the premium added, a ship that sails by itself when full
       autoDeliver: false, autoAccept: false, autoBuy: false, researchCost: 1, truckFee: 1, clientBonus: 1, forecast: false,
       capacity: 1, crew: 0,     // these two are the store's: what the player carries, and extra workers in every yard
@@ -309,6 +318,10 @@ export class Company {
     storeMods(kept, { store: { boosts: [] } }, this.owns, this.wall(), this.catalog, this.storeLevel);
     storeMods(m, this, this.owns, this.wall(), this.catalog, this.storeLevel);   // the credits store: what is owned for good, at its level, and the boosts that run
     for (const event of this.eventsNow()) apply(event.effect);   // today's event, and those an Event ticket of the credits store started
+    // Worker motivation: one factor on the machines, on the workers' walk and on the trucks (runRoutes() reads paceNow, so
+    // routeRate stays what a truck can carry). Keen workers go a tenth faster, worn-out ones slow down to half.
+    this.paceNow = m.pace = this.pace();
+    m.speed *= m.pace; m.workerSpeed *= m.pace;
     this.mods = m;
     this.econ.boost = { price: m.price, kept: kept.price, speed: m.speed, capacity: m.capacity };
   }
@@ -496,11 +509,14 @@ export class Company {
     if (this.founded && this.costPerSec > 0) this.charge(this.costPerSec * dt);
     if (this.market.open && this.marketOpen()) this.market.tick(dt);   // the market's clock is play time: it stands still while the player is away
     if (this.port.open) this.shipsHome(this.port.tick(dt));   // a voyage is play time, like the market's clock
+    if (this.motivationOn) this.wearBy(dt);                    // dt is seconds of work: the loop hands a hidden page 5% of its time
+    else if (this.paceNow !== 1) this.applyMods();             // the site closed (the company was sold): nobody is slowed
     this.clock += dt;
     if (this.clock < SLOW_TICK) return;
     const t = this.clock; this.clock = 0;
     for (const b of this.books.values()) for (const k of BOOK_KEYS) b[k].tick(t);
     for (const m of Object.values(this.flow)) m.tick(t);
+    if (rushing(this.mods)) this.priceMeter.acc = 0; else this.priceMeter.tick(t);   // a rush of the credits store is not the company's own income: the price waits it out
     for (const m of this.trips.values()) m.tick(t);
     for (const m of this.shopFlow.values()) m.tick(t);
     this.refreshIn = Math.max(0, this.refreshIn - t);
@@ -716,7 +732,7 @@ export class Company {
   //     Finance, the Overview, the company's value). Sales (income) and goods that go aboard (aboard) feed it.
   //   - minute.sum, "earned in one minute" (records.peakMinute): sales only (income).
   /** Something was sold: a good at a shop, goods from the warehouse, a contract. All three meters; the piggy bank of the credits store gets its share on top (js/sim/store.js, bankAdd). */
-  income(amount) { this.econ.addCash(amount); this.stats.income += amount; this.flow.income.add(amount); this.minute.sum += amount; bankAdd(this, amount); }
+  income(amount) { this.econ.addCash(amount); this.stats.income += amount; this.flow.income.add(amount); this.priceMeter.add(amount / (timedFactor(this.mods) * this.paceNow)); this.minute.sum += amount; bankAdd(this, amount); }
   /**
    * Cash that is not a sale of this moment: pay for time away, a goal's reward, a finished build, a ship home, a hold
    * unloaded. It is earned (stats.income) and moves neither the shown income nor "earned in one minute", and puts
@@ -732,7 +748,7 @@ export class Company {
    * A hold thrown away by a sale of the company was counted here and never paid: the meter is a one-minute rate, and
    * the sale sets its rate to nothing (sell).
    */
-  aboard(amount) { this.flow.income.add(amount); }
+  aboard(amount) { this.flow.income.add(amount); this.priceMeter.add(amount / (timedFactor(this.mods) * this.paceNow)); }
   /** A machine finished `n` batches: book the inputs another yard made as its income and this yard's materials. */
   batch(areaId, recipeId, n = 1) {
     if (!this.founded) return;
@@ -813,12 +829,18 @@ export class Company {
   /** Items a minute of `item` reaching the shops, sold or stocked. */
   shopRate(item) { return this.shopFlow.get(item)?.rate || 0; }
   /**
+   * The same at the pace of steady workers, as the contract board judges a good (orderable, pruneOffers): worn-out or keen
+   * workers make every good slower or faster alike, and the board asks for the goods it would ask a steady company for.
+   * How long an order takes (fillTime, orderSize, the Warehouse Manager) is real time, and reads shopRate.
+   */
+  steadyRate(item) { return this.shopRate(item) / this.paceNow; }
+  /**
    * Goods worth ordering. Planks that all go into the workshop never reach a shop, and an order for
    * them would never fill, so offers prefer goods that arrive fast enough to fill a small order in a few minutes.
    */
   orderable() {
     const all = this.producible(), small = this.capacity * CONTRACTS.kinds[0].size;
-    const quick = all.filter(item => this.shopRate(item) * CONTRACTS.fillSeconds >= small);
+    const quick = all.filter(item => this.steadyRate(item) * CONTRACTS.fillSeconds >= small);
     // A game that was just loaded has measured nothing yet: an offer made now would ask for the newest goods, which may
     // never reach a shop (robots, engines). It waits until a good is seen arriving fast enough, or until the wait is
     // over (settling). Which goods are asked for is otherwise as it was: it decides what a company can earn, and the
@@ -828,7 +850,7 @@ export class Company {
   }
   /** Swap out offers for goods that have stopped reaching the shops, as long as other goods still do. */
   pruneOffers() {
-    const small = this.capacity * CONTRACTS.kinds[0].size, slow = item => this.shopRate(item) * CONTRACTS.fillSeconds < small / 4;
+    const small = this.capacity * CONTRACTS.kinds[0].size, slow = item => this.steadyRate(item) * CONTRACTS.fillSeconds < small / 4;
     // A rush offer the yards can no longer make in time goes too, whatever else is on offer.
     this.offers = this.offers.filter(o => !o.limit || this.fillTime(o) <= o.limit);
     if (this.producible().every(slow)) return;
@@ -1150,7 +1172,7 @@ export class Company {
       // A running build comes first (routeHeld): the truck stands, with what it had towards its next load and no more,
       // so that once released it carries at its rate and not in a burst. No fee, no trip.
       if (this.holds(d)) { this.acc[d.id] = Math.min(1, this.acc[d.id] || 0); continue; }
-      let acc = (this.acc[d.id] || 0) + ROUTES.rate * this.mods.routeRate * dt;
+      let acc = (this.acc[d.id] || 0) + ROUTES.rate * this.mods.routeRate * this.paceNow * dt;   // the trucks keep the workers' pace
       while (acc >= 1) {
         if (!move(d)) { acc = 1; break; }   // the truck waits, loaded
         acc -= 1;
@@ -1795,10 +1817,12 @@ export class Company {
       // so that a stage of costly goods (cars, gift sets) is not a loss.
       const cash = Math.max(b.minutes * 60 * this.goalRef(), SITE.floor * this.site.value);
       this.site.done.push(b.id);
+      if (b.id === 'park') Object.assign(this.motivation, { level: 100, hold: 0 });   // the meter starts full; applyMods() below folds in its pace
       Object.assign(this.site, { at: null, stage: 0, value: 0 });
       this.earn(cash);
       this.gainXp(b.xp);
       this.events.push({ type: 'built', build: b, stage, cash, xp: b.xp });
+      if (b.id === 'park') this.applyMods();
     }
   }
   /** How much free warehouse stock the running stage could take now: stock no running contract needs. */
@@ -1842,6 +1866,44 @@ export class Company {
   contractsShort(item) { return this.active.length ? Math.min(this.reserved(item), this.room(item)) - (this.stock[item] || 0) : 0; }
   /** A running rush order needs this good: its clock runs, so it is served before the site. */
   rushNeeds(item) { return this.active.some(c => c.limit && c.needs.some(n => n[0] === item)); }
+
+  // --- worker motivation (js/data/builds.js MOTIVATION, js/sim/motivation.js) -------------------------------------
+  /** The meter runs once the Workers' Park is finished, and only while the building site is open: after a sale of the company it waits. */
+  get motivationOn() { return this.siteOpen && this.site.done.includes('park'); }
+  /** The factor on the machines and the workers right now: 1 wherever the meter does not run. */
+  pace() { return this.motivationOn ? paceOf(this.motivation.level) : 1; }
+  /** `seconds` of work pass. A change of state is told once: steady, worn, or empty (the one notice for a step that ends at zero). */
+  wearBy(seconds) {
+    const m = this.motivation, before = stateOf(m.level), had = m.level > 0;
+    wear(m, seconds);
+    if (this.pace() !== this.paceNow) this.applyMods();
+    const now = stateOf(m.level);
+    if (had && m.level <= 0) this.events.push({ type: 'motivation', state: 'empty' });   // reaching zero is the one notice, whatever the state was
+    else if (now !== before) this.events.push({ type: 'motivation', state: now });
+  }
+  /** The work of an absence (its paid seconds times the share for time away), as a ship's voyage is moved by them. */
+  wearAway(workSeconds) { if (this.motivationOn) this.wearBy(workSeconds); }
+  /** The three activities as the park offers them now: [{ id, name, price, can, runs, leaves: { level, hold }, state }]. Empty without the park. */
+  activities() {
+    if (!this.motivationOn) return [];
+    return MOTIVATION.activities.map(a => {
+      const price = priceOf(a, this.priceMeter.rate, this.goalRef()), leaves = after(this.motivation, a);
+      return { id: a.id, name: a.name, price, can: canRun(this.motivation, a) && this.econ.cash >= price, runs: canRun(this.motivation, a), leaves, state: stateOf(leaves.level) };
+    });
+  }
+  /** Hold an activity: its price is paid and counts as spent (so the company's value in the ranking does not fall). @returns whether it was held */
+  buyActivity(id) {
+    const a = MOTIVATION.activities.find(x => x.id === id);
+    if (!a || !this.motivationOn || !canRun(this.motivation, a)) return false;
+    const price = priceOf(a, this.priceMeter.rate, this.goalRef());
+    if (!this.econ.spend(price)) return false;
+    this.spent += price;
+    const was = stateOf(this.motivation.level);
+    Object.assign(this.motivation, after(this.motivation, a));
+    this.applyMods();
+    this.events.push({ type: 'activity', activity: a, cash: price, from: was, to: stateOf(this.motivation.level) });
+    return true;
+  }
 
   // --- the company's name, its records and the Advisor ------------------------------------------------------
   /** Name the company. @returns the name as it was kept, '' for none */

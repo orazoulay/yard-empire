@@ -47,6 +47,10 @@ export const SITE = {
   // The way in: an opening in the east fence of the Department Store (the fence stands at x) and one opposite it in the
   // plot's own fence, at this z, between the tower's lot and the house's. half: half the width of the opening.
   gate: { yard: 'store', side: 'e', x: 90, at: 110, half: 2.2 },
+  // The Workers' Park (the fourth build): a plot of its own south of the site's, towards the sea. It lies east of the
+  // coast row (x 92 and more, the yards end at 90), clear of the Metropolis's street (which ends at z 125) and of the
+  // beach (the sand begins at 151 at the nearest). The world keeps it clear of trees and buildings, as the site's plot.
+  park: { minX: 92, maxX: 116, minZ: 127, maxZ: 149 },
 };
 
 export const BUILDS = [
@@ -77,4 +81,32 @@ export const BUILDS = [
       { name: 'Lobby', done: 'The lobby shines', needs: [['ring', 600], ['gem', 400]], adds: ['lobby'] },
       { name: 'Opening day', done: 'The tower is open', needs: [['car', 300], ['giftset', 200]], adds: ['roof', 'antenna', 'plaza'] },
     ] },
+  // Not a building: a park, drawn by its own shape (js/sim/park.js, parkParts). What it starts is worker motivation
+  // (MOTIVATION below, js/sim/motivation.js): the meter runs from the moment this build is finished.
+  { id: 'park', name: "Workers' Park", minutes: 240, xp: 15000,
+    pitch: 'A stage, food stalls and a lawn by the sea, where the workers get their spirits back.',
+    shape: { kind: 'park' },
+    stages: [
+      { name: 'Ground and paths', done: 'The lawn is laid', needs: [['brick', 5000]], adds: ['lawn', 'fence', 'gate'] },
+      { name: 'Stage and seats', done: 'The stage stands', needs: [['chair', 5000], ['glass', 3000]], adds: ['stage', 'benches'] },
+      { name: 'Food stalls', done: 'The stalls are open', needs: [['bread', 3000], ['giftset', 300]], adds: ['stalls', 'barbecue'] },
+      { name: 'Opening night', done: 'The park is open', needs: [['gem', 600], ['car', 300]], adds: ['masts', 'lamps', 'parking', 'flowers'] },
+    ] },
 ];
+
+/**
+ * Worker motivation (docs/superpowers/specs/2026-11-21-worker-motivation-design.md): one meter for the company, from 0
+ * to 100, that runs once the Workers' Park is finished. Rules in js/sim/motivation.js.
+ * life: seconds of work that empty a full meter. keen, worn: from `keen` up the workers are keen, under `worn` they are
+ * worn out. keenPace: the pace of keen workers; floor: the pace at zero (it falls in a straight line from 1 at `worn`).
+ * priceMemory: seconds the income meter for the activities' price remembers; a minute without sales moves it under 5%.
+ * An activity adds points, or fills the meter and holds it full for `hold` seconds of work; it costs `minutes` of income.
+ */
+export const MOTIVATION = {
+  life: 7200, keen: 80, worn: 50, keenPace: 1.1, floor: 0.5, priceMemory: 1200,
+  activities: [
+    { id: 'barbecue', name: 'Barbecue', adds: 25, minutes: 2.3 },
+    { id: 'concert', name: 'Concert', adds: 50, minutes: 5.5 },
+    { id: 'festival', name: 'Festival', fills: true, hold: 5400, minutes: 10.2 },
+  ],
+};

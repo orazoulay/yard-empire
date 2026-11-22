@@ -6,9 +6,10 @@
 // the screen (js/game/overview.js). It multiplies the camera's own distance, so the small zooms the camera makes by itself (closer when
 // the player stands, further when they run, the pan over a new yard) go on as before on top of it.
 import { Zoom, wheelDelta } from './sim/yard.js';
+import { DOUBLE_TAP_MS } from './ui-logic.js';
 
 const TAP_MS = 260, TAP_MOVE = 14;     // a touch this short that moved this little is a tap
-const DOUBLE_MS = 340, DOUBLE_MOVE = 44;   // two taps this close together, in time and place, are a double tap
+const DOUBLE_MS = DOUBLE_TAP_MS, DOUBLE_MOVE = 44;   // two taps this close together, in time and place, are a double tap (js/input.js waits as long before a single one opens anything)
 
 export class ZoomControl {
   /** @param input  the joystick (js/input.js): a pinch takes the screen over from it */

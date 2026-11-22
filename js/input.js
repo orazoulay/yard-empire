@@ -1,6 +1,6 @@
 // @ts-check
 // Virtual joystick (touch / mouse drag anywhere) + keyboard. Produces a 2D move vector.
-import { stick } from './ui-logic.js';
+import { stick, isTap, DOUBLE_TAP_MS } from './ui-logic.js';
 
 const RADIUS = 60;
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'];
@@ -14,6 +14,9 @@ export class Input {
     this.keys = new Set();
     this.moved = false;
     this.onFirstMove = null;
+    // A tap, not a steer (isTap), told once a second tap can no longer make it a double tap: (x, y), where the finger went down.
+    this.onTap = null;
+    this.tapWait = 0;   // the timer of a tap that waits out the double tap
 
     canvas.addEventListener('pointerdown', e => this.down(e));
     window.addEventListener('pointermove', e => this.move(e));
@@ -25,11 +28,16 @@ export class Input {
     window.addEventListener('keydown', e => { if (typing(e)) return; this.keys.add(e.code); if (e.code.startsWith('Arrow')) e.preventDefault(); });
     window.addEventListener('keyup', e => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
+    // A tap still waiting out the double tap is dropped when the page is hidden: it must not act in the background.
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(this.tapWait); this.tapWait = 0; } });
   }
 
   down(e) {
+    const second = !!this.tapWait;   // a press while a tap waits: a double tap (the zoom goes back), or a second finger
+    clearTimeout(this.tapWait); this.tapWait = 0;
     if (this.pointer.active || e.button > 0) return;   // the stick is the first finger, or the main mouse button
     this.pointer.active = true; this.pointer.id = e.pointerId;
+    this.pointer.at = e.timeStamp; this.pointer.steered = false; this.pointer.second = second;
     this.pointer.ox = this.pointer.x = e.clientX; this.pointer.oy = this.pointer.y = e.clientY;
     this.joy.style.left = e.clientX + 'px'; this.joy.style.top = e.clientY + 'px';
     this.knob.style.transform = 'translate(-50%, -50%)';
@@ -44,12 +52,18 @@ export class Input {
     const len = Math.hypot(dx, dy);
     if (len > RADIUS) { dx *= RADIUS / len; dy *= RADIUS / len; }
     this.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-    this.joy.classList.toggle('steer', stick(dx, dy, RADIUS).len > 0);   // the ring lights up once the player really moves
+    const steer = stick(dx, dy, RADIUS).len > 0;
+    this.joy.classList.toggle('steer', steer);   // the ring lights up once the player really moves
+    if (steer) this.pointer.steered = true;
   }
   up(e) {
     if (!this.pointer.active || e.pointerId !== this.pointer.id) return;
-    this.pointer.active = false; this.pointer.id = null;
+    const p = this.pointer;
+    p.active = false; p.id = null;
     this.joy.style.display = 'none';
+    if (!this.onTap || p.second || !isTap({ ms: e.timeStamp - p.at, steered: p.steered, lifted: e.type === 'pointerup' })) return;
+    const x = p.ox, y = p.oy;
+    this.tapWait = setTimeout(() => { this.tapWait = 0; this.onTap?.(x, y); }, DOUBLE_TAP_MS);
   }
 
   /** True while the player is asking to move, by stick or by key. Reading it has no side effects. */

@@ -1,17 +1,12 @@
 // What stands where on the building site and around the city, worked out as plain numbers: no drawing here.
 // js/site.js and js/gfx/cityedge.js turn these lists into shapes; tests/site.test.mjs checks them without a screen.
+// The Workers' Park, the site's second plot, is worked out in js/sim/park.js.
 import { AREAS } from '../data/areas.js';
 import { BUILDS, SITE } from '../data/builds.js';
+import { mulberry, stagesShown, isPark, block, round, COLORS, PAD } from './plotkit.js';
+import { PARK, PARK_GROUND, parkBlocks, parkShown } from './park.js';
 
-/** A repeatable run of numbers in [0, 1) for a whole-number seed (mulberry32). The same seed gives the same world. */
-export function mulberry(a) {
-  return function () {
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
+export { mulberry, stagesShown, isPark };   // the run of numbers the scenery is drawn from, and how far a build is shown, live in js/sim/plotkit.js
 
 /** Does a point lie on a rectangle of ground, with `pad` around it? */
 export const onRect = (x, z, r, pad = 0) => x > r.minX - pad && x < r.maxX + pad && z > r.minZ - pad && z < r.maxZ + pad;
@@ -460,16 +455,6 @@ function streetPlan({ b, rects, clear, slab, slabs, buildings, chimneys, whereAt
 }
 
 // ------------------------------------------------------------------------------------------ the building site
-/**
- * How much of a build is to be seen: -1 nothing (not started), 0 the lot marked out, 1 and up that many finished
- * stages, and all of them for a finished build.
- * @param site  the company's `site`: { done, at, stage }
- */
-export function stagesShown(site, build) {
-  if (site.done.includes(build.id)) return build.stages.length;
-  return site.at === build.id ? site.stage : -1;
-}
-
 /** A stage in work is drawn in this many steps: the site is made again at most this often while a stage fills. */
 export const PART_STEPS = 20;
 /**
@@ -490,11 +475,6 @@ export function stagePart(needs) {
  */
 export const siteKey = (site, open, part = 0, inside = '') =>
   (open ? 'open' : 'shut') + '|' + BUILDS.map(b => stagesShown(site, b)).join(',') + (part > 0 || inside ? `|${part}|${inside}` : '');
-
-const block = (w, h, d, color, x, y, z, more = {}) => ({ kind: 'block', w, h, d, color, at: [x, y, z], ...more });
-const round = (rt, rb, h, color, x, y, z, more = {}) => ({ kind: 'round', rt, rb, h, color, at: [x, y, z], ...more });
-const COLORS = { slab: 0xb9bcc0, earth: 0x8c6f4d, pane: 0x2b3a4a, glass: 0x7fc4e8, lit: 0xffe9a8, wood: 0x8b5a2b, steel: 0x6b7078, peg: 0xf2c230, door: 0x6b4a2f,
-  green: 0x6fa84f, bush: 0x4f8f3f, path: 0xd9cfb8, asphalt: 0x5c626b, line: 0xf2f2f2, gold: 0xe3b341, water: 0x6fc3e8, crane: 0xf2a900, brick: 0xb8553a };
 
 const BASE = 0.3;       // the height of a foundation
 const WALL = 0.35;      // how thick the walls of a building in work are drawn
@@ -545,6 +525,7 @@ function layersOf(build, shown, part) {
  * @returns parts: { kind: 'block' | 'round', sizes, color, at: [x, y, z], turn?: [rx, ry, rz], glow?: true }
  */
 export function buildParts(build, shown, { part = 0, cutaway = false } = {}) {
+  if (isPark(build)) return [];   // a park has no walls or floors; its own drawing comes later
   if (shown < 0) return [];
   const { s, w, d, cols, gap, H, doorX, doorW } = frame(build), base = BASE, top = base + H;
   const { amount, has, floors, closed } = layersOf(build, shown, part);
@@ -670,21 +651,24 @@ export function fenceRuns([x1, z1, x2, z2], gaps = []) {
 }
 const EDGE = 0.8;   // how far from a fence the player stops, as in a yard
 /**
- * The ground of the site the player may step on, as two rectangles: the plot inside its fence, and the passage
- * from the Department Store through the two openings. They overlap each other and the store's own ground.
+ * The ground of the site the player may step on, as rectangles: the plot inside its fence, the passage from the
+ * Department Store through the two openings, and for a park that is begun the lane to it and the park inside its
+ * fence. Each overlaps the next, and the passage the store's own ground.
  */
 export function siteWalk() {
-  const p = SITE.plot, g = SITE.gate, reach = 1.6, t = g.half - 0.3;
+  const p = SITE.plot, g = SITE.gate, reach = 1.6, t = g.half - 0.3, k = SITE.park, [x0, x1] = PARK.gate;
   return {
     plot: { minX: p.minX + EDGE, maxX: p.maxX - EDGE, minZ: p.minZ + EDGE, maxZ: p.maxZ - EDGE },
     door: { minX: g.x - reach, maxX: p.minX + reach, minZ: g.at - t, maxZ: g.at + t },
+    // once the park is begun: the lane from the opening in the site's south fence to the park's gate, and the park inside its fence
+    lane: { minX: x0 + 0.6, maxX: x1 - 0.6, minZ: p.maxZ - EDGE - 0.4, maxZ: k.minZ + EDGE + 0.4 },
+    park: { minX: k.minX + EDGE, maxX: k.maxX - EDGE, minZ: k.minZ + EDGE, maxZ: k.maxZ - EDGE },
   };
 }
 /** Just inside the plot's entrance: where "Go to the site" puts the player. */
 export const siteEntrance = () => ({ x: SITE.plot.minX + 2.2, z: SITE.gate.at });
 
 const inRect = (x, z, r) => x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ;
-const PAD = 0.3;    // a footprint is this much larger than what is drawn: a figure has a width
 const THICK = 0.9;  // a wall stops the player over this depth. A step on a slow phone is longer than the wall is thick.
 
 /**
@@ -696,7 +680,7 @@ export function siteBlocks(site, part = 0) {
   const out = [];
   for (const b of BUILDS) {
     const shown = stagesShown(site, b);
-    if (shown < 0) continue;
+    if (shown < 0 || isPark(b)) continue;
     const [lx, lz] = lotOf(b), { w, d, doorX, doorW } = frame(b), { amount, closed } = layersOf(b, shown, shown === site.stage && site.at === b.id ? part : 0);
     const rect = (x0, x1, z0, z1) => out.push({ minX: lx + x0, maxX: lx + x1, minZ: lz + z0, maxZ: lz + z1, build: b.id });
     if (closed) rect(-w / 2 - PAD, w / 2 + PAD, -d / 2 - PAD, d / 2 + PAD);
@@ -710,6 +694,8 @@ export function siteBlocks(site, part = 0) {
     }
     if (shown < b.stages.length && b.shape.floors >= 5) { const [cx, cz] = craneAt(b); rect(cx - 0.9, cx + 0.9, cz - 0.9, cz + 0.9); }
   }
+  const park = BUILDS.find(isPark), begun = park ? stagesShown(site, park) : -1;   // the park: what stands on it so far, and its works until it is finished
+  if (begun >= 0) out.push(...parkBlocks(parkShown(site, site.at === park.id ? part : 0), begun < park.stages.length));
   return out;
 }
 /**
@@ -718,19 +704,26 @@ export function siteBlocks(site, part = 0) {
  */
 export function insideOf(site, part, x, z) {
   const b = BUILDS.find(o => o.id === site.at);
-  if (!b) return '';
+  if (!b || isPark(b)) return '';
   const { amount, closed } = layersOf(b, site.stage, part), [lx, lz] = lotOf(b), s = b.shape;
   if (closed || !(amount('walls') > 0)) return '';
   return inRect(x, z, { minX: lx - s.width / 2, maxX: lx + s.width / 2, minZ: lz - s.depth / 2, maxZ: lz + s.depth / 2 + 0.2 }) ? b.id : '';
 }
-/** How high the ground is at a point of the plot: the top of a foundation where one lies, else 0. The player is lifted by it. */
-export function groundAt(site, part, x, z) {
+/**
+ * How high the ground is at a point of the plot: the top of a foundation where one lies, the park's lawn, else 0. The
+ * player is lifted by it.
+ * @param lawn  whether the park's lawn is laid, as the game keeps it when the site changes (it asks every step);
+ *              left out, it is worked out from the site
+ */
+export function groundAt(site, part, x, z, lawn) {
   for (const b of BUILDS) {
     const shown = stagesShown(site, b);
-    if (shown < 0) continue;
+    if (shown < 0 || isPark(b)) continue;
     const [lx, lz] = lotOf(b), s = b.shape, slab = layersOf(b, shown, site.at === b.id ? part : 0).amount('slab');
     if (slab > 0 && inRect(x, z, { minX: lx - s.width / 2 - 0.4, maxX: lx + s.width / 2 + 0.4, minZ: lz - s.depth / 2 - 0.4, maxZ: lz + s.depth / 2 + 0.4 })) return BASE * slab;
   }
+  // in the park the player stands on the lawn and its paths, not in them
+  if (z > SITE.park.minZ && x > PARK.in.x0 && x < PARK.in.x1 && z > PARK.in.z0 && z < PARK.in.z1 && (lawn ?? parkShown(site, site.at === 'park' ? part : 0).includes('lawn'))) return PARK_GROUND;
   return 0;
 }
 
@@ -747,7 +740,12 @@ export function siteSign({ site, needs, open, labels, part = 0 }) {
   if (!open) return null;
   // Behind the lot and over what stands on it so far, so that it covers neither the work nor the player: the camera
   // looks north, and what is further north and higher is drawn further up the screen. Never higher than a house.
-  const at = (b, shown, f) => { const [x, z] = lotOf(b), h = b.shape.floors * b.shape.floor * layersOf(b, shown, f).amount('walls'); return [x, Math.min(h, SIGN_TOP) + 2.5, z - b.shape.depth / 2 - 0.5]; };
+  const at = (b, shown, f) => {
+    // The park's sign hangs low in front of its plot, over the grass between its south fence and the beach: a sign the
+    // width of a phone's screen would cover the stage and the stalls anywhere on the plot, and the site north of it.
+    if (isPark(b)) return [(SITE.park.minX + SITE.park.maxX) / 2, 0.6, SITE.park.maxZ + 2.4];
+    const [x, z] = lotOf(b), h = b.shape.floors * b.shape.floor * layersOf(b, shown, f).amount('walls'); return [x, Math.min(h, SIGN_TOP) + 2.5, z - b.shape.depth / 2 - 0.5];
+  };
   const b = BUILDS.find(o => o.id === site.at);
   if (b) {
     const stage = b.stages[site.stage];
@@ -761,3 +759,4 @@ export function siteSign({ site, needs, open, labels, part = 0 }) {
   const next = BUILDS.find(o => !site.done.includes(o.id));
   return next ? { build: next.id, at: at(next, 0, 0), title: next.name, sub: 'Start it in Headquarters, Construction', percent: null, goods: [] } : null;
 }
+

@@ -25,7 +25,20 @@ export const TUNES = {
   // three to the bar: C, A minor, D minor, G, the bass on one and the chord on two and three
   waltz: { id: 'waltz', beat: 0.38, bar: 6, chords: [[C4, E4, G4, C5], [A3, C4, E4, A4], [D4, F4, A4, D5], [G3, B3, D4, G4]],
     bass: [1, 0, 0, 1, 0, 0], lead: [3, 1, 2, null, 2, 1], bassNote: { dur: 1.1, gain: 0.045, type: 'sine' }, leadNote: { dur: 0.9, gain: 0.02, type: 'triangle', octave: 1 } },
+  // the Workers' Park while an activity shows (not sold in the store): a quick march, C, F, G, C, the bass on one and
+  // five and a bright run up the chord and back, as at a fair
+  park: { id: 'park', beat: 0.27, bar: 8, chords: [[C4, E4, G4, C5], [F3, A3, C4, F4], [G3, B3, D4, G4], [C4, E4, G4, C5]],
+    bass: [1, 0, 0, 0, 1, 0, 0, 0], lead: [0, 1, 2, 3, 2, 3, 1, 2], bassNote: { dur: 1, gain: 0.036, type: 'sine' }, leadNote: { dur: 0.5, gain: 0.02, type: 'triangle', octave: 2 } },
 };
+/** The tune of the Workers' Park, which plays over the player's own while an activity shows (Sfx.setEvent). */
+export const PARK_TUNE = 'park';
+/**
+ * Which tune plays: the one of a moment in the world while it lasts, else the player's.
+ * @param chosen  the player's tune (one of TUNES), or null for the game's own music
+ * @param event   { tune, until }: a tune that plays over it until `until` (ms, Date.now's clock), or null
+ * @param now     the moment, on the same clock
+ */
+export const tuneNow = (chosen, event, now) => (event && now < event.until ? event.tune : chosen);
 /**
  * The notes of a tune at one beat, counted from its start: [{ freq, dur, gain, type }]. The tune goes round after its
  * last chord, so a beat and the same beat one round later give the same notes.
@@ -44,7 +57,9 @@ export class Sfx {
     this.settings = settings;
     this.ctx = null; this.master = null; this.noiseBuf = null;
     this.last = {};
-    this.tune = null;   // the tune of the credits store that plays (one of TUNES), or null for the game's own
+    this.chosen = null; // the player's tune: one of TUNES chosen in the credits store, or null for the game's own music
+    this.event = null;  // a tune over it for a while ({ tune, until }): the Workers' Park's, while an activity shows. Never the player's choice
+    this.tune = null;   // the tune that plays now (tuneNow)
     const unlock = () => this.unlock();
     addEventListener('pointerdown', unlock, { passive: true });
     addEventListener('keydown', unlock);
@@ -179,14 +194,32 @@ export class Sfx {
    * the player walked into another yard or the store answered once more.
    */
   setTune(id) {
-    const tune = Object.hasOwn(TUNES, id) ? TUNES[id] : null;
-    if (tune === this.tune) return false;
-    this.tune = tune; this.beat = 0;
+    const tune = id !== PARK_TUNE && Object.hasOwn(TUNES, id) ? TUNES[id] : null;   // the park's tune is never the player's choice
+    if (tune === this.chosen) return false;
+    this.chosen = tune;
+    this.follow();
     return true;
+  }
+  /**
+   * A tune that plays over the player's until a moment of the clock on the wall (Date.now), so that a picture that ends
+   * while the page is hidden leaves the player's tune when it comes back. null ends it now. It changes nothing the
+   * player chose, and like any tune it is heard only with the music on.
+   * @param id  one of TUNES (PARK_TUNE), or null  @param until  ms
+   */
+  setEvent(id, until = 0) {
+    this.event = id && Object.hasOwn(TUNES, id) ? { tune: TUNES[id], until } : null;
+    this.follow();
+  }
+  /** Play what should play now: a tune that is not the one playing starts at the next beat, from its first chord. */
+  follow(now = Date.now()) {
+    const tune = tuneNow(this.chosen, this.event, now);
+    if (tune === this.tune) return;
+    this.tune = tune; this.beat = 0;
   }
   /** Quiet background music. Call every frame: notes are booked a quarter of a second ahead, so it stops by itself when the game does. */
   music() {
     if (!this.musicOn) { this.nextNote = null; return; }
+    this.follow();   // the park's tune ends by the clock, whether or not anybody was looking
     const c = this.ctx, tune = this.tune;
     if (this.nextNote == null || this.nextNote < c.currentTime - 1) { this.nextNote = c.currentTime + 0.4; this.beat = this.beat || 0; }
     while (this.nextNote < c.currentTime + 0.25) {

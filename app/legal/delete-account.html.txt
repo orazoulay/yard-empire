@@ -18,7 +18,7 @@
 
   <h2>What is deleted</h2>
   <ul>
-    <li>Your account: email address, username and password.</li>
+    <li>Your account: email address, username and password, and its link to your Google account if you signed in with Google.</li>
     <li>Your saved game on our servers.</li>
     <li>Your entry on the leaderboard, if you had one.</li>
   </ul>
@@ -40,7 +40,10 @@
   </div>
 
   <h2>Or in the game</h2>
-  <p>Open Settings, then your account, then "Delete my account", and enter your password.</p>
+  <p>Open Settings, then your account, then "Delete my account", and enter your password or confirm with Google.</p>
+
+  <h2>Signed in with Google?</h2>
+  <p>An account made with "Continue with Google" has no password, so the form above cannot open it. Delete it in the game instead, as described just above. If you chose "Continue with Google" and left before choosing a username, an account exists without a game: continue with Google once more, choose a name, and delete it the same way. If you cannot do that, write to the address on the <a href="privacy.html">privacy policy</a> page from the email of the account, and we will delete it for you.</p>
 
   <h2>Forgot your password?</h2>
   <p>Set a new one first: in the game, open Settings, "Sign in or create account", "Sign in", then "Forgot password?". If you cannot do that, write to the address on the <a href="privacy.html">privacy policy</a> page from the email of the account, and we will delete it for you.</p>

@@ -26,7 +26,7 @@
   <div id="labels"></div>
 
   <div id="hud">
-    <!-- Two rows: the name and the buttons, then the yard chip and the quiet things (saved or not, the log). -->
+    <!-- Two rows: the name and the buttons, then the yard chip and the quiet things (saved or not, the log). Under them, when there are any: the Motivation chip and the running boosts. -->
     <header id="topbar">
       <div class="top-row">
         <div class="logo-room"><div id="logo"><span class="top">YARD</span><span class="bottom">EMPIRE</span></div></div>
@@ -56,6 +56,8 @@
           <button id="log-btn" class="icon-btn mini" aria-haspopup="dialog" aria-label="What happened"><span id="log-icon" class="s-icon"></span><span id="log-dot" class="badge" hidden></span></button>
         </div>
       </div>
+      <!-- Worker motivation, in a row of its own: hidden until the Workers' Park stands (js/hud.js, setMotivation). A tap opens the park's card. -->
+      <button id="motivation-chip" class="motivation-chip" type="button" hidden></button>
       <!-- The boosts of the credits store that are running, each with the time it has left. Empty and hidden most of the time. Not a live region: its time changes every second. -->
       <div id="boosts" class="top-row boosts" aria-live="off" hidden></div>
     </header>
@@ -63,6 +65,7 @@
     <div id="unlock" class="card" role="status">
       <div class="u-icon" id="unlock-icon"></div>
       <div class="u-text"><div class="u-kicker">Unlocked</div><div class="u-title" id="unlock-title"></div><div class="u-desc" id="unlock-desc"></div></div>
+      <button id="unlock-act" class="u-act" type="button" hidden></button>
       <div class="u-more" id="unlock-more" hidden></div>
     </div>
 
@@ -149,6 +152,11 @@
       <form id="acc-form" novalidate>
         <div class="sheet-title">Save your progress</div>
         <div class="sheet-note">An account keeps your yards safe and lets you play on any device.</div>
+        <div id="acc-google" class="acc-google" hidden>
+          <div id="acc-google-web" class="acc-google-web"></div>
+          <button type="button" id="acc-google-app" class="sheet-btn google" hidden><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><span>Continue with Google</span></button>
+          <div class="acc-or" aria-hidden="true"><span>or</span></div>
+        </div>
         <div class="seg">
           <button type="button" id="acc-tab-new" class="on">Create account</button>
           <button type="button" id="acc-tab-in">Sign in</button>
@@ -169,6 +177,18 @@
         <button type="submit" id="acc-submit" class="sheet-btn primary">Create account</button>
         <button type="button" id="acc-guest" class="sheet-btn">Keep playing as guest</button>
         <button type="button" id="acc-forgot" class="text-btn" hidden>Forgot password?</button>
+      </form>
+      <form id="acc-choose-form" novalidate hidden>
+        <div class="sheet-title">Choose a username</div>
+        <div class="sheet-note">Your name in the game. Other players see it only if you join the ranking.</div>
+        <label class="field"><span>Username</span>
+          <input id="acc-choose-name" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="20" required>
+        </label>
+        <div class="sheet-note small">3 to 20 letters, numbers or underscores.</div>
+        <div class="sheet-error" id="acc-choose-error" role="alert" hidden></div>
+        <button type="submit" id="acc-choose-submit" class="sheet-btn primary">Continue</button>
+        <button type="button" id="acc-choose-another" class="text-btn">Suggest another name</button>
+        <button type="button" id="acc-choose-back" class="sheet-btn">Not now</button>
       </form>
       <form id="acc-reset-form" novalidate hidden>
         <div class="sheet-title">Set a new password</div>
@@ -208,12 +228,18 @@
         <button type="button" id="acc-export" class="sheet-btn">Download my data</button>
         <button type="button" id="acc-delete" class="sheet-btn danger">Delete my account</button>
         <form id="acc-del-form" novalidate hidden>
-          <div class="sheet-note small">This removes your account and everything the server keeps for it. It cannot be undone. Type your password to confirm.</div>
-          <label class="field"><span>Password</span>
+          <div class="sheet-note small" id="acc-del-note">This removes your account and everything the server keeps for it. It cannot be undone. Type your password to confirm.</div>
+          <label class="field" id="acc-del-pass-field"><span>Password</span>
             <input id="acc-del-pass" type="password" autocomplete="current-password" maxlength="200" required>
           </label>
           <div class="sheet-error" id="acc-del-error" role="alert" hidden></div>
           <button type="submit" id="acc-del-submit" class="sheet-btn danger confirm">Delete my account for good</button>
+          <div id="acc-del-google" class="acc-google" hidden>
+            <div class="acc-or" id="acc-del-or" aria-hidden="true"><span>or</span></div>
+            <div class="sheet-note small">Confirm with Google to delete this account for good.</div>
+            <div id="acc-del-google-web" class="acc-google-web"></div>
+            <button type="button" id="acc-del-google-app" class="sheet-btn google" hidden><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><span>Confirm with Google</span></button>
+          </div>
         </form>
         <button type="button" id="acc-signout" class="sheet-btn danger">Sign out</button>
         <button type="button" id="acc-close" class="sheet-btn primary">Back to the yard</button>

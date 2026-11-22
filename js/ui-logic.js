@@ -283,7 +283,7 @@ export function feelOf(moment) {
 // --- the log -----------------------------------------------------------------------------------------
 /** Which Headquarters tab a line of the log leads to, by its kicker; null for a line that is only news (an unlock in a yard). */
 const LOG_TABS = { Goal: 'goals', Achievement: 'goals', Event: 'goals', Milestone: 'overview', Promoted: 'overview', Contract: 'contracts',
-  'Building site': 'construction', Built: 'construction' };
+  'Building site': 'construction', Built: 'construction', Motivation: 'construction' };   // Motivation: the Workers' Park card
 export function logTarget(entry) {
   if (entry?.kicker === 'New' && entry.title === 'Company founded') return 'overview';
   return LOG_TABS[entry?.kicker] || null;
@@ -336,6 +336,24 @@ export function stick(dx, dy, radius, dead = STICK_DEAD) {
   if (!(raw > dead)) return { x: 0, z: 0, len: 0 };
   const len = Math.min(1, (raw - dead) / (1 - dead)), k = len / (raw * radius);
   return { x: dx * k, z: dy * k, len };
+}
+
+/** A tap is let go within this many ms; a second press within DOUBLE_TAP_MS of it makes a double tap (js/zoom.js). */
+export const TAP_MS = 300, DOUBLE_TAP_MS = 340;
+/**
+ * Whether a press of the stick was a tap and not a steer: let go within TAP_MS, never past the stick's dead zone (it
+ * never moved the player), and lifted, not cancelled or taken over by a second finger.
+ * @param o  ms: how long it was held; steered: it went past the dead zone at any moment; lifted: it ended in a pointerup
+ */
+export const isTap = ({ ms, steered, lifted }) => lifted && !steered && ms <= TAP_MS;
+/**
+ * Where a ray meets the ground (y = 0): { x, z }, or null for a ray that does not go down to it.
+ * @param from  where it starts ({ x, y, z }, the camera)  @param dir  which way it goes
+ */
+export function rayToGround(from, dir) {
+  if (!(dir.y < -1e-9)) return null;
+  const t = -from.y / dir.y;
+  return { x: from.x + dir.x * t, z: from.z + dir.z * t };
 }
 
 // --- keyboard shortcuts ------------------------------------------------------------------------------

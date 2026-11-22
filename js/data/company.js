@@ -374,7 +374,8 @@ export const ACHIEVEMENTS = [
   { id: 'secondact', name: 'Second act', desc: 'Sell the company and found a new one', measure: 'sales', at: 1, xp: 300 },
   // Two for the building site (js/data/builds.js): 700 experience on top of what the builds themselves pay.
   { id: 'firsthome', name: 'First home', desc: 'Finish the Family House', measure: 'houseBuilt', at: 1, xp: 300 },
-  { id: 'builder', name: 'Master builder', desc: 'Finish all three builds', measure: 'builds', at: 3, xp: 400 },
+  // The Workers' Park is the fourth build and is not counted here: the three are the buildings.
+  { id: 'builder', name: 'Master builder', desc: 'Finish the house, the apartment block and the tower', measure: 'builds', at: 3, xp: 400 },
   // Five for the International Region: 1,350 experience. (The second ship's id is not 'fleet': Fleet owner, the truck routes, has it.)
   { id: 'harbour', name: 'Harbour town', desc: 'Open a yard in the International Region', measure: 'regionOpen', at: 1, xp: 200 },
   { id: 'coastline', name: 'Coastline', desc: 'Build all four yards of the International Region to the last upgrade', measure: 'regionBuilt', at: 4, xp: 400 },

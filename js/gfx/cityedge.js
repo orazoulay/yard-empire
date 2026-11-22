@@ -8,23 +8,22 @@
 // two meshes: the still things with the paint on the road, and whatever shines after dark (windows, skylights, signs,
 // lamps). The ground under them is three more: the asphalt, and the pavement of each location. Nothing here moves.
 import * as THREE from 'three';
-import { box, mat, soaks, GLOW, LIGHT, CITY_STACKS } from '../world.js';
+import { box, mat, soaks, CITY_STACKS } from '../world.js';
 import { bake } from '../engine/bake.js';
 import { cylinderShape } from '../engine/materials.js';
-import { ground, glowMap } from '../textures.js';
+import { ground } from '../textures.js';
 import { cityEdge, edgeYards, PARAPET } from '../sim/site.js';
+import { LEAVES, NEON } from '../data/looks.js';
+import { share, FLAT, BALL } from './shapes.js';
+import { shiningMaterial, lightPatches, lightMaterial } from './lamps.js';
 
 // ------------------------------------------------------------------------------------------ shapes, made once
-const share = geo => { geo.userData.shared = true; return geo; };
-/** A shape whose every corner takes the middle of the block picture, where it is not shaded toward an edge. */
-const plain = geo => { geo.attributes.uv.array.fill(0.5); return share(geo); };
-const FLAT = share(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2));   // lies on the ground and faces up
+// (FLAT, lying on the ground, and BALL are shared with the Workers' Park: js/gfx/shapes.js)
 const PANE = share(new THREE.PlaneGeometry(1, 1));                          // stands and faces south
 const DISC = share(new THREE.CircleGeometry(1, 12).rotateX(-Math.PI / 2));
 const TUBE = { 8: share(new THREE.CylinderGeometry(1, 1, 1, 8)), 12: share(new THREE.CylinderGeometry(1, 1, 1, 12)) };
 const CONE = share(new THREE.CylinderGeometry(0.07, 1, 1, 8));              // a parasol, a lid, a traffic cone
 const DOME = share(new THREE.CylinderGeometry(0.4, 1, 1, 8));              // the top of a tank
-const BALL = plain(new THREE.IcosahedronGeometry(1, 0));
 const corners = pts => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pts.length / 3 * 2).fill(0.5), 2)); g.computeVertexNormals(); return share(g); };
 const GABLE = corners([   // a roof one long, one deep and one high: its ridge runs along x, its foot lies at y = 0
   -0.5, 0, 0.5, 0.5, 0, 0.5, 0.5, 1, 0, -0.5, 0, 0.5, 0.5, 1, 0, -0.5, 1, 0,
@@ -44,11 +43,9 @@ const C = {
   water: 0x4fc3e8, panel: 0x27408b, kerb: 0xc4c2bb, cover: 0x33373d, deck: 0x565b63,
   warm: 0xffe2a0, cool: 0xd6ecf7, sky: 0xa9dcf5, lamp: 0xfff1c2, sodium: 0xffc58a, beacon: 0xff5a4a,
 };
-const LEAVES = [0x4f9a3f, 0x5aa845, 0x6dbb4e];
 const CARS = [0xe23d3d, 0x3d7be2, 0xf0f0f0, 0x2f9e6b, 0xf2c230, 0x3c434c, 0xe8742c];
 const CRATES = [0xb5432e, 0x2f6fb0, 0x3f8f5f, 0xe8742c, 0x8a9099];          // shipping containers, drums, lorry cabs
 const ACCENT = [0xd4483b, 0x2f8f83, 0xf2a900, 0x3d7be2, 0xd94f8a];          // awnings, parasols and signs: by a building's tint
-const NEON = [0xff5fa2, 0x4fe3ff, 0xffd84a, 0x6dff9a, 0xff8a4a];
 /** What the two locations are built of. Seen from above, the roofs are what the player sees. */
 const LOOKS = {
   city: { walls: [0xa8553f, 0xc98a4b, 0x7f8a94, 0x9aa3ad, 0x8a6f5a], roofs: [0x5e7f9a, 0x8a4f3a, 0xd0a146, 0x4f7f6a, 0xb5533c], trim: 0xd9d4c7, foot: 0x4a4f57, paving: ['concrete', 5, 0xa3a6a8] },
@@ -430,27 +427,13 @@ let shine = null;
 /** The one material of everything along the edge that shines after dark, each part in its own colour (js/sky.js turns it up at night). */
 function shining(like) {
   if (shine) return shine;
-  shine = mat(0xffffff, { vertexColors: true, map: like.map, roughness: 0.5, emissive: 0xffffff, emissiveIntensity: 0.3 });
-  shine.userData.byDay = 0.3; GLOW.push(shine);
-  shine.onBeforeCompile = shader => { shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance *= vColor.rgb;'); };
+  shine = shiningMaterial(0.3, like.map);
   return shine;
 }
 
 /** The pools of light under the street lamps, as one mesh that is only there at night: [x, z, size, colour]. */
 function pools(list) {
-  const pos = [], uv = [], col = [], index = [], c = new THREE.Color();
-  list.forEach(([x, z, size, color], k) => {
-    const h = size / 2;
-    pos.push(x - h, 0.034, z - h, x - h, 0.034, z + h, x + h, 0.034, z + h, x + h, 0.034, z - h); uv.push(0, 1, 0, 0, 1, 0, 1, 1);
-    c.set(color); for (let i = 0; i < 4; i++) col.push(c.r, c.g, c.b);
-    index.push(k * 4, k * 4 + 1, k * 4 + 2, k * 4, k * 4 + 2, k * 4 + 3);
-  });
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setIndex(index);
-  const light = new THREE.MeshBasicMaterial({ vertexColors: true, alphaMap: glowMap(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-  light.userData.full = 0.55; light.visible = false; LIGHT.push(light);
-  const m = new THREE.Mesh(geo, light);
+  const m = new THREE.Mesh(lightPatches(list.map(([x, z, size, color]) => ({ kind: 'pool', size, color, at: [x, 0.034, z] }))), lightMaterial(0.55));
   m.renderOrder = 3; m.matrixAutoUpdate = false; m.name = 'city-light';
   return m;
 }

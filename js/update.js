@@ -65,15 +65,21 @@ export function readList(data) {
   return { version, minBuild, files: { ...files }, apart: [...apart] };
 }
 
+/** True for an address on another site than the page's own. Where the page's address is not known, nothing is foreign. */
+function foreign(src, home) {
+  try { return !!home && new URL(src, home).origin !== home; } catch { return false; }
+}
+
 /**
  * Is this "error" or "unhandledrejection" event the game's own code breaking? A picture that did not load, a
  * request that did not get through and a sound the phone would not play are not: they must not send a good
- * version back.
+ * version back. Nor is a script of another site that did not load (Google's sign-in file, js/google.js): `home` is
+ * the page's own address, and where it is not known every script counts.
  */
-export function isBreak(type, e) {
+export function isBreak(type, e, home = globalThis.location?.origin) {
   if (type === 'error') {
     const el = e?.target && e.target.tagName ? e.target : null;
-    if (el) return el.tagName === 'SCRIPT' && !!el.src;
+    if (el) return el.tagName === 'SCRIPT' && !!el.src && !foreign(el.src, home);
     return e?.error instanceof Error;
   }
   const r = e?.reason;

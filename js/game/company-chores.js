@@ -4,6 +4,7 @@ import { MOMENTS } from '../ui-logic.js';
 import { fmt } from '../format.js';
 import { helperChores } from '../sim/helpers.js';
 import { localDay, receiptLine } from '../sim/store.js';
+import { parkView } from '../sim/hqview.js';
 
 /** The player's local day number (days since 1970): daily and weekly goals follow it. */
 export const today = () => localDay(Date.now());
@@ -89,6 +90,7 @@ export class CompanyChoresMethods {
     this.storeChores();   // the credits store: receipts applied once, and the extra workers (js/game/store.js)
     this.syncSite();   // cheap: it draws only when the picture changes: a stage finished, a build started, another twentieth of a stage arrived
     this.siteChores();
+    this.hud.setMotivation(parkView(this.company));   // the chip in the top bar: it writes only when the state or the level changed
     const c = this.company, event = c.eventNow();
     if ((event?.id || '') !== this.shownEvent) {   // say so when an event starts, and once when the game opens during one
       this.shownEvent = event?.id || '';

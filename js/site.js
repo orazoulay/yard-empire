@@ -5,14 +5,16 @@
 // A building is one shape made of all its blocks (merge), plus one more for its lit windows, so a twelve-floor
 // tower costs two draws. Each building is drawn again only when its own picture changes: a stage is finished,
 // another twentieth of the stage in work has arrived, or the player steps into it or out of it.
+//
+// The Workers' Park (the fourth build) is not a building: it is drawn into the same group by the Park (js/park.js).
 import * as THREE from 'three';
 import { GLOW, mat } from './world.js';
-import { blockPart, merge, roundPart, solid } from './models.js';
+import { merge, recordPart, solid } from './models.js';
 import { makeSignpost } from './scenery.js';
 import { BUILDS } from './data/builds.js';
-import { buildParts, lotOf, plotParts, siteKey, stagesShown } from './sim/site.js';
+import { buildParts, isPark, lotOf, plotParts, siteKey, stagesShown } from './sim/site.js';
+import { Park } from './park.js';
 
-const part = p => (p.kind === 'round' ? roundPart(p.rt, p.rb, p.h, p.color, p.at, p.turn, 12) : blockPart(p.w, p.h, p.d, p.color, p.at, p.turn));
 
 export class Site {
   constructor(scene) {
@@ -28,12 +30,13 @@ export class Site {
     GLOW.push(this.lit);
     this.plot = null;        // the ground and the fence: made once
     this.builds = new Map(); // build id -> { key, meshes }: what was drawn of it last time
+    this.park = new Park(this.group);
   }
 
   /** One shape for a list of parts, at a place on the ground. */
   shape(parts, material, x = 0, z = 0, shadows = true) {
     if (!parts.length) return null;
-    const mesh = new THREE.Mesh(merge(parts.map(part)), material);
+    const mesh = new THREE.Mesh(merge(parts.map(recordPart)), material);
     mesh.position.set(x, 0, z);
     mesh.castShadow = shadows; mesh.receiveShadow = true;
     this.group.add(mesh);
@@ -54,13 +57,14 @@ export class Site {
     // Nothing is drawn for a company that has never had a site: the ground east of the store is simply empty.
     const any = company.siteOpen || site.at || site.done.length;
     this.group.visible = !!any;
-    if (!any) return true;
+    if (!any) { this.park.sync(site, stage); return true; }   // the park too lets go of its meshes and of a picture that ran
     if (!this.plot) {
       const plot = plotParts();
       this.plot = this.shape(plot.parts, this.body, 0, 0, false);
       this.sign = makeSignpost('Building site', 'up'); this.sign.position.set(plot.sign[0], 0, plot.sign[1]); this.group.add(this.sign);
     }
     for (const b of BUILDS) {
+      if (isPark(b)) continue;   // the park is drawn by its own code, not as a building
       const shown = stagesShown(site, b), working = site.at === b.id;
       const own = shown + (working ? `|${stage}|${inside === b.id}` : ''), was = this.builds.get(b.id);
       if (was && was.key === own) continue;
@@ -68,6 +72,7 @@ export class Site {
       const parts = buildParts(b, shown, working ? { part: stage, cutaway: inside === b.id } : {}), [x, z] = lotOf(b);
       this.builds.set(b.id, { key: own, meshes: [this.shape(parts.filter(p => !p.glow), this.body, x, z), this.shape(parts.filter(p => p.glow), this.lit, x, z, false)].filter(Boolean) });
     }
+    this.park.sync(site, stage);
     return true;
   }
 }

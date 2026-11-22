@@ -8,6 +8,7 @@ import { AutoQuality } from './engine/quality.js';
 import { FramePace } from './engine/pace.js';
 import { FrameStats, DebugPanel, debugWanted } from './engine/perf.js';
 import { Input } from './input.js';
+import { rayToGround } from './ui-logic.js';
 import { Labels } from './labels.js';
 import { Fx } from './fx.js';
 import { Guide, Pulse } from './guide.js';
@@ -77,11 +78,11 @@ class Game {
 
     // Every yard outside Lumber Town is built-up land the forest keeps away from; the city's edge goes around those of
     // Industrial City and the Metropolis (edgeYards, js/sim/site.js). The coast row lies along the Metropolis's south
-    // side, so the edge has no street there, and the sea begins behind the row. The building site's plot is kept free
-    // of trees and of the city's buildings.
+    // side, so the edge has no street there, and the sea begins behind the row. The building site's plot and the park's are kept
+    // free of trees and of the city's buildings.
     const coast = AREAS.filter(a => a.location === 'region').map(a => a.bounds);
     this.seaZ = coast.length ? Math.max(...coast.map(r => r.maxZ)) : null;
-    const { scene, camera, updateCamera, sun, hemi, setDetail } = createWorld(AREAS.map(a => ({ ...a.bounds, city: a.location !== 'town' })), [SITE.plot], { seaZ: this.seaZ, south: !coast.length });
+    const { scene, camera, updateCamera, sun, hemi, setDetail } = createWorld(AREAS.map(a => ({ ...a.bounds, city: a.location !== 'town' })), [SITE.plot, SITE.park], { seaZ: this.seaZ, south: !coast.length });
     this.scene = scene; this.camera = camera; this.updateCamera = updateCamera;
     scene.environment = skyLight(this.renderer);
     this.sun = sun;
@@ -108,6 +109,7 @@ class Game {
 
     // The building site's footprints are asked for while the yards are built (their worn paths go around what stands in the way), so they exist first.
     this.siteRects = []; this.sitePart = 0; this.onSite = false; this.siteBusy = 0; this.siteGiven = -1;
+    this.parkOpen = false; this.parkLawn = false; this.parkWarm = false; this.parkAct = null; this.parkSmoke = 0;   // the Workers' Park: whether it can be walked into and its lawn is laid, whether its crowd's shaders are made, and the picture of an activity (never saved)
     // Credits (js/credits.js): owned only once the server says so in this visit. Built before the yards, which ask it for their fence.
     this.credits = new Credits(account, { offered: !!CLOUD.url });
     this.fenceKind = () => this.credits.look('fence');
@@ -193,6 +195,14 @@ class Game {
     });
     this.hud.onSkipTutorial = () => this.tutorial.finish(true);
     this.hud.onLogPick = tab => { if (this.company.founded) this.hq.open(tab); };   // a line of the log about the company opens its tab
+    this.hud.onMotivation = () => this.openPark();   // the Motivation chip opens the Workers' Park card
+    // and so does a tap on the park in the world: where the tap's ray from the camera meets the ground (js/game/site.js, tapPark)
+    const ray = new THREE.Vector3();
+    this.input.onTap = (x, y) => {
+      const r = this.canvas.getBoundingClientRect(), cam = this.camera;
+      ray.set((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1, 0.5).unproject(cam).sub(cam.position);
+      this.tapPark(rayToGround(cam.position, ray));
+    };
     this.hqOpen = false;
     this.hq = new Headquarters(this);
     this.ui = new YardUi(this, new Pulse(scene));   // yard interface: needs the HUD, the settings, the sound and the Headquarters above

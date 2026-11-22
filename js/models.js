@@ -11,6 +11,8 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Eule
 export const blockPart = (w, h, d, color, at = [0, 0, 0], turn = [0, 0, 0]) => ({ geo: new THREE.BoxGeometry(w, h, d), color, at, turn });
 /** A cylinder (or a cone, with one radius 0) as a part for merge(): upright unless turned. */
 export const roundPart = (rt, rb, h, color, at = [0, 0, 0], turn = [0, 0, 0], seg = 10) => ({ geo: new THREE.CylinderGeometry(rt, rb, h, seg), color, at, turn });
+/** A block or a cylinder written as plain numbers (js/sim/plotkit.js: block, round) as a part for merge(). */
+export const recordPart = p => (p.kind === 'round' ? roundPart(p.rt, p.rb, p.h, p.color, p.at, p.turn, p.seg || 12) : blockPart(p.w, p.h, p.d, p.color, p.at, p.turn));
 
 /**
  * One shape out of several parts. The colour of each part is stored in the shape itself, so the

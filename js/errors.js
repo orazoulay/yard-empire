@@ -11,16 +11,23 @@
 const QUIET = new Set(['AbortError', 'NotAllowedError', 'NotSupportedError', 'NetworkError', 'TimeoutError', 'QuotaExceededError', 'SecurityError', 'InvalidStateError']);
 const MAX_KEPT = 5;
 
+/** True for an address on another site than the page's own. Where the page's address is not known, nothing is foreign. */
+function foreign(src, home) {
+  try { return !!home && new URL(src, home).origin !== home; } catch { return false; }
+}
+
 /**
  * What an "error" or "unhandledrejection" event means for the player: { kind, message, where, stack }, or null
  * when it is not the game breaking (a browser extension, a request that did not get through, a sound the
  * browser would not play). Pure, so the rules can be tested.
+ * @param home  the page's own address (its origin). A script of another site is not a part of the game: Google's
+ *              sign-in file (js/google.js) may be blocked or out of reach, and the game plays on without it.
  */
-export function problemFrom(type, e) {
+export function problemFrom(type, e, home = globalThis.location?.origin) {
   if (type === 'error') {
     const el = e.target && e.target.tagName ? e.target : null;
-    if (el) {   // a file did not load; only a script takes the game down with it
-      return el.tagName === 'SCRIPT' && el.src ? { kind: 'load', message: 'A part of the game did not load', where: el.src, stack: '' } : null;
+    if (el) {   // a file did not load; only a script of the game takes the game down with it
+      return el.tagName === 'SCRIPT' && el.src && !foreign(el.src, home) ? { kind: 'load', message: 'A part of the game did not load', where: el.src, stack: '' } : null;
     }
     const error = e.error, message = String(e.message || (error && error.message) || '');
     if (!message) return null;

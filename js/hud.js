@@ -11,6 +11,7 @@ import { GRAPHICS, GRAPHICS_LABEL } from './settings-logic.js';
 const KICKER_ICON = { Unlocked: 'upgrade', 'New area': 'expansion', New: 'hq', Milestone: 'award', Promoted: 'star', Contract: 'contracts',
   Achievement: 'award', Goal: 'goals', Tycoon: 'ranking', 'A new start': 'star', Event: 'clock', 'Tutorial done': 'check', Credits: 'gem' };   // star: rank and legacy stars only; an event lasts until midnight: a clock
 const CARD_MS = 3100, CARD_MS_BUSY = 2000;   // how long an unlock card stays; shorter while several more are waiting
+const CARD_MS_ACT = 5000;                     // a card with a button stays longer: there is something to press
 
 const $ = id => document.getElementById(id);
 /** An element with a class and, when given, text. Everything the HUD builds goes through here: no markup is parsed. */
@@ -36,12 +37,16 @@ export class Hud {
     showVersion(); addEventListener('yard:version', showVersion);
     this.sheets = [];          // the open sheets, the one on top last
     this.onSheets = null;      // (open: boolean) the first sheet opened, or the last one closed
-    this.onShowWay = null; this.onYardChip = null; this.onBare = null;
+    this.onShowWay = null; this.onYardChip = null; this.onBare = null; this.onMotivation = null;
     this.start = null;         // what the loading screen should do when the game is ready (see hideLoading)
     this.rateKey = ''; this.saveKey = ''; this.areaKey = ''; this.hintTimer = 0; this.standing = '';
     $('off-icon').replaceChildren(icon('team'));
     $('log-icon').replaceChildren(icon('bell'));
     $('unlock').addEventListener('click', () => { if (this.unlockBusy) this.nextUnlock(); });
+    // A card's one button ("Open the park") does what it says, and the card makes way for the next.
+    $('unlock-act')?.addEventListener('click', e => { e.stopPropagation(); const card = this.unlockNow; this.nextUnlock(); card?.onAction?.(); });
+    this.motivationChip = $('motivation-chip'); this.motivationKey = '';
+    this.motivationChip?.addEventListener('click', () => this.onMotivation?.());
     $('obj-show').addEventListener('click', () => this.onShowWay?.());
     $('area-chip').addEventListener('click', () => this.onYardChip?.());
     $('log-btn').addEventListener('click', () => this.showLog());
@@ -135,6 +140,24 @@ export class Hud {
     list.forEach((b, i) => { const t = clock(Math.max(0, b.seconds)); if (times[i] && times[i].textContent !== t) times[i].textContent = t; });
   }
 
+  // --- worker motivation ------------------------------------------------------
+  /**
+   * The Motivation chip: hidden until the Workers' Park stands. Written only when the state or the whole level changed,
+   * which is once in about a minute of work at the most. @param v  parkView(company) (js/sim/hqview.js), or null
+   */
+  setMotivation(v) {
+    const b = this.motivationChip;
+    if (!b) return;
+    const key = v ? v.state + v.level : '';
+    if (key === this.motivationKey) return;
+    this.motivationKey = key;
+    b.hidden = !v;
+    if (!v) return;
+    b.className = 'motivation-chip ' + v.state;
+    b.replaceChildren(icon(v.state), el('b', '', String(v.level)), el('span', '', v.stateName));
+    b.setAttribute('aria-label', `Workers' motivation ${v.level} of 100, ${v.stateName}. Open the Workers' Park`);
+  }
+
   // --- area chip ----------------------------------------------------------
   setArea(name, index, total) {
     const key = name + index + '/' + total;
@@ -190,7 +213,10 @@ export class Hud {
   }
 
   // --- unlock card (queued so two unlocks never overlap) -------------------
-  /** Announce something. It is shown as a card, which a tap sends away, and kept in the log behind the bell. */
+  /**
+   * Announce something. It is shown as a card, which a tap sends away, and kept in the log behind the bell.
+   * A card may have one button: `action` is its text and `onAction` what it does (the log keeps the words only).
+   */
   unlock(card) {
     const symbol = card.symbol || KICKER_ICON[card.kicker] || 'award';
     this.journal.add({ kicker: card.kicker || 'Unlocked', title: card.title, desc: card.desc || '', symbol }, Date.now());
@@ -202,13 +228,17 @@ export class Hud {
   nextUnlock() {
     clearTimeout(this.unlockTimer);
     const card = this.unlockQueue.shift(), box = $('unlock');
-    if (!card) { this.unlockBusy = false; box.classList.remove('show'); return; }
+    const act = $('unlock-act');
+    this.unlockNow = card || null;
+    if (!card) { this.unlockBusy = false; box.classList.remove('show'); if (act) act.hidden = true; return; }
     this.unlockBusy = true;
+    if (act) { act.hidden = !card.action; act.textContent = card.action || ''; }
+    box.classList.toggle('has-act', !!card.action);
     document.querySelector('#unlock .u-kicker').textContent = card.kicker || 'Unlocked';
     $('unlock-icon').replaceChildren(icon(card.symbol)); $('unlock-title').textContent = card.title; $('unlock-desc').textContent = card.desc || '';
     this.showWaiting();
     box.classList.remove('show'); void box.offsetWidth; box.classList.add('show');
-    this.unlockTimer = setTimeout(() => this.nextUnlock(), this.unlockQueue.length > 2 ? CARD_MS_BUSY : CARD_MS);
+    this.unlockTimer = setTimeout(() => this.nextUnlock(), this.unlockQueue.length > 2 ? CARD_MS_BUSY : card.action ? CARD_MS_ACT : CARD_MS);
   }
   showWaiting() {
     const n = this.unlockQueue.length, more = $('unlock-more');

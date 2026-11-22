@@ -5,6 +5,12 @@ import { siteWalk } from '../sim/site.js';
 
 const inRect = (p, r) => p.x >= r.minX && p.x <= r.maxX && p.z >= r.minZ && p.z <= r.maxZ;
 const WALK = siteWalk();                 // the ground of the building site the player may step on, and the passage to it
+// The way between the building site and the Workers' Park: the lane runs straight south from the opening in the site's
+// fence to the park's gate. A walker within LINED of its middle line goes through both openings in a straight line;
+// one who is not is led first to the inside of the opening on their side, as at the site's west opening.
+const LANE_X = (WALK.lane.minX + WALK.lane.maxX) / 2, LINED = 1;
+const SITE_SIDE = { x: LANE_X, z: WALK.plot.maxZ - 0.6 };   // just inside the site's south opening
+const PARK_SIDE = { x: LANE_X, z: WALK.park.minZ + 0.6 };   // just inside the park's gate
 /** True when the straight line from a to b passes through the rectangle r. */
 function crosses(a, b, r) {
   let t0 = 0, t1 = 1;
@@ -24,6 +30,8 @@ export class MovementMethods {
     for (const d of this.doors) if (this.econ.has(d.gateId) && inRect(p, d.rect)) return true;
     // the building site, once it is open: the plot, and the passage from the Department Store through the two openings
     if (this.company.siteOpen && (inRect(p, WALK.plot) || inRect(p, WALK.door))) return true;
+    // and the Workers' Park once it is begun: down the lane from the opening in the site's south fence, and inside the park's own
+    if (this.parkOpen && (inRect(p, WALK.park) || inRect(p, WALK.lane))) return true;
     return false;
   }
   /** Returns where a move from prev to next may end: full move, a slide along a wall, or prev. */
@@ -34,7 +42,6 @@ export class MovementMethods {
     return prev;
   }
   areaAt(p) { return this.areas.find(a => a.open && a.contains(p)) || null; }
-  /** Next point to walk toward to reach `target`, going through a door when it is in another area. */
   /** The footprints nobody walks through: every machine with its belt, the shop counters and the Port's quay, of the open yards. */
   blocks() {
     if (this._blocks) return this._blocks;
@@ -84,7 +91,22 @@ export class MovementMethods {
     return best ? best.pts : [a, b];
   }
 
+  /**
+   * Where a point lies on the way to the Workers' Park, once it is begun: 'park' inside its fence, 'lane' between the
+   * two fences, '' anywhere else. Asked of the point itself: the workers and the trucks are asked about too.
+   */
+  parkSide(p) {
+    if (!this.parkOpen) return '';
+    if (inRect(p, WALK.park) || (inRect(p, WALK.lane) && p.z > SITE.park.minZ)) return 'park';
+    return inRect(p, WALK.lane) && p.z > WALK.plot.maxZ ? 'lane' : '';
+  }
+  /** Next point to walk toward to reach `target`: through a door when it is in another area, through the openings to and from the site and the park. */
   waypoint(pos, target) {
+    // Between the site and the park, through the lane: first to the inside of the opening on this side unless lined up with it.
+    const from = this.parkSide(pos), to = this.parkSide(target), lined = Math.abs(pos.x - LANE_X) <= LINED;
+    if (from === 'park') return to === 'park' ? target : !lined ? PARK_SIDE : to === 'lane' ? target : SITE_SIDE;
+    if (from === 'lane') return to === 'lane' ? target : to === 'park' ? PARK_SIDE : SITE_SIDE;
+    if (to && inRect(pos, WALK.plot)) return !lined ? SITE_SIDE : to === 'lane' ? target : PARK_SIDE;
     // From the building site the way to anything in a yard leads out through its opening: first to the plot's side of it, then through.
     if (this.onSite && pos.x > SITE.gate.x) return pos.x > SITE.plot.minX + 1.4 && Math.abs(pos.z - SITE.gate.at) > 1 ? { x: SITE.plot.minX + 1.4, z: SITE.gate.at } : { x: SITE.gate.x - 1.4, z: SITE.gate.at };
     const A = this.areaAt(pos), B = this.areaAt(target);

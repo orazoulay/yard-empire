@@ -1,15 +1,42 @@
 // The Construction tab (the building site) and the Expansion tab (new yards and selling the company).
 // Added to the Headquarters class in js/hq.js (see mix() in js/hq/kit.js): `this` is the Headquarters.
-import { h, amount, withAmount, bar, label, needText, cap, chip, section, note, row } from './kit.js';
+import { h, amount, withAmount, bar, label, needText, cap, chip, section, note, row, money } from './kit.js';
 import { fmt } from '../format.js';
 import { RANKS, MILESTONES, MEASURES, LOCATIONS, PRESTIGE } from '../data/company.js';
 import { AREAS } from '../data/areas.js';
 import { BUILDS } from '../data/builds.js';
 import { icon } from '../icons.js';
 import { saleLines, bankLines } from '../sim/store.js';
-import { siteHoldText } from '../sim/hqview.js';
+import { siteHoldText, parkView, meterAt } from '../sim/hqview.js';
+
+const ACTIVITY_ICON = { barbecue: 'barbecue', concert: 'concert', festival: 'star' };
 
 export class HqBuild {
+  // --- the Workers' Park (worker motivation, js/sim/company.js) ----------------------------------------------------
+  /** The Workers' Park: the meter with its three states, the work left before the next, and the activities. Null until the park stands. */
+  parkSection() {
+    const c = this.company, v = parkView(c);
+    if (!v) return null;
+    const meter = h('article', { class: 'hq-card hq-park-meter ' + v.state },
+      h('div', { class: 'hq-park-head' },
+        h('b', { class: 'hq-park-num', text: String(v.level) }), h('span', { class: 'hq-park-label', text: 'Motivation' }),
+        chip(v.stateName, v.state === 'keen' ? 'good' : v.state === 'worn' ? 'bad' : ''), chip(`Pace ${v.pace}%`)),
+      // the bar is a picture to the eye; a screen reader gets the same in words
+      h('div', { class: 'hq-park-zones', role: 'img', 'aria-label': `Motivation ${v.level} of 100: ${v.stateName}, pace ${v.pace}%` },
+        h('i', { class: 'w' }), h('i', { class: 's' }), h('i', { class: 'k' }),
+        h('span', { class: 'hq-park-mark', style: `left:${meterAt(v.level)}` })),
+      h('div', { class: 'hq-park-legend', 'aria-hidden': 'true' }, h('span', { text: 'Worn out' }), h('span', { text: 'Steady' }), h('span', { text: 'Keen' })),
+      h('div', { class: 'hq-sub', text: v.line }));
+    // An activity that cannot be held now is a button that is off, and its line says why: the meter is full, a festival
+    // holds it, or the cash is short.
+    const acts = h('article', { class: 'hq-card hq-park-acts' }, ...v.activities.map(a => h('div', { class: 'hq-park-act' + (a.can ? '' : ' off') },
+      icon(ACTIVITY_ICON[a.id], 'act-' + a.id),
+      h('div', { class: 'hq-park-act-text' }, h('h4', { text: a.name }), h('div', { class: 'hq-sub', text: a.does }),
+        a.runs && !a.can ? h('div', { class: 'hq-sub hq-park-short', text: 'Not enough cash yet' }) : null),
+      this.button_(money(a.price), 'park-' + a.id, () => this.act('park', () => c.buyActivity(a.id)), { disabled: !a.can, cls: a.id === 'festival' ? 'primary' : '', exact: a.price }))));
+    return section("Workers' Park", note('Work wears the workers down. From 80 they are keen and a tenth faster; under 50 they slow down, to half their pace at zero. Hold something for them here.'), meter, acts);
+  }
+
   // --- Construction: the building site (js/data/builds.js, and "the building site" in js/sim/company.js) --------
   construction() {
     const c = this.company, list = c.buildList(), running = c.build();
@@ -24,12 +51,14 @@ export class HqBuild {
             : chip(i > 0 ? `After the ${BUILDS[i - 1].name}` : 'Not yet', '', 'lock')));
     const show = this.button_('Show me the site', 'site-show', () => this.game.showSite());
     const go = this.button_('Go to the site', 'site-go', () => this.game.goToSite());   // the player stands at the plot's entrance, and can walk into what is being built
+    const park = c.site.done.includes('park') ? this.button_('Show me the park', 'park-show', () => this.game.showPark()) : null;   // once the Workers' Park stands
     if (!running) {
       const all = list.every(x => x.state === 'done');
       return [
+        this.parkSection(),
         section('Building site', note(all ? 'Everything here is built. The new quarter stands, and it stays when you sell the company.'
           : 'Build something bigger than a yard. A build goes up in stages, from goods your yards make: while it runs, the goods a stage needs go to the site instead of being sold. You can walk onto the site through the opening in the east fence of the Department Store.'),
-          h('div', { class: 'hq-actions wrap' }, go, show)),
+          h('div', { class: 'hq-actions wrap' }, go, show, park)),
         section('What to build', ...cards),
       ];
     }
@@ -51,6 +80,7 @@ export class HqBuild {
     // trucks: the company owns a route that carries a good some stage asks for, so a stage can hold a yard of it back
     const holds = c.siteHolds(), trucks = c.routeDefs.some(d => c.routes[d.id] && BUILDS.some(b => b.stages.some(st => st.needs.some(n => n[0] === d.item))));
     return [
+      this.parkSection(),
       section(running.name, note(`Stage ${at + 1} of ${running.stages.length}: ${running.stages[at].name}`),
         ...goods, time ? row('This stage', time) : null,
         holds.routes.length ? h('p', { class: 'hq-note hq-sale-line warn' }, icon('clock'), h('span', { text: siteHoldText(holds.items.map(label), holds.yards.map(id => AREAS.find(a => a.id === id).name)) })) : null,

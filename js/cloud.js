@@ -14,6 +14,10 @@ const EARLY = 60;   // refresh the pass this many seconds before it runs out
 const WAITING_KEY = 'yard-empire-awaiting';   // the email this device signed up with and whose confirmation link it is waiting for
 const RESET_KEY = 'yard-empire-awaiting-reset';   // the email this device asked a new password for
 const OLD_LINK = 'That link is too old or was already used. Sign in, or create the account again to get a new link.';
+const GOOGLE_FAILED = 'Google sign-in did not work. Try again, or use your email.';
+const GOOGLE_AGAIN = 'Continue with Google again, then choose a username.';
+const EMAIL_TAKEN = 'That email already has an account. Sign in instead.';
+const PROFILE = '/rest/v1/profiles?select=id,username,role,status,listed,created_at&limit=1';
 
 const read = (store, key) => { try { return JSON.parse(store.getItem(key)); } catch { return null; } };
 const write = (store, key, value) => { try { value == null ? store.removeItem(key) : store.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } };
@@ -69,7 +73,7 @@ function plain(status, data) {
   const text = String(data?.msg || data?.error_description || data?.message || data?.error || '');
   if (/invalid login credentials/i.test(text)) return 'Email or password is wrong';
   if (/email not confirmed/i.test(text)) return 'Confirm your email first: open the link we sent you, then sign in.';
-  if (/already registered|already been registered/i.test(text)) return 'That email already has an account. Sign in instead.';
+  if (/already registered|already been registered/i.test(text)) return EMAIL_TAKEN;
   if (/username must be/i.test(text) || /database error saving new user/i.test(text)) return 'Username must be 3 to 20 letters, numbers or underscores, and not taken.';
   if (/valid email|invalid format|email address .* is invalid/i.test(text)) return 'Enter a valid email address';
   if (/password/i.test(text) && /(at least|characters|weak|short)/i.test(text)) return 'Password must be 8 characters or more';
@@ -93,7 +97,12 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
   const back = home ? '?redirect_to=' + encodeURIComponent(home) : '';   // on the requests that make Supabase send an email with a link
   let session = read(storage, SESSION_KEY);   // { access, refresh, expires (seconds), email }
   const keep = s => { session = s; write(storage, SESSION_KEY, s); };
-  const fromTokens = d => ({ access: d.access_token, refresh: d.refresh_token, expires: Math.floor(now() / 1000) + (d.expires_in || 3600), email: d.user?.email || session?.email });
+  // How the account signs in, as Supabase lists it (['email', 'google']). A session from before the game knew of
+  // Google has no list, and so has a pass given without one (the link in an email): both are accounts with a password.
+  const waysOf = d => (Array.isArray(d.user?.app_metadata?.providers) ? d.user.app_metadata.providers.map(String) : session?.ways);
+  const fromTokens = d => ({ access: d.access_token, refresh: d.refresh_token, expires: Math.floor(now() / 1000) + (d.expires_in || 3600), email: d.user?.email || session?.email, ways: waysOf(d) });
+  const hasPassword = () => !session?.ways || session.ways.includes('email');
+  const hasGoogle = () => !!session?.ways?.includes('google');
 
   // The player opened the link in an email and it brought them back here. Whatever it carried leaves the address
   // bar at once.
@@ -103,6 +112,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
   let news = null;       // what 'GET me' tells the player about the link: { note, good, signedIn } or { reset: { email } }
   let recovery = null;   // { tokens, email }: the pass of a "new password" link
   let unchecked = null;  // a link that carried a one-time code instead of a pass: traded for one by the first 'GET me'
+  let unnamed = null;    // the answer to a first Google sign-in whose account has no username yet: kept in this page's memory only, until 'POST username'
   const take = (tokens, type) => {
     const email = String(tokens.user?.email || '').toLowerCase() || emailOf(tokens.access_token), waiting = read(storage, WAITING_KEY);
     if (type === 'recovery') {
@@ -163,7 +173,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     return r;
   }
   async function profile() {
-    const r = await asPlayer('GET', '/rest/v1/profiles?select=id,username,role,status,listed,created_at&limit=1');
+    const r = await asPlayer('GET', PROFILE);
     return r.ok ? { ok: true, row: Array.isArray(r.data) ? r.data[0] || null : null } : { ok: false, r };
   }
   /** One change to credits. An answer the function gave on purpose (a refusal with its words) is passed on as it came. */
@@ -178,6 +188,15 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
    */
   const board = (period, which) => (session ? asPlayer : (m, p, b) => send(m, p, b, { as: 'visitor' }))('POST', '/rest/v1/rpc/leaderboard',
     { period: period === 'week' ? 'week' : 'all', ...(which === 'boosted' || which === 'all' ? { board: which } : {}) });
+
+  const taken = cfg.google ? 'That email already has an account. Sign in, or continue with Google.' : EMAIL_TAKEN;
+  const said = r => (r.data?.error === EMAIL_TAKEN ? { ...r, data: { ...r.data, error: taken } } : r);
+
+  /**
+   * A good pass for an account that has no username yet: a first sign-in with Google, or an account that left the name
+   * form then and comes back by email. Nobody is signed in: the pass waits in this page's memory for 'POST username'.
+   */
+  const nameless = tokens => { unnamed = tokens; keep(null); return good({ choose: true }); };
 
   const routes = {
     /** Who is playing. Tells account.js that accounts exist here, and whether the pass on this device is still good. */
@@ -204,17 +223,17 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       if (!p.ok) return p.r.status === 0 ? { status: 0, ok: false, data: null } : good({ accounts: true, user: null });
       if (!p.row) { keep(null); return good({ accounts: true, user: null }); }
       if (p.row.status === 'banned') { keep(null); return good({ accounts: true, user: null, banned: true }); }
-      return good({ accounts: true, user: { id: p.row.id, username: p.row.username, role: p.row.role } });
+      return good({ accounts: true, user: { id: p.row.id, username: p.row.username, role: p.row.role }, password: hasPassword(), google: hasGoogle() });
     },
     async 'POST register'({ username, email, password }) {
       const free = await send('POST', '/rest/v1/rpc/username_free', { name: String(username || '') }, { as: 'visitor' });
       if (free.status === 0) return fail(free);
       if (free.ok && free.data === false) return { status: 409, ok: false, data: { error: 'Username must be 3 to 20 letters, numbers or underscores, and not taken.' } };
       const r = await send('POST', '/auth/v1/signup' + back, { email, password, data: { username } }, { as: 'visitor' });
-      if (!r.ok) return fail(r);
+      if (!r.ok) return said(fail(r));
       // Where emails are confirmed, Supabase answers a sign-up for an email that already has an account as if it were new,
       // only with no way of signing in listed, and sends nothing: waiting for that email would never end.
-      if (!r.data?.access_token && Array.isArray(r.data?.identities) && r.data.identities.length === 0) return { status: 409, ok: false, data: { error: 'That email already has an account. Sign in instead.' } };
+      if (!r.data?.access_token && Array.isArray(r.data?.identities) && r.data.identities.length === 0) return { status: 409, ok: false, data: { error: taken } };
       // With "confirm email" on, Supabase creates the account but gives no pass until the link in the email is opened.
       if (!r.data?.access_token) {
         write(storage, WAITING_KEY, String(email || '').trim().toLowerCase());   // so the link may sign this device in when it comes back
@@ -229,9 +248,65 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       keep(fromTokens(r.data));
       write(storage, WAITING_KEY, null);   // signed in by hand: no link is waited for any more
       const p = await profile();
+      if (p.ok && !p.row) return nameless(r.data);   // made by Google and left without a name: the name is asked for now
       if (!p.ok || !p.row) { keep(null); return fail(p.ok ? { status: 500, data: null } : p.r); }
       if (p.row.status === 'banned') { keep(null); return { status: 403, ok: false, data: { error: 'This account is suspended.', banned: true } }; }
       return good({ user: { id: p.row.id, username: p.row.username, role: p.row.role } });
+    },
+    /**
+     * Signing in with Google: js/google.js had a Google ID token made for `nonce`, and Supabase trades it for a pass
+     * (it checks the token's signature, that it was made for this game, and the nonce). An email that has an account
+     * already gets that account. An account that has no username yet is not signed in: its pass waits in this page's
+     * memory for 'POST username', and the answer is { choose: true }.
+     */
+    async 'POST google'({ token, nonce }) {
+      unnamed = null;
+      const r = await send('POST', '/auth/v1/token?grant_type=id_token', { provider: 'google', id_token: token, nonce }, { as: 'visitor' });
+      if (r.status === 0 || r.status === 429) return fail(r);
+      if (!r.ok || !r.data?.access_token) return { status: r.status || 400, ok: false, data: { error: GOOGLE_FAILED } };
+      const p = await send('GET', PROFILE, undefined, { pass: r.data.access_token });
+      if (p.status === 0) return fail(p);
+      if (!p.ok) return { status: p.status, ok: false, data: { error: GOOGLE_FAILED } };
+      const row = Array.isArray(p.data) ? p.data[0] || null : null;
+      if (!row) return nameless(r.data);
+      if (row.status === 'banned') return { status: 403, ok: false, data: { error: 'This account is suspended.', banned: true } };
+      keep(fromTokens(r.data));
+      write(storage, WAITING_KEY, null);   // signed in: no link is waited for any more
+      return good({ user: { id: row.id, username: row.username, role: row.role } });
+    },
+    /** The username of an account Google just opened (claim_username, supabase/migrations/20261121000000_google.sql). Then, and only then, the player is signed in. */
+    async 'POST username'({ username }) {
+      if (!unnamed) return { status: 403, ok: false, data: { error: GOOGLE_AGAIN } };
+      const r = await send('POST', '/rest/v1/rpc/claim_username', { p_name: String(username || '') }, { pass: unnamed.access_token });
+      if (r.status === 0) return fail(r);
+      if (r.status === 401 || r.status === 403) { unnamed = null; return { status: 403, ok: false, data: { error: GOOGLE_AGAIN } }; }
+      if (!r.ok) return fail(r);
+      if (r.data?.ok !== true && r.data?.code !== 'named') {
+        const code = r.data?.code === 'taken' ? 'taken' : 'invalid';
+        return { status: 409, ok: false, data: { error: code === 'taken' ? 'That username is taken. Try another.' : 'Username must be 3 to 20 letters, numbers or underscores.', code } };
+      }
+      const tokens = unnamed;
+      unnamed = null;
+      keep(fromTokens(tokens));
+      const p = await profile();
+      if (!p.ok || !p.row) { keep(null); return fail(p.ok ? { status: 500, data: null } : p.r); }
+      return good({ user: { id: p.row.id, username: p.row.username, role: p.row.role } });
+    },
+    /** Whether nobody has this username yet, for the name the form suggests. */
+    async 'POST username/free'({ name }) {
+      const r = await send('POST', '/rest/v1/rpc/username_free', { name: String(name || '') }, { as: 'visitor' });
+      return r.ok ? good({ free: r.data !== false }) : fail(r);
+    },
+    /**
+     * The player left the name form: the pass that waited is forgotten, and handed back to the server so that none is
+     * left alive that nobody holds. Nothing was kept on the device. The account itself stays at Supabase, without a
+     * profile: the next sign-in asks for the name again (legal/privacy.html says so).
+     */
+    async 'POST google/cancel'() {
+      const held = unnamed;
+      unnamed = null;
+      if (held?.access_token) await send('POST', '/auth/v1/logout?scope=local', undefined, { pass: held.access_token });
+      return good({ ok: true });
     },
     async 'POST logout'() {
       if (session) {
@@ -291,6 +366,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       const r = await asPlayer('PUT', '/auth/v1/user', { password });
       if (!r.ok) { keep(null); return fail(r); }
       const p = await profile();
+      if (p.ok && !p.row) return nameless(v.data);   // the password is set; the account still has no name
       if (!p.ok || !p.row) { keep(null); return fail(p.ok ? { status: 500, data: null } : p.r); }
       return good({ user: { id: p.row.id, username: p.row.username, role: p.row.role } });
     },
@@ -305,8 +381,10 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       if (r.status === 403 && r.data?.banned) return { status: 403, ok: false, data: { error: 'This account is suspended.', banned: true } };
       return r.ok || r.status === 409 || r.status === 0 ? r : fail(r);   // 409 carries the admin's version of the save
     },
-    async 'POST account/delete'({ password }) {
-      const r = await asPlayer('POST', '/functions/v1/account', { action: 'delete', password });
+    /** @param proof  { password }, or { google: { token, nonce } }: a Google ID token made just now, for an account that has no password */
+    async 'POST account/delete'({ password, google }) {
+      const proof = google ? { google: { id_token: google.token, nonce: google.nonce } } : { password };
+      const r = await asPlayer('POST', '/functions/v1/account', { action: 'delete', ...proof });
       if (!r.ok) return fail(r);
       keep(null);
       return good({ ok: true });
@@ -319,7 +397,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       if (!s.ok) return fail(s);
       const row = Array.isArray(s.data) ? s.data[0] : null;
       return good({
-        account: { username: p.row.username, email: session?.email || null, role: p.row.role, joined: p.row.created_at, onLeaderboard: p.row.listed },
+        account: { username: p.row.username, email: session?.email || null, signIn: session?.ways || ['email'], role: p.row.role, joined: p.row.created_at, onLeaderboard: p.row.listed },
         save: row?.data ?? null,
         leaderboard: row ? { value: row.value, stars: row.stars, yards: row.yards, heldBack: row.suspect, savedAt: row.updated_at } : null,
       });
@@ -364,5 +442,6 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     try { return await route(body || {}, opts); } catch { return { status: 0, ok: false, data: null }; }
   };
   call.needsEmail = true;   // the forms ask for an email: Supabase signs people in by it
+  call.google = String(cfg.google || '');   // Google's client ID of this game, or '' where Google is not offered (js/google.js)
   return call;
 }

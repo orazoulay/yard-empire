@@ -17,6 +17,15 @@ export const FENCES = ['rail', 'picket', 'stone', 'brick', 'iron', 'mesh', 'glas
 /** Hats are built in js/characters.js. */
 export const HATS = ['hard', 'straw', 'chef', 'miner', 'cap'];
 
+/** What the people who are only there to be looked at wear: the shops' customers (js/customers.js) and the crowd of the Workers' Park (js/sim/park.js). */
+export const PEOPLE = {
+  shirt: [0x4f7fd6, 0xd6604f, 0x8e5bd6, 0xe0a52f, 0x3aa39a, 0xd94f8a], pants: [0x3b4654, 0x5a4a3a, 0x2f3d5c],
+  skin: [0xf1c8a0, 0xe0ac7e, 0xc68a5c, 0x9c6a43], hair: [0x3b2a1e, 0x6b4a2b, 0x1f1a17, 0xb5803f, 0xd9d2c4],
+};
+/** The scenery's greens of leaves, and its neon: the city's edge (js/gfx/cityedge.js) and the Workers' Park (js/sim/park.js). */
+export const LEAVES = [0x4f9a3f, 0x5aa845, 0x6dbb4e];
+export const NEON = [0xff5fa2, 0x4fe3ff, 0xffd84a, 0x6dff9a, 0xff8a4a];
+
 /**
  * What a trade wears. shirt: a few shades, so that two workers of one yard are not copies; apron and
  * vest are optional; helmet is the colour of the hat.

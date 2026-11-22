@@ -9,7 +9,15 @@ import { MOMENTS, feelOf } from '../ui-logic.js';
 import { EFFECT_ICON } from '../icons.js';
 
 const SHOCK_RING = new THREE.RingGeometry(0.86, 1, 48);   // the shape of every ring that spreads over the ground (shock)
-const OFFER_AFTER = 7;                   // seconds from a purchase to the offer of an account: the cards about it come first
+// What a fall of worker motivation says, by the state it fell to; 'empty' is the meter at zero (js/sim/company.js, wearBy).
+const MOTIVATION_CARDS = {
+  steady: { symbol: 'steady', title: 'The workers are no longer keen', desc: 'They work at their usual pace. A barbecue would lift them.' },
+  worn: { symbol: 'worn', title: 'The workers are worn out', desc: 'They slow down, and more the longer it lasts. Hold something for them at the Workers\' Park.' },
+  empty: { symbol: 'worn', title: 'The workers are at half their pace', desc: 'Every yard works at half speed until something is held for them.' },
+};
+// What an activity held at the park left the workers as, by the state after it (Company.buyActivity's `to`).
+const ACTIVITY_LEAVES = { keen: 'The workers are keen: a tenth faster.', steady: 'The workers are steady again.', worn: 'The workers are still worn out, but less so.' };
+const OFFER_AFTER = 7;                 // seconds from a purchase to the offer of an account: the cards about it come first
 
 /** The feedback of the Game. */
 export class FeedbackMethods {
@@ -153,7 +161,15 @@ export class FeedbackMethods {
         this.showSite(false);
       } else if (e.type === 'built') {
         card = { symbol: 'construction', title: `${e.build.name} is finished`, desc: `+$${fmt(e.cash)} and +${fmt(e.xp)} experience`, kicker: 'Built' };
+        // the Workers' Park starts the meter: one line more, and the way to its card
+        if (e.build.id === 'park') Object.assign(card, { desc: card.desc + '\nYour workers now have a Motivation meter. Work wears it; the park lifts it.', ...this.parkButton() });
         this.hud.setCash(this.econ.cash); this.hud.bumpCash(); this.showSite(false);
+      } else if (e.type === 'motivation') {   // worker motivation fell to a lower state (Company.wearBy): told on the way down only
+        if (MOTIVATION_CARDS[e.state]) card = { ...MOTIVATION_CARDS[e.state], kicker: 'Motivation', ...this.parkButton() };
+      } else if (e.type === 'activity') {   // an activity was held at the Workers' Park (Company.buyActivity)
+        // what it left them as, in the words of the chip's state: a barbecue below 25 leaves them worn out still
+        card = { symbol: e.to, title: `${e.activity.name} at the Workers' Park`, desc: ACTIVITY_LEAVES[e.to] || '', kicker: 'Motivation' };
+        this.parkShow?.(e.activity);   // the park's picture of it, where there is one
       } else if (e.type === 'ship') {   // a ship of the Port is back from its voyage (Company.shipsHome): the sum is in the cash
         const route = PORT.routes.find(r => r.id === e.route)?.name || 'its voyage';
         card = { symbol: 'logistics', title: `Your ship is home from ${route}`, desc: `+$${fmt(e.pay)} for ${fmt(e.goods)} goods sold overseas`, kicker: 'Port' };
@@ -164,11 +180,16 @@ export class FeedbackMethods {
       if (!card) continue;
       if (MOMENTS[e.type]) this.feel(e.type);
       this.hud.unlock(card);
-      if (this.hqOpen) this.hq.toast(`${card.kicker}: ${card.title}`, e.type);   // Headquarters: the kind of event picks the icon of the line
+      // Headquarters: the kind of event picks the icon of the line; an activity's is the face of the state it left the workers in
+      if (this.hqOpen) this.hq.toast(`${card.kicker}: ${card.title}`, e.type === 'activity' ? 'activity-' + e.to : e.type);
     }
   }
 
   onHqToggle(open) { this.hqOpen = open; this.sfx.click(); }
+  /** Open the Headquarters on the Construction tab, where the Workers' Park card is: the Motivation chip and the notices lead there. */
+  openPark() { if (this.company.founded) this.hq.open('construction'); }
+  /** The button of a notice about worker motivation. */
+  parkButton() { return { action: 'Open the park', onAction: () => this.openPark() }; }
 
   /**
    * One moment, felt the way its size says (js/ui-logic.js, FEEL and MOMENTS): a sound, a buzz, confetti and,

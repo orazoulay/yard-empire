@@ -1,6 +1,8 @@
 // What the Headquarters screen works out before it draws: what is remembered, orderings, estimates and wording.
 // Pure: plain numbers and lists in, plain values out. No page and no game objects, so every rule here has a test.
 import { OFFLINE_EFFICIENCY, OFFLINE_CAP_SECONDS, shareText } from './offline.js';
+import { stateOf, workLeft, pointsOf, STATE_NAMES } from './motivation.js';
+import { fmt } from '../format.js';
 
 // --- figures --------------------------------------------------------------------------------
 /** True when js/format.js shortens this amount ($5.2M): only then is there an exact figure worth adding. */
@@ -129,8 +131,13 @@ const signed = factor => {
  */
 export function modRows(mods, { capacity, slots }) {
   const rows = [], off = f => Math.abs(f - 1) > 1e-9;
-  if (off(mods.speed)) rows.push(['Machine speed', signed(mods.speed)]);
-  if (off(mods.workerSpeed)) rows.push(['Workers walk', signed(mods.workerSpeed)]);
+  // The workers' pace (worker motivation) is folded into the machines and the walk, and the trucks keep it too
+  // (Company.runRoutes); it has a row of its own, and the rows of the machines, the walk and the trucks show what is left,
+  // so keen workers read as one tenth faster once and not four times.
+  const pace = mods.pace || 1, speed = mods.speed / pace, walk = mods.workerSpeed / pace;
+  if (off(pace)) rows.push(["Workers' motivation", signed(pace)]);
+  if (off(speed)) rows.push(['Machine speed', signed(speed)]);
+  if (off(walk)) rows.push(['Workers walk', signed(walk)]);
   if (off(mods.price)) rows.push(['Selling prices', signed(mods.price)]);
   if (off(mods.contractPay)) rows.push(['Contract pay', signed(mods.contractPay)]);
   if (off(mods.wage)) rows.push(['Wages and salaries', signed(mods.wage)]);
@@ -147,6 +154,55 @@ export function modRows(mods, { capacity, slots }) {
     rows.push(['Time away', `${shareText(share)} for up to ${Math.round(cap / 360) / 10} h a day`]);
   }
   return rows.map(([name, value]) => ({ name, value }));
+}
+
+// --- worker motivation (js/sim/motivation.js, and "worker motivation" in js/sim/company.js) ---------------------------
+/**
+ * Everything the Workers' Park card and the chip in the top bar show, or null while the meter does not run.
+ * level: whole points; pace: a percent; held, left: seconds of work; next: the state the workers come to after `left`.
+ * @returns {null | { level, state, stateName, pace, held, left, next, line, activities: { id, name, price, can, runs, does }[] }}
+ */
+export function parkView(company) {
+  if (!company.motivationOn) return null;
+  const m = company.motivation, level = pointsOf(m.level), state = stateOf(m.level), pace = Math.round(company.mods.pace * 100);
+  const mins = s => Math.max(1, Math.round(s / 60)), left = workLeft(m), held = Math.max(0, m.hold);
+  const next = level <= 0 ? null : state === 'keen' ? 'steady' : state === 'steady' ? 'worn' : 'empty';
+  const line = held > 0 ? `Held full for ${mins(held)} more min of work.`
+    : state === 'keen' ? `About ${mins(left)} min of work until the workers are no longer keen.`
+      : state === 'steady' ? `About ${mins(left)} min of work until the workers are worn out and slow down.`
+        : level > 0 ? `The workers are worn out: they work at ${pace}% of their pace. About ${mins(left)} min of work until they are at half.`
+          : 'The workers are worn out: they work at half their pace until something is held for them.';
+  const activities = company.activities().map(a => ({
+    id: a.id, name: a.name, price: a.price, can: a.can, runs: a.runs,
+    does: !a.runs ? (held > 0 ? 'Nothing wears while the festival holds' : 'The meter is full')
+      : a.leaves.hold > 0 ? `Fills the meter and holds it full for ${mins(a.leaves.hold)} min of work${held > 0 ? ' from now' : ''}`   // only a festival leaves a hold, as soon as it can run (also while its own hold is full)
+        : `+${pointsOf(a.leaves.level) - level} · leaves the meter at ${pointsOf(a.leaves.level)}, ${STATE_NAMES[a.state]}`,
+  }));
+  return { level, state, stateName: STATE_NAMES[state], pace, held, left, next, line, activities };
+}
+/**
+ * Where the marker of the park's meter stands, as a CSS length from the bar's left inner edge: the bar is three zones
+ * (worn out 0 to 49, steady 50 to 79, keen 80 to 100, on 50%, 30% and 20% of it), and each whole point is placed inside
+ * its own zone, clear of the lines between the zones and of the rounded ends. The marker is 6px wide; a line is 2px.
+ */
+export function meterAt(level) {
+  const p = pointsOf(level);   // the figure the card shows beside it
+  // each zone: from its first point to its last, the percent and the pixels at the two ends
+  const [from, to, pct0, pct1, px0, px1] = p < 50 ? [0, 49, 0, 50, 7, -4] : p < 80 ? [50, 79, 50, 80, 5, -5] : [80, 100, 80, 100, 4, -7];
+  const f = (p - from) / (to - from), r = n => Math.round(n * 100) / 100;
+  return `calc(${r(pct0 + (pct1 - pct0) * f)}% + ${r(px0 + (px1 - px0) * f)}px)`;
+}
+/**
+ * The Advisor's line while the workers are worn out: the cheapest activity the cash covers, or, when it covers none, the
+ * cheapest that runs and that the cash is short of. Null while they are not worn out. @param v  parkView(company)
+ */
+export function parkAdvice(v) {
+  if (v?.state !== 'worn') return null;
+  const paid = v.activities.find(a => a.can), cheapest = paid || v.activities.find(a => a.runs);
+  if (!cheapest) return null;
+  return { problem: `The workers are worn out: every yard works at ${v.pace}% of its pace.`,
+    fix: paid ? `Hold the ${cheapest.name} at the Workers' Park for $${fmt(cheapest.price)}.` : `The ${cheapest.name} at the Workers' Park costs $${fmt(cheapest.price)}; you have less.`,
+    go: 'construction' };
 }
 
 /** Names in a sentence: "chairs", "chairs and glass", "bricks, chairs and glass". */

@@ -5,16 +5,14 @@
 import * as THREE from 'three';
 import { box } from './world.js';
 import { softShadow } from './textures.js';
+import { PEOPLE } from './data/looks.js';
 
 const MAX = 3;            // customers in the whole game at one time
 const SPEED = 3.1;        // a stroll, slower than a worker
 const PAUSE = 1.0;        // seconds at the counter
 const FADE = 0.25;        // seconds to appear at the edge of the yard, and to go
 const GAP = [7, 14];      // seconds between two customers at the same shop
-const SHIRT = [0x4f7fd6, 0xd6604f, 0x8e5bd6, 0xe0a52f, 0x3aa39a, 0xd94f8a];
-const PANTS = [0x3b4654, 0x5a4a3a, 0x2f3d5c];
-const SKIN = [0xf1c8a0, 0xe0ac7e, 0xc68a5c, 0x9c6a43];
-const HAIR = [0x3b2a1e, 0x6b4a2b, 0x1f1a17, 0xb5803f, 0xd9d2c4];
+const { shirt: SHIRT, pants: PANTS, skin: SKIN, hair: HAIR } = PEOPLE;
 
 class Customer {
   constructor(scene, n) {

@@ -11,4 +11,7 @@
 export const CLOUD = {
   url: 'https://mrxszsbwtsnhmfufyjmt.supabase.co',
   key: 'sb_publishable_6MG36XrVJ43Bmp4RgkZU_g_BKh7w1Vx',
+  // Google's client ID of this game (the one of type "Web application"), for "Continue with Google" (js/google.js).
+  // Public, like the key above. Left empty, the game offers no Google sign-in at all.
+  google: '',
 };

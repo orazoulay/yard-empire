@@ -1,6 +1,7 @@
 // The account sheet: create an account, sign in, change password, sign out. Opened from Settings.
 import { passwordStrength } from './ui-logic.js';
 import { showNotice } from './notice.js';
+import { googleSource } from './google.js';
 
 const $ = id => document.getElementById(id);
 const SEEN_KEY = 'lumber-tycoon-account-seen';
@@ -51,15 +52,66 @@ export function bindAccountUi(account, { onOpen } = {}) {
       b.textContent = 'Show'; b.setAttribute('aria-pressed', 'false'); b.setAttribute('aria-label', 'Show the password');
     }
   };
+  // --- Google: one button over the form; a username for the account a first Google sign-in made --------------------
+  const source = googleSource({ google: account.googleId });   // null where there is no Google: nothing of it shows
+  const gBox = $('acc-google'), chooseForm = $('acc-choose-form'), chooseInput = $('acc-choose-name'), chooseError = $('acc-choose-error');
+  let offered = false, choosing = false;
+  /** A first sign-in with Google: the account has no username yet. The form comes with a free name already in it. */
+  const askName = async () => {
+    choosing = true; if (sheet.hidden) open();   // Google may answer after the player closed the sheet: the name is still asked for
+    form.hidden = true; chooseForm.hidden = false; show(chooseError, '');
+    chooseInput.value = await account.suggestName();
+    chooseInput.focus({ preventScroll: true }); chooseInput.select();
+  };
+  /** The name form is left (Not now, Escape, the phone's Back, a tap outside): that sign-in is forgotten, and nothing was kept. */
+  const endChoose = () => {
+    if (!choosing) return;
+    choosing = false; account.forgetGoogle();
+    chooseForm.hidden = true; form.hidden = !!account.user;
+  };
+  const onGoogle = async proof => {
+    show(error, ''); show(good, '');
+    const r = await account.google(proof.token, proof.nonce);
+    if (r.choose) return askName();
+    if (!r.ok && !r.busy) show(error, r.error);   // on success the page reloads into the player's own game
+  };
+  /** In the app the button is the game's own: a press asks Android's account chooser (js/google.js, ask). */
+  const askApp = (button, line, sorry, onProof) => button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      const r = await source.ask();
+      if (r.token) await onProof({ token: r.token, nonce: r.nonce });
+      else if (r.unavailable) show(line, sorry);   // a chooser the player closed says nothing
+    } finally { button.disabled = false; }
+  });
+  /** Put Google over the form the first time a guest sees the sheet. Google's file is asked for here and nowhere earlier. */
+  const offerGoogle = async () => {
+    if (!source || account.user || offered) return;
+    offered = true;
+    if (source.kind === 'app') { $('acc-google-app').hidden = false; gBox.hidden = false; return; }
+    gBox.hidden = !(await source.mount($('acc-google-web'), onGoogle, form.clientWidth));
+    offered = !gBox.hidden;   // the file did not come: it is asked for again the next time the sheet opens
+  };
+  if (source?.kind === 'app') askApp($('acc-google-app'), error, 'Google sign-in is not available on this device. Use your email.', onGoogle);
+  chooseForm.addEventListener('input', () => show(chooseError, ''));
+  chooseForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    show(chooseError, '');
+    const r = await busy($('acc-choose-submit'), 'One moment…', () => account.chooseName(chooseInput.value.trim()));
+    if (!r.ok) show(chooseError, r.error);   // on success the page reloads, signed in
+  });
+  $('acc-choose-another').addEventListener('click', async () => { show(chooseError, ''); chooseInput.value = await account.suggestName(); });
+  $('acc-choose-back').addEventListener('click', () => { endChoose(); setMode('new'); });
   /** @param byPlayer  the player asked for the sheet: the first field takes focus. Not when it opens by itself, where a phone keyboard would cover the yard unasked. */
   const open = (message, byPlayer = false, goodNews = false) => {
     sheet.hidden = false; account.open = true;
     pwForm.hidden = true; show(pwError, '');
     if (message) show(goodNews ? good : error, message);
     onOpen?.();
+    offerGoogle();
     if (byPlayer) (account.user ? $('acc-close') : account.needsEmail ? $('acc-email') : name).focus({ preventScroll: true });
   };
-  const close = () => { sheet.hidden = true; account.open = false; pass.value = ''; show(error, ''); show(good, ''); hidePasswords(); judge(); if (!account.user && !byLink) endReset(); };   // a new password by link stays ready: the link works once
+  const close = () => { endChoose(); sheet.hidden = true; account.open = false; pass.value = ''; show(error, ''); show(good, ''); hidePasswords(); judge(); if (!account.user && !byLink) endReset(); };   // a new password by link stays ready: the link works once
   /** Runs one request with the button disabled, so a slow network cannot send it twice. */
   const busy = async (button, label, work) => {
     const before = button.textContent;
@@ -100,6 +152,7 @@ export function bindAccountUi(account, { onOpen } = {}) {
     $('acc-status').textContent = account.online ? 'Your progress is saved to your account.' : 'Offline. Your progress will be saved when you are back online.';
     // The admin portal belongs to the small Python server. With accounts in the cloud it knows none of them, so it is not offered.
     $('acc-admin').hidden = user.role !== 'admin' || account.needsEmail;
+    $('acc-change').hidden = !account.hasPassword;   // an account only Google opens has no password to change
   } else {
     entry.textContent = 'Sign in or create account';
   }
@@ -135,6 +188,7 @@ export function bindAccountUi(account, { onOpen } = {}) {
       if (mode === 'new') return account.register(name.value.trim(), pass.value, email);
       return account.signIn(account.needsEmail ? email : name.value.trim(), pass.value);
     });
+    if (r.choose) return askName();   // an account Google made and that was left without a name
     if (r.pending) {   // the account is made; it opens when the link in the email is used. Not an error, and nothing more to create.
       setMode('in');
       $('acc-email').value = r.email || ''; pass.value = ''; judge();
@@ -159,7 +213,30 @@ export function bindAccountUi(account, { onOpen } = {}) {
     // In the Android app the file goes through the share sheet, and the player may close it without choosing.
     $('acc-status').textContent = !r.ok ? r.error : r.how === 'cancelled' ? 'No file was made.' : r.how === 'shared' ? 'Your data is ready as a file.' : 'Your data was saved as a file.';
   });
-  $('acc-delete').addEventListener('click', () => { delForm.hidden = !delForm.hidden; show(delError, ''); if (!delForm.hidden) $('acc-del-pass').focus(); });
+  // An account Google opens may confirm with Google; one that has no password has no other way.
+  const canGoogle = !!source && account.hasGoogle;
+  const onDeleteProof = async proof => {
+    show(delError, '');
+    const r = await account.deleteAccount({ google: proof });
+    if (!r.ok && !r.busy) show(delError, r.error);   // on success the page reloads as a guest
+  };
+  const setDelete = async () => {
+    $('acc-del-pass-field').hidden = $('acc-del-submit').hidden = $('acc-del-or').hidden = !account.hasPassword;
+    if (!account.hasPassword) $('acc-del-note').textContent = canGoogle ? 'This removes your account and everything the server keeps for it. It cannot be undone.'
+      : 'This account signs in with Google, which cannot be asked here. Open the game where you signed in with Google to delete it, or write to the address in the privacy policy.';
+    if (!canGoogle) return;
+    if (source.kind === 'app') { $('acc-del-google-app').hidden = false; $('acc-del-google').hidden = false; return; }
+    const came = await source.mount($('acc-del-google-web'), onDeleteProof, delForm.clientWidth);
+    $('acc-del-google').hidden = !came;
+    if (!came && !account.hasPassword) $('acc-del-note').textContent = 'Google could not be reached just now, and this account has no password. Try again in a moment, or write to the address in the privacy policy.';
+  };
+  if (source?.kind === 'app') askApp($('acc-del-google-app'), delError, 'Google could not be asked on this device just now. Try again.', onDeleteProof);
+  $('acc-delete').addEventListener('click', () => {
+    delForm.hidden = !delForm.hidden; show(delError, '');
+    if (delForm.hidden) return;
+    setDelete();
+    if (account.hasPassword) $('acc-del-pass').focus();
+  });
   delForm.addEventListener('submit', async e => {
     e.preventDefault();
     show(delError, '');
@@ -214,6 +291,7 @@ export function bindAccountUi(account, { onOpen } = {}) {
     }
     if ($('acc-reset-pass').value.length < 8) return show(resetError, 'Password must be 8 characters or more');
     const r = await busy(resetSubmit, 'One moment…', () => account.resetPassword(sentTo, $('acc-reset-code').value, $('acc-reset-pass').value));
+    if (r.choose) { endReset(); return askName(); }   // the password is set; the account still has no name
     if (!r.ok) show(resetError, r.error);   // on success the page reloads, signed in
   });
 

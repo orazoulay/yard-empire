@@ -77,11 +77,17 @@ export class Account {
     this.claim = false;       // the next upload takes the company for this device: set when the server's save was had (pull), or by the player (keepHere)
     this.elsewhere = false;   // the server refused an upload: the company was opened on another device after this one. Nothing is uploaded until the player chooses.
     this.onElsewhere = null;  // called when that happens, to ask the player (js/account-ui.js)
+    this.hasPassword = true;  // false for an account that only Google opens: no password to change, and none to ask for before deleting
+    this.hasGoogle = false;   // Google opens this account
+    this.tradingGoogle = false;
+    this.deleting = false;
   }
 
   get saveKey() { return saveKey(this.user?.id); }
   /** True when this backend signs people in by email, so the forms have to ask for one. */
   get needsEmail() { return !!this.call.needsEmail; }
+  /** Google's client ID of this game where the backend offers signing in with Google (js/cloud.js), else ''. */
+  get googleId() { return this.call.google || ''; }
 
   /** Before the game starts: find out who is playing and put the right progress in their save slot. */
   async boot() {
@@ -96,6 +102,8 @@ export class Account {
     this.supported = true; this.online = true;
     this.user = me.data.user;
     this.reset = me.data.reset || null;
+    this.hasPassword = me.data.password !== false;
+    this.hasGoogle = me.data.google === true;
     if (me.data.banned) this.flash('This account is suspended.');
     else if (me.data.note) this.flash(me.data.note, me.data.noteGood === true);   // the player came back through the link in an email
     else if (cached && !this.user) this.flash('You were signed out. Sign in again to keep saving to your account.');
@@ -218,6 +226,37 @@ export class Account {
     return this.enter(r);
   }
 
+  /**
+   * Sign in with a Google ID token (js/google.js). A player with an account: the page reloads, signed in. A new
+   * one: { ok: false, choose: true }, and the sheet asks for a username (chooseName). Google may answer twice for
+   * one choice, and a finger may tap twice: while one token is being traded another is not sent.
+   */
+  async google(token, nonce) {
+    if (this.tradingGoogle) return { ok: false, busy: true };
+    this.tradingGoogle = true;
+    try {
+      return this.enter(await this.call('POST', 'google', { token, nonce }));
+    } finally { this.tradingGoogle = false; }
+  }
+  /** The username of the account Google just opened. On success the page reloads, signed in. */
+  async chooseName(username) { return this.enter(await this.call('POST', 'username', { username })); }
+  /** The player left the name form: nothing of that sign-in is kept. */
+  forgetGoogle() { this.call('POST', 'google/cancel'); }
+  /**
+   * A name to put in the form: "Player_" and four digits that nobody has, or five after three tries were taken.
+   * When the server cannot be asked the name is suggested anyway: the server decides when it is taken.
+   */
+  async suggestName(random = Math.random) {
+    let name = '';
+    for (let i = 0; i < 4; i++) {
+      const digits = i < 3 ? 4 : 5;
+      name = 'Player_' + String(Math.floor(random() * 10 ** digits)).padStart(digits, '0');
+      const r = await this.call('POST', 'username/free', { name });
+      if (!r.ok || r.data?.free !== false) return name;
+    }
+    return name;
+  }
+
   /** Forgot password: have a code sent to this email. Only where the backend knows emails (see needsEmail). */
   async forgotPassword(email) {
     const r = await this.call('POST', 'password/forgot', { email });
@@ -236,7 +275,9 @@ export class Account {
     return this.enter(r);
   }
 
+  /** @returns { ok } after a reload is on its way; { ok: false, choose: true } when the account has no username yet (the sheet asks for one); or { ok: false, error } */
   enter(r) {
+    if (r.ok && r.data?.choose) return { ok: false, choose: true };
     if (!r.ok || !r.data?.user) return { ok: false, error: problem(r) };
     this.leave(() => write(ID_KEY, r.data.user));   // boot() loads their progress after the reload
     return { ok: true };
@@ -256,11 +297,19 @@ export class Account {
     return r.ok ? { ok: true } : { ok: false, error: problem(r) };
   }
 
-  /** Remove the account and everything the server keeps for it, then carry on as a guest. Needs the password again. */
-  async deleteAccount(password) {
+  /**
+   * Remove the account and everything the server keeps for it, then carry on as a guest.
+   * @param proof  the password again, or for an account Google opens { google: { token, nonce } }: a Google ID token made just now
+   */
+  async deleteAccount(proof) {
     if (!this.user) return { ok: false, error: 'Sign in first' };
+    // Google may answer twice for one choice. A second request would arrive after the account is gone, and its token
+    // would then open a new, empty account for the address that was just deleted.
+    if (this.deleting) return { ok: false, busy: true };
+    this.deleting = true;
     const id = this.user.id;
-    const r = await this.call('POST', 'account/delete', { password });
+    let r;
+    try { r = await this.call('POST', 'account/delete', typeof proof === 'string' ? { password: proof } : { google: proof?.google }); } finally { this.deleting = false; }
     if (!r.ok) return { ok: false, error: problem(r) };
     this.flash('Your account was deleted.', true);   // what the player asked for: said as done, not as a problem
     // The copy on this device belonged to the account too: it goes after the game's last save, so that save cannot bring it back.

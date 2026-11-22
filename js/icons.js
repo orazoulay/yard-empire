@@ -60,6 +60,13 @@ const SHAPES = {
   swap: [p('M4 8.5h13M14 5.5l3 3-3 3'), p('M20 15.5H7M10 12.5l-3 3 3 3')],
   edit: [p('M4.5 19.5l1-4L16 5l3 3L8.5 18.5z'), p('M14 7l3 3')],
   restore: [p('M12 14V4M8 8l4-4 4 4'), p('M5 16v3.5h14V16')],   // the opposite of collect: back out of the box
+  // worker motivation: a face for each state (the chip in the top bar fills the circle with its colour), and two of the
+  // Workers' Park's activities (the Festival is the star)
+  keen: [c(12, 12, 10), c(8.5, 10, 0.6), c(15.5, 10, 0.6), p('M7.5 14q4.5 4.5 9 0')],
+  steady: [c(12, 12, 10), c(8.5, 10, 0.6), c(15.5, 10, 0.6), p('M8 15.5h8')],
+  worn: [c(12, 12, 10), c(8.5, 10, 0.6), c(15.5, 10, 0.6), p('M7.5 17q4.5-4 9 0')],
+  barbecue: [p('M4 10h16a8 8 0 0 1-16 0z'), p('M8 17l-2 4M16 17l2 4'), p('M9 3c-1 1.5 1 2.5 0 4M13 3c-1 1.5 1 2.5 0 4')],   // a grill bowl on its legs, and smoke
+  concert: [p('M9 18V5l10-2v13'), c(6.5, 18, 2.5), c(16.5, 16, 2.5)],   // two notes
 };
 
 /** The icon for what an upgrade does, by the type of its effect. */

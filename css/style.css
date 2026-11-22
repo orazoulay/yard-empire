@@ -160,6 +160,28 @@ button { font-family: inherit; }
   border: 1px solid rgba(143, 107, 255, .55); background: linear-gradient(180deg, rgba(56, 40, 104, .82), rgba(34, 26, 64, .82)); }
 .boost-chip b { font-weight: 700; }
 .boost-time { font-variant-numeric: tabular-nums; color: #fff; }
+/* Worker motivation: a chip in a row of its own under the yard picker, from the moment the Workers' Park stands
+   (js/hud.js, setMotivation). A face for the state, the level, the state's name; a tap opens the park's card. */
+.motivation-chip {
+  align-self: flex-start; position: relative; pointer-events: auto; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 12px 2px 4px; border-radius: 16px;
+  background: #fff; color: var(--text); border: 2.5px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+  font-family: var(--display); font-size: 1rem; font-weight: 700; line-height: 1; white-space: nowrap; transition: transform .12s;
+}
+.motivation-chip[hidden] { display: none; }
+.motivation-chip::before { content: ""; position: absolute; inset: min(0px, calc((100% - 44px) / 2)); }   /* a 44px finger */
+.motivation-chip:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.motivation-chip:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+.motivation-chip .icon { width: 22px; height: 22px; stroke: var(--ink); stroke-width: 2; }
+.motivation-chip .icon circle:first-child { fill: #ffe07a; }
+.motivation-chip.keen .icon circle:first-child { fill: #8fe09a; }
+.motivation-chip.worn .icon circle:first-child { fill: #ff9a97; }
+.motivation-chip b { font-size: 1.1875rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.motivation-chip span { color: var(--muted); font-weight: 700; }
+.motivation-chip.keen { background: #e3f7e6; }
+.motivation-chip.keen span { color: var(--green-ink); }
+.motivation-chip.worn { background: #fde6e5; }
+.motivation-chip.worn span { color: var(--red-ink); }
 #cash.bump { animation: bump .25s; }
 @keyframes bump { 50% { transform: scale(1.12); } }
 /* saved or not: quieter than the chip beside it */
@@ -228,6 +250,20 @@ button { font-family: inherit; }
   font-size: .75rem; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .u-more[hidden] { display: none; }
+/* a notice that leads somewhere has one button ("Open the park"); a tap anywhere else sends it away. Where the words
+   and the button do not fit side by side (a phone), the button goes under them, at the right, and the words keep their width. */
+#unlock.has-act { flex-wrap: wrap; row-gap: 10px; }
+#unlock.has-act .u-text { flex: 1 1 200px; }
+#unlock.has-act .u-act { margin-left: auto; }
+.u-act {
+  flex: none; position: relative; pointer-events: auto; cursor: pointer; min-height: 36px; padding: 0 12px;
+  border: 2.5px solid var(--ink); border-radius: 12px; background: #fff; box-shadow: 0 3px 0 var(--ink); color: var(--text);
+  font-family: var(--display); font-size: .875rem; font-weight: 800; white-space: nowrap;
+}
+.u-act[hidden] { display: none; }
+.u-act::before { content: ""; position: absolute; inset: -4px; }   /* a 44px finger */
+.u-act:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.u-act:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 
 /* a line of help above the objective card. A short one is one line 32px tall, as it always was; a longer one, or several
    purchases said at once (one line each), wraps, centred, and the box grows upward. What stands above it is placed by
@@ -1027,6 +1063,33 @@ button.hq-help-close { display: grid; place-items: center; width: 44px; height: 
 .hq-stage.done h4 { color: var(--p-up); }
 .hq-stage.now { border-color: var(--p-gold); }
 .hq-stage.later { opacity: .7; }
+/* the Workers' Park card (js/hq/build.js, parkSection): the level, its state and pace; the meter in three zones with a
+   marker (placed by meterAt in js/sim/hqview.js, inside its zone); and the three activities in one card */
+.hq-park-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; }
+.hq-park-num { font-family: var(--display); font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.hq-park-label { margin-inline-end: auto; font-size: var(--t-md); font-weight: 600; color: var(--p-ink2); }
+.hq-park-head .hq-chip { align-self: center; font-size: var(--t-sm); }
+.hq-park-zones { position: relative; display: flex; height: 20px; margin: 6px 0 0; border: 3px solid var(--ink); border-radius: 12px; }
+.hq-park-zones i { height: 100%; }
+.hq-park-zones .w { width: 50%; background: #fbc9c7; border-radius: 9px 0 0 9px; }
+.hq-park-zones .s { width: 30%; background: #e3e9ef; border-inline: 2px solid var(--ink); }
+.hq-park-zones .k { width: 20%; background: #bfe9c6; border-radius: 0 9px 9px 0; }
+.hq-park-mark { position: absolute; top: -8px; width: 6px; height: 30px; margin-left: -3px; border-radius: 3px; background: var(--ink); box-shadow: 0 0 0 2px #fff; }
+.hq-park-legend { display: flex; margin-top: -6px; font-size: var(--t-xs); font-weight: 700; color: var(--p-ink3); }
+.hq-park-legend span:nth-child(1) { width: 50%; }
+.hq-park-legend span:nth-child(2) { width: 30%; }
+.hq-park-legend span:nth-child(3) { width: 20%; }
+.hq-park-acts { gap: 0; padding-block: 4px; }
+.hq-park-act { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.hq-park-act + .hq-park-act { border-top: 2px solid var(--p-line); }
+.hq-park-act > .icon { font-size: 26px; stroke-width: 2; color: var(--ink); }
+.hq-park-act-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hq-park-act h4 { font-family: var(--display); font-weight: 700; }
+.hq-park-act button.hq-btn { flex: none; min-width: 84px; }
+.hq-park-short { color: var(--p-down); font-weight: 700; }
+.icon.act-barbecue path:first-child { fill: var(--red); }
+.icon.act-concert circle { fill: var(--blue); }
+.icon.act-festival path { fill: var(--yellow); }
 .hq-research-text { min-width: min(100%, 190px); flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .hq-levels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: var(--t-sm); color: var(--p-ink3); line-height: 1.4; }
 .hq-levels li { display: flex; align-items: flex-start; gap: 7px; }
@@ -1346,3 +1409,18 @@ button.hq-btn:disabled, button.hq-btn:disabled:hover { background: var(--p-raise
 .hq-chip { font-weight: 700; }
 .hq-toast { border: 3px solid #fff; }
 
+/* Signing in with Google. On the site the button is Google's own, drawn by Google's file in a frame of its own; in the
+   Android app it is the game's, with Google's mark and wording as its branding rules ask (white, the mark at the left).
+   The line under it says "or" above the form of before. */
+.acc-google { display: flex; flex-direction: column; gap: 10px; }
+.acc-google[hidden] { display: none; }
+.acc-google-web { display: flex; justify-content: center; min-height: 44px; }
+.acc-google-web:empty { display: none; }
+.sheet-btn.google { display: flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: #1f1f1f; }
+.sheet-btn.google:hover { background: #f2f2f2; }
+.sheet-btn.google:disabled { opacity: .6; }
+.sheet-btn.google[hidden] { display: none; }
+.sheet-btn.google svg { width: 18px; height: 18px; flex: none; }
+.acc-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .8125rem; font-weight: 600; }
+.acc-or::before, .acc-or::after { content: ""; flex: 1; height: 1px; background: currentColor; opacity: .35; }
+.acc-or[hidden] { display: none; }

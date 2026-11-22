@@ -70,7 +70,7 @@ export class LoopMethods {
     const onSite = p.pos.x > SITE.gate.x && this.company.siteOpen;
     if (onSite || this.onSite) {
       this.onSite = onSite;
-      p.pos.y = onSite ? groundAt(this.company.site, this.sitePart, p.pos.x, p.pos.z) : 0;
+      p.pos.y = onSite ? groundAt(this.company.site, this.sitePart, p.pos.x, p.pos.z, this.parkLawn) : 0;
       this.syncSite();
     }
 
@@ -122,6 +122,7 @@ export class LoopMethods {
     this.sfx.hum(hum); this.sfx.music();
     this.sky.update(dt, this.camFocus, this.zoom.value); this.sfx.rain(this.sky.rain);
     this.life.update(dt, this.paused);
+    this.parkFrame(dt);   // the picture of an activity at the Workers' Park, while one shows
 
     // yard interface: the carry bubble, the labels in the yard, the income and save status, being shown the way
     this.ui.frame(dt);
@@ -137,7 +138,7 @@ export class LoopMethods {
       this.objTimer = 0.15;
       this.updateObjectiveCard(obj);
       const i = this.areas.indexOf(this.playerArea);
-      this.hud.setArea(this.onSite ? 'Building site' : this.playerArea.cfg.name, i + 1, this.areas.length);
+      this.hud.setArea(this.onSite ? (p.pos.z > SITE.park.minZ ? "Workers' Park" : 'Building site') : this.playerArea.cfg.name, i + 1, this.areas.length);
     }
 
     this.moveCamera(dt, p);

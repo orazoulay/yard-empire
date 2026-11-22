@@ -1,4 +1,4 @@
-// The Advisor tab: what holds each yard back, the rush orders and the market watch.
+// The Advisor tab: what holds each yard back, worn-out workers, the rush orders and the market watch.
 // Added to the Headquarters class in js/hq.js (see mix() in js/hq/kit.js): `this` is the Headquarters.
 import { h, bar, label, cap, section, note } from './kit.js';
 import { MARKET, RUSH } from '../data/company.js';
@@ -7,6 +7,7 @@ import { icon } from '../icons.js';
 import { clockText } from '../sim/company.js';
 import { advise, ADVICE, bestPurchase, paybackText } from '../sim/advice.js';
 import { fmt } from '../format.js';
+import { parkView, parkAdvice } from '../sim/hqview.js';
 
 export class HqAdvisor {
   // --- Advisor --------------------------------------------------------------------------------------------
@@ -32,12 +33,23 @@ export class HqAdvisor {
     });
     return [
       note('The Advisor reads the last minute of every yard and names what holds it back, when there is something you can do about it.'),
+      this.parkTip(),
       this.proCard(),
       section(`Yards · ${tips.length ? `${tips.length} to look at` : 'nothing to report'}`, ...cards,
         tips.length ? null : note(settling ? 'Still reading the books. The first advice comes after about a minute of play.' : 'Every open yard runs as well as it can with what is built. Nothing holds one back that you could change right now.')),
       this.rushCard(),
       c.market.open ? this.marketWatch() : null,
     ];
+  }
+  /** Worn-out workers slow every yard at once: one card for the company, naming the cheapest activity that mends it (js/sim/hqview.js, parkAdvice). */
+  parkTip() {
+    const tip = parkAdvice(parkView(this.company));
+    if (!tip) return null;
+    return section('Workers', h('article', { class: 'hq-card advice' },
+      h('header', {}, h('h4', { text: "Workers' Park" }), h('span', { class: 'hq-chip bad', text: 'Worn out' })),
+      h('div', { class: 'hq-goal-text', text: tip.problem }),
+      h('div', { class: 'hq-sub', text: tip.fix }),
+      h('div', { class: 'hq-actions' }, this.button_('Construction', 'advice-park', () => this.go(tip.go)))));
   }
   /**
    * The Advisor Pro of the credits store, while it is owned: of the next purchase of every open yard, the one that pays

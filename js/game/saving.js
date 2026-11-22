@@ -27,6 +27,8 @@ export class SavingMethods {
     const sailing = secs > 0 && this.company.port.ships.some(s => s.left > 0);
     // A ship that came home is told of once: by the welcome-back sheet when there is one (the yards earned), else by its own card.
     const sea = sailing ? this.company.shipsAway(secs * (terms.share || OFFLINE_EFFICIENCY), r.earned >= 1) : { ships: 0, cash: 0 };
+    // Worker motivation wears with work, and out of sight the workers did this share of it (js/sim/motivation.js).
+    if (secs > 0) this.company.wearAway(secs * (terms.share || OFFLINE_EFFICIENCY));
     this.econ.lastSeen = now;   // the same absence is never paid twice
     if (r.earned < 1) {
       if (sailing) { this.company.useAway(secs); this.hud.setCash(this.econ.cash); this.save(); }   // a ship sailed on the allowance though the yards paid nothing

@@ -37,7 +37,9 @@ const TOP_AFTER = 400;                            // pixels scrolled before "bac
 const TOAST_ICON = { deliver: 'contracts', delivered: 'contracts', ready: 'contracts', research: 'research', route: 'logistics', hire: 'team',
   goal: 'goals', sell: 'coin', founded: 'hq', milestone: 'award', achievement: 'award', rank: 'star',
   build: 'construction', send: 'construction', site: 'construction', stage: 'construction', built: 'construction',
-  sail: 'port', unload: 'port', export: 'port', refit: 'port', ship: 'port' };   // the Port tab's actions, and a ship home and a refit done
+  sail: 'port', unload: 'port', export: 'port', refit: 'port', ship: 'port',   // the Port tab's actions, and a ship home and a refit done
+  park: 'keen', motivation: 'worn',   // the Workers' Park: an activity held (the press), and the workers' motivation falling
+  'activity-keen': 'keen', 'activity-steady': 'steady', 'activity-worn': 'worn' };   // an activity held: the face of the state it left them in
 
 function readPrefs() {
   try { return cleanPrefs(JSON.parse(localStorage.getItem(PREFS_KEY))); } catch { return cleanPrefs(null); }   // private mode, or nothing stored
