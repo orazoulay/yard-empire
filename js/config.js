@@ -13,5 +13,5 @@ export const CLOUD = {
   key: 'sb_publishable_6MG36XrVJ43Bmp4RgkZU_g_BKh7w1Vx',
   // Google's client ID of this game (the one of type "Web application"), for "Continue with Google" (js/google.js).
   // Public, like the key above. Left empty, the game offers no Google sign-in at all.
-  google: '',
+  google: '977259213570-gooerk5c0qdm38hure2dt5g1tlsr2jej.apps.googleusercontent.com',
 };
