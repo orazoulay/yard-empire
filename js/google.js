@@ -77,7 +77,10 @@ function appSource(clientId, plugin, crypto_) {
         const answer = await plugin.signIn({ clientId, nonce: pair.hashed });
         return answer?.idToken ? { token: String(answer.idToken), nonce: pair.raw } : { unavailable: true };
       } catch (e) {
-        return String(e?.code || '').toLowerCase() === 'cancelled' ? { cancelled: true } : { unavailable: true };
+        // Android hands Google's refusal of an app it does not know (no Android client for this signing key in Google
+        // Cloud) over as a cancellation, "[16] Account reauth failed.": that is not the player closing the chooser.
+        const closed = String(e?.code || '').toLowerCase() === 'cancelled' && !/reauth failed/i.test(String(e?.message || ''));
+        return closed ? { cancelled: true } : { unavailable: true };
       }
     },
   };
