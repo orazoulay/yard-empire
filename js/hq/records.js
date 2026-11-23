@@ -1,13 +1,11 @@
-// The Records tab, the company's name and the backup of the save.
+// The Records tab, the company's name, and the account a guest is offered to keep their game.
 // Added to the Headquarters class in js/hq.js (see mix() in js/hq/kit.js): `this` is the Headquarters.
-import { h, amount, figure, label, cap, kpi, section, note, row } from './kit.js';
-import { saveFile } from '../files.js';
+import { h, figure, label, cap, kpi, section, note, row } from './kit.js';
 import { fmt } from '../format.js';
 import { icon, emblemIcon } from '../icons.js';
 import { CLIENTS } from '../data/company.js';
 import { cleanName, NAME_MAX } from '../sim/company.js';
 import { personOf } from '../sim/stories.js';
-import { exportSave, importSave, backupName } from '../sim/backup.js';
 
 export class HqRecords {
   // --- Records ------------------------------------------------------------------------------------------
@@ -40,7 +38,7 @@ export class HqRecords {
         row('From the warehouse at 10% or more above normal', fmt(b.marketGood)))),
       section('Regular clients', ...(clients.length ? [h('div', { class: 'hq-rows' }, ...clients)] : []),
         note(`A client you deliver to again and again becomes a regular: at ${CLIENTS.levels.join(', ').replace(/, (\d+)$/, ' and $1')} orders it moves up a level, and each level adds ${Math.round(CLIENTS.bonus * c.mods.clientBonus * 100)}% to what its orders pay.`)),
-      section('Backup', this.backupCard()),
+      this.keepCard(),
     ];
   }
 
@@ -110,63 +108,13 @@ export class HqRecords {
     input.focus(); input.select?.();
   }
 
-  // --- the backup -----------------------------------------------------------------------------------------
-  // this.backup is what the last export or import said: { text, tone }, and for a file that was read and
-  // checked also { save, summary }. Nothing is replaced until the player has pressed twice.
-  backupCard() {
-    const b = this.backup, arm = this.confirm === 'restore';
-    const when = ms => (ms ? new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'an unknown date');
-    return h('article', { class: 'hq-card backup' },
-      h('header', {}, h('h4', {}, icon('collect'), h('span', { text: 'A backup you can hold' }))),
-      h('div', { class: 'hq-sub', text: 'Save your game as a file and keep it. Opening a backup replaces the game you are playing now with the one in the file, on this or another device.' }),
-      h('div', { class: 'hq-actions' },
-        this.button_('Save a backup file', 'backup-save', () => this.exportBackup()),
-        this.button_('Open a backup file', 'backup-open', () => this.pickBackup())),
-      b?.text ? h('div', { class: 'hq-sub ' + (b.tone || ''), role: 'status', text: b.text }) : null,
-      b?.save ? h('div', { class: 'hq-rows' },
-        row('Made on', when(b.summary.exported)),
-        b.summary.name ? row('Company', b.summary.name) : null,
-        row('Rank', b.summary.rank),
-        row('Yards open', String(b.summary.yards)),
-        row('Cash', amount(b.summary.cash)),
-        b.summary.stars ? row('Legacy stars', String(b.summary.stars)) : null) : null,
-      b?.save ? h('div', { class: 'hq-actions' },
-        this.button_(arm ? 'Tap again to replace your game' : 'Replace my game with this backup', 'backup-restore',
-          () => { if (!arm) { this.confirm = 'restore'; this.render(); return; } this.game.restore(b.save); }, { cls: arm ? 'danger' : 'primary' }),
-        this.button_('Forget it', 'backup-forget', () => { this.backup = null; this.confirm = null; this.render(); }, { cls: 'quiet' })) : null);
-  }
-  async exportBackup() {
-    this.game.save();   // the file holds the game as it is this second
-    const now = new Date(), name = backupName(now);
-    const text = exportSave(JSON.parse(JSON.stringify(this.game.econ)), now.getTime());
-    const how = await saveFile(name, text, 'text/plain');   // a download in a browser, the share sheet in the app
-    this.backup = how === 'saved' ? { text: `Saved as ${name}. Keep the file somewhere safe.`, tone: 'good' }
-      : how === 'shared' ? { text: `${name} is ready. Keep it somewhere safe.`, tone: 'good' }
-        : how === 'cancelled' ? { text: 'No backup was made.', tone: '' }
-          : { text: 'The backup file could not be made on this device.', tone: 'bad' };
-    this.confirm = null; this.render();
-  }
-  /** Let the player choose a file. The field that does it is made once and kept beside the tabs, out of the way of redraws. */
-  pickBackup() {
-    if (!this.filePicker) {
-      this.filePicker = h('input', { type: 'file', accept: '.txt,text/plain,application/json', hidden: true, tabindex: '-1', 'aria-hidden': 'true' });
-      this.filePicker.addEventListener('change', async () => {
-        const file = this.filePicker.files?.[0];
-        this.filePicker.value = '';   // so that choosing the same file again is noticed
-        if (!file) return;
-        let text = '';
-        try { text = file.size > 4000000 ? 'x'.repeat(2000001) : await file.text(); } catch { text = ''; }   // a file that large is refused by its size alone
-        this.readBackup(text);
-      });
-      this.el.append(this.filePicker);
-    }
-    this.filePicker.click();
-  }
-  /** Check the text of a backup file. A good one is shown with what it holds; a bad one with the reason it is refused. */
-  readBackup(text) {
-    const r = importSave(text, Date.now());
-    this.backup = r.ok ? { save: r.save, summary: r.summary, text: 'This backup is whole and can be brought back.', tone: 'good' } : { text: r.reason, tone: 'bad' };
-    this.confirm = null;
-    if (this.isOpen) this.render();
+  // --- keeping a guest's game ------------------------------------------------------------------------------
+  /** For a guest: the game is tied to this device until there is an account. Nothing where accounts are not offered, and for a player who has one. */
+  keepCard() {
+    const account = this.game.account;
+    if (!account?.supported || account.user) return null;
+    return section('Keep your game', h('article', { class: 'hq-card keep' },
+      h('div', { class: 'hq-sub', text: 'Your game is tied to this device. Create an account and it is yours on any device.' }),
+      h('div', { class: 'hq-actions' }, this.button_('Create an account', 'keep-account', () => { this.close(); document.getElementById('btn-account').click(); }, { cls: 'primary' }))));
   }
 }

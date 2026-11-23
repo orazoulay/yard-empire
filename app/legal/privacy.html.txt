@@ -14,15 +14,16 @@
   </header>
 
   <h1>Privacy policy</h1>
-  <p class="updated">Last updated: 13 November 2026</p>
+  <p class="updated">Last updated: 23 November 2026</p>
 
-  <p>Yard Empire is a game about building yards and a company. This page says what the game keeps about you, why, and how to have it removed. The short version: you can play without an account and then nothing about you leaves your device. An account stores your email, a username and your saved game, so that you can play on any device.</p>
+  <p>Yard Empire is a game about building yards and a company. This page says what the game keeps about you, why, and how to have it removed. The short version: without an account, your saved game is kept on our server under a random number that your device made, and nothing else about you is. An account stores your email, a username and your saved game, so that you can play on any device.</p>
 
   <h2>Who is responsible</h2>
   <p>Yard Empire is made by <b id="developer-name">Or Azoulay</b>. For anything about your data, write to <b id="contact-email"><a href="mailto:orazo123@gmail.com">orazo123@gmail.com</a></b>.</p>
 
   <h2>Playing without an account</h2>
-  <p>Your saved game and your settings (sound, graphics and the like) are kept on your device only, in the game's own storage. They are not sent anywhere. "Reset progress" in the settings removes the saved game, and clearing the game's data in your browser or phone removes everything.</p>
+  <p>Your settings (sound, graphics and the like) are kept on your device only, in the game's own storage. Your saved game is kept on your device and, from the first upgrade in the game on, on our server too, so that it is not lost with the device's copy. The server keeps it under a random number that your device made, together with the dates it was first and last saved and figures worked out from it, such as the company's value. The saved game holds the company name you type, if you type one. We do not ask for your name or email, and the server keeps nothing about your device.</p>
+  <p>"Reset progress" in the settings removes the saved game from your device, and from our server the next time the game starts with a connection. A game that was not saved for 180 days (14 days, when it was saved only once) is removed from our server as new players come. If you clear the game's data or remove the app, the random number is gone with it and nobody can tell which game was yours; it is then removed the same way. When you sign in to an account that has no save of its own, the game moves into it and the server no longer keeps it for you as a guest.</p>
 
   <h2>What an account stores</h2>
   <table>
@@ -35,7 +36,7 @@
     <tr><td><b>Leaderboard figures</b></td><td>Only if you choose to join: your username, company value, number of yards and legacy stars are shown to other players, and whether your company bought something with credits that changes what it earns (its line is then marked "boosted"). The game asks you once whether you want to join; you can join or leave at any time.</td></tr>
     <tr><td><b>Credits</b></td><td>Only with an account: your credit balance, what you got with them, and a record of each time credits were given to you or spent (how many, what for, and when). They are kept by our server so that they cannot be lost or changed by mistake. No payment is involved: credits cannot be bought.</td></tr>
     <tr><td><b>A sign-in pass on your device</b></td><td>So that you stay signed in. It is kept in the game's own storage and removed when you sign out.</td></tr>
-    <tr><td><b>Dates</b></td><td>When the account was made and when it last saved, to keep the service running and to spot misuse.</td></tr>
+    <tr><td><b>Dates</b></td><td>When the account was made, when it last saved, and when a game that moved into it was first saved as a guest (with the number it had), to keep the service running and to spot misuse.</td></tr>
   </table>
   <p>The game has no advertising, no analytics and no tracking. It does not read your contacts, your location, your photos or anything else on your device. It loads nothing from other sites while you play, with one exception: on the website, when the account form is shown to a player who is not signed in, or when a player who signed in with Google opens "Delete my account", the "Continue with Google" button is loaded from Google, so that it can be offered. Google's servers then see the internet address the request comes from, as any site does. The Android app loads nothing from Google's site: it asks the phone's own account chooser.</p>
 
@@ -46,9 +47,11 @@
 
   <h2>How long it is kept</h2>
   <p>For as long as you have the account. When you delete the account, your email, username, saved game and leaderboard entry are removed from our systems together, straight away. Routine backups kept by our hosting provider, where there are any, are replaced on their own schedule.</p>
+  <p>Without an account: until "Reset progress", or 180 days after the game was last saved (14 days, when it was saved only once).</p>
 
   <h2>Your choices</h2>
   <ul>
+    <li><b>Playing without an account:</b> "Reset progress" in the game's settings removes your saved game, here and, the next time the game starts with a connection, on our server.</li>
     <li><b>See your data:</b> in the game, open Settings, then your account, then "Download my data".</li>
     <li><b>Delete your account:</b> in the game under Settings, your account, "Delete my account", or on the <a href="delete-account.html">delete your account</a> page.</li>
     <li><b>Leave the leaderboard:</b> in the Headquarters, on the Ranking tab.</li>

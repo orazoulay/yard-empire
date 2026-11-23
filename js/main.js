@@ -184,11 +184,10 @@ class Game {
         this.hud.clearLog();   // the log tells of the progress that is being erased
         // A signed-in player gets a fresh save stamped "now", so it replaces the copy on the server too.
         if (account.user) localStorage.setItem(this.saveKey, JSON.stringify(blankSave(Date.now())));
-        else localStorage.removeItem(this.saveKey);
+        else { localStorage.removeItem(this.saveKey); account.guest.reset(); }   // a guest's game goes from the server as well
         location.reload();
       },
       onReplayTutorial: () => this.tutorial.restart(),
-      onRestore: save => this.restore(save),   // a backup file opened from the settings: as from the Headquarters' Records tab
       onOpen: () => { this.settingsOpen = true; this.sfx.click(); },
       onClose: () => { this.settingsOpen = false; },
       onToggle: name => { this.sfx.unlock(); this.sfx.click(); this.settings.buzz(15); if (name === 'graphics') this.applyGraphics(); },
@@ -246,6 +245,7 @@ const account = await new Account(CLOUD.url ? supabaseTransport(CLOUD) : undefin
 loading.step(2);
 const game = window.game = new Game(account);
 account.onLeave = () => { game.save(); game.noSave = true; };
+account.guest.onKept = () => game.hud.note('Saved', 'Your game is now saved on our server', 'It is tied to this device until you create an account.');
 game.offerAccount = bindAccountUi(account, { onOpen: () => game.sfx.click() }).offer;
 account.start();
 game.credits.refresh();   // what this player has in credits: asked once the account is known, and again when the connection comes back

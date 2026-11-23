@@ -23,6 +23,7 @@
     <li>Your entry on the leaderboard, if you had one.</li>
   </ul>
   <p>This happens straight away and cannot be undone. Routine backups kept by our hosting provider, where there are any, are replaced on their own schedule. A copy of the game saved on your own device stays there until you clear the game's data.</p>
+  <p>Playing without an account? "Reset progress" in the game's settings removes your saved game from your device, and from our server the next time the game starts with a connection.</p>
 
   <h2>Delete it now</h2>
   <div class="panel">

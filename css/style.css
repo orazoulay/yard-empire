@@ -1254,14 +1254,14 @@ button.hq-btn.armed { border-color: var(--p-gold); color: var(--p-gold-ink); }
 .hq-export button.hq-switch { flex: none; }
 .hq-card.refit .hq-need { flex-basis: 100%; }
 
-/* ---------- more to do: the streak's days, the box a company name is typed in, advice and backup cards ---------- */
+/* ---------- more to do: the streak's days, the box a company name is typed in, advice and a guest's card ---------- */
 .hq-days { display: flex; gap: 6px; }
 .hq-day { flex: 1; max-width: 44px; height: 28px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--p-line); color: var(--p-ink3); font-size: var(--t-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
 .hq-day.on { color: var(--p-gold-ink); border-color: var(--ink); background: #fff3c4; }
 .hq-day.next { color: var(--p-ink); border-style: dashed; border-color: var(--p-line-strong); }
 .hq-card.streak h4 .icon { color: var(--p-gold-ink); }
 .hq-card.season h4 .icon { color: var(--p-gold-ink); }
-.hq-card.advice .hq-actions, .hq-card.backup .hq-actions { flex-wrap: wrap; }
+.hq-card.advice .hq-actions, .hq-card.keep .hq-actions { flex-wrap: wrap; }
 .hq-sub.good { color: var(--p-up); }
 .hq-sub.bad { color: var(--p-down); }
 .hq-todo > .hq-goal-body { padding: 2px 0; }

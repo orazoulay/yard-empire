@@ -2,9 +2,11 @@
 //
 // The game itself only ever reads and writes one localStorage key (account.saveKey). This module
 // decides which key that is, fills it before the game starts, and uploads it while the game runs.
+// A guest's game is kept on the server too (js/guest.js), and the device's copy is what a guest plays from offline.
 // Changing who is playing always ends in a page reload, so the game never swaps saves mid-run.
 // On a plain file host with no server (or with no connection) the game simply plays as before.
 import { saveFile } from './files.js';
+import { GuestGame, played } from './guest.js';
 import { GUEST_KEY, saveKey, logKey, pickSave, keepStore, withoutStore } from './sim/sync.js';
 
 const ID_KEY = 'lumber-tycoon-account';        // last signed-in player, so they can start offline
@@ -12,6 +14,7 @@ const revKey = id => `lumber-tycoon-rev:u${id}`;
 const FLASH_KEY = 'lumber-tycoon-flash';       // one message to show after a reload
 const DEVICE_KEY = 'lumber-tycoon-device';     // this browser's own name, made once: the server lets one device at a time write a company
 const elseKey = id => `lumber-tycoon-elsewhere:u${id}`;   // the server said this player's company is played on another device
+const movingKey = id => `lumber-tycoon-moving:u${id}`;   // this account's slot holds this device's guest game, and the server has not moved it yet
 const SYNC_EVERY = 20000;
 
 const read = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
@@ -81,6 +84,8 @@ export class Account {
     this.hasGoogle = false;   // Google opens this account
     this.tradingGoogle = false;
     this.deleting = false;
+    this.guest = new GuestGame(this.call);   // a game played without an account, kept on the server (js/guest.js)
+    this.guest.onFound = found => this.leave(() => write(GUEST_KEY, found));
   }
 
   get saveKey() { return saveKey(this.user?.id); }
@@ -95,7 +100,11 @@ export class Account {
     const me = await this.call('GET', 'me', null, { timeout: 2500 });
     if (me.status === 0) {                          // offline: carry on as whoever played here last
       this.user = cached; this.supported = !!cached;
-      if (cached) { this.rev = seenRev(cached.id); this.elsewhere = !!read(elseKey(cached.id)); }   // the word of an earlier visit stands until the server's save is had
+      if (cached) {
+        this.rev = seenRev(cached.id); this.elsewhere = !!read(elseKey(cached.id));   // the word of an earlier visit stands until the server's save is had
+        this.guest.on();
+        this.bring();
+      } else this.guest.offline();
       return this;
     }
     if (me.data?.accounts !== true) return this;    // no account server behind this page
@@ -107,7 +116,16 @@ export class Account {
     if (me.data.banned) this.flash('This account is suspended.');
     else if (me.data.note) this.flash(me.data.note, me.data.noteGood === true);   // the player came back through the link in an email
     else if (cached && !this.user) this.flash('You were signed out. Sign in again to keep saving to your account.');
-    if (this.user) { write(ID_KEY, this.user); await this.pull(); this.elsewhere = !!read(elseKey(this.user.id)); } else remove(ID_KEY);
+    if (this.user) {
+      write(ID_KEY, this.user);
+      this.guest.on();
+      await this.pull();
+      this.elsewhere = !!read(elseKey(this.user.id));
+      this.guest.clear();   // a guest's game this device gave up is deleted for a signed-in player too
+    } else {
+      remove(ID_KEY);
+      await this.guest.boot();
+    }
     return this;
   }
 
@@ -116,8 +134,17 @@ export class Account {
     const id = this.user.id;
     const localRev = seenRev(id);
     this.rev = localRev;
-    const r = await this.call('GET', 'save');
-    if (!r.ok || !r.data) return;                   // keep playing from the device copy (the game then knows it was not pulled)
+    let r = await this.call('GET', 'save');
+    if (!r.ok || !r.data) { this.bring(); return; }   // keep playing from the device copy (the game then knows it was not pulled)
+    if (this.guest.key && !this.guest.off) {   // the server keeps a guest's game of this device
+      const m = await this.moveIn(r.data.save);
+      if (m === 'has_save' && !r.data.save) {   // another device gave the account a game in the meantime
+        r = await this.call('GET', 'save');
+        if (!r.ok || !r.data) return;
+      }
+      if (read(movingKey(id))) return;   // not known yet: the device's copy for now, and nothing is uploaded before it is (push)
+      if (m === 'moved') r.data.save = read(saveKey(id));
+    }
     // a device that was told the company is played on another one takes the server's copy: it stood open, it was not played
     const pick = pickSave({ local: read(saveKey(id)), localRev, server: r.data.save, serverRev: r.data.adminRev, guest: read(GUEST_KEY), yielded: !!read(elseKey(id)) });
     // a device copy from a game that did not know the credits store takes the server's store block (js/sim/sync.js, keepStore)
@@ -128,6 +155,50 @@ export class Account {
     this.pulled = true;
     remove(elseKey(id));
     this.claim = true;   // this visit starts from what the server has: the company is this device's from its first upload on
+  }
+
+  // --- a guest's game that moves into this account (js/guest.js, guest_move in the database) ------------------------
+  // The game is in one slot of the device at a time. The guest's slot is emptied only when the server has moved the game,
+  // or when the account's slot takes it over with the mark movingKey; a slot with the mark is never uploaded as the
+  // account's, and goes back to the guest when the account turns out to have a game of its own.
+  /** The server cannot say what this account has: the player goes on with the guest's game, in an empty slot of the account. */
+  bring() {
+    const id = this.user?.id, guest = read(GUEST_KEY);
+    if (!id || this.guest.off || !this.guest.key || !guest || played(read(saveKey(id)))) return;
+    write(movingKey(id), true);
+    write(saveKey(id), guest);
+    if (read(saveKey(id)) && read(movingKey(id))) remove(GUEST_KEY);
+  }
+  /** The other way: the guest's game goes back to the guest's slot. */
+  giveBack() {
+    const id = this.user?.id;
+    if (!id || !read(movingKey(id))) return;
+    const pick = pickSave({ local: read(GUEST_KEY), server: read(saveKey(id)) });
+    if (pick.save) write(GUEST_KEY, pick.save);
+    remove(saveKey(id)); remove(movingKey(id));
+  }
+  /**
+   * At the start, with the server's save in hand: move the guest's game of this device, where there is one and the
+   * account's slot is not a game of its own. @param server  the account's save on the server, or null
+   * @returns what the server said (GuestGame.move), or '' when nothing was asked
+   */
+  async moveIn(server) {
+    const id = this.user.id, moving = !!read(movingKey(id)), mine = read(saveKey(id)), guest = read(GUEST_KEY);
+    if (!moving && (!guest || played(mine))) return '';   // the account's own game, unsent, is here too: neither goes over the other
+    const game = moving ? mine : guest, m = await this.guest.move(game);
+    if (m.what === 'later') { if (!server) this.bring(); return m.what; }
+    if (m.what === 'has_save') { this.giveBack(); return m.what; }
+    if (m.what === 'refused') {   // it goes into an account with no save as it always did (pickSave), and the server's copy is given up
+      if (server) { this.giveBack(); return m.what; }
+      remove(movingKey(id));
+      this.guest.reset();
+      return m.what;
+    }
+    write(saveKey(id), m.what === 'moved' ? m.save : game);   // moved before: the copy played last wins, as ever
+    if (!moving) remove(GUEST_KEY);
+    remove(movingKey(id));
+    this.guest.forget();
+    return m.what;
   }
 
   /**
@@ -143,7 +214,6 @@ export class Account {
 
   /** Once the game is running: upload progress every so often, and when the player leaves. */
   start() {
-    if (!this.user) return;
     setInterval(() => this.push(), SYNC_EVERY);
     setTimeout(() => this.push(), 3000);
     addEventListener('online', () => this.push());
@@ -151,10 +221,21 @@ export class Account {
   }
 
   async push(leaving = false) {
-    if (!this.user || this.stopped || this.elsewhere) return;
+    if (!this.user) return this.stopped ? undefined : this.guest.push(leaving);
+    if (this.stopped || this.elsewhere) return;
     if (this.busy) { this.again = true; return; }
     const kept = read(this.saveKey), save = this.holdStore() ? withoutStore(kept) : kept;   // a block that is not known never replaces the server's
     if (!save) return;
+    if (read(movingKey(this.user.id))) {   // the guest's game first: this upload would be taken for a first one out of nowhere
+      this.busy = true;
+      const m = await this.guest.move(kept), own = m.what === 'refused' ? await this.serverSave() : null;
+      this.busy = false;
+      if (this.stopped || m.what === 'later' || (m.what === 'refused' && !own)) return;
+      if (m.what === 'has_save' || own?.save) return this.leave(() => this.giveBack());   // the account has a game of its own after all: the page loads into it
+      remove(movingKey(this.user.id));
+      if (m.what === 'refused') this.guest.reset(); else this.guest.forget();
+      this.claim = true;
+    }
     this.busy = true;
     const claim = this.claim;
     const r = await this.call('PUT', 'save', { save, adminRev: this.rev, device: this.device, ...(claim ? { claim: true } : {}) }, { keepalive: leaving });
@@ -179,7 +260,7 @@ export class Account {
       });
     } else if (r.status === 401 || r.status === 403) {
       this.flash(r.data?.banned ? 'This account is suspended.' : 'You were signed out. Sign in again to keep saving to your account.');
-      this.leave(() => remove(ID_KEY));
+      this.leave(() => { this.giveBack(); remove(ID_KEY); });
     }
   }
 
@@ -288,7 +369,7 @@ export class Account {
     if (this.stopped) return { ok: true };
     const r = await this.call('POST', 'logout');
     if (r.status === 0) return { ok: false, error: problem(r) };
-    this.leave(() => remove(ID_KEY));
+    this.leave(() => { this.giveBack(); remove(ID_KEY); });
     return { ok: true };
   }
 
@@ -313,6 +394,7 @@ export class Account {
     if (!r.ok) return { ok: false, error: problem(r) };
     this.flash('Your account was deleted.', true);   // what the player asked for: said as done, not as a problem
     // The copy on this device belonged to the account too: it goes after the game's last save, so that save cannot bring it back.
+    if (read(movingKey(id))) { remove(movingKey(id)); this.guest.reset(); }   // a guest's game that was still on its way in goes with it
     this.leave(() => { remove(ID_KEY); remove(saveKey(id)); remove(logKey(saveKey(id))); remove(revKey(id)); remove(elseKey(id)); });
     return { ok: true };
   }

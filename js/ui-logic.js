@@ -59,15 +59,6 @@ export function awayText(seconds) {
 }
 
 /**
- * What a backup file holds, in one line under the button that opened it (Settings): what the Headquarters' Records
- * tab shows as rows. @param s  the summary importSave gives  @param when  the day it was made, as the page writes dates
- */
-export function backupLine(s, when) {
-  const what = [s.name, s.rank, `${s.yards} ${s.yards === 1 ? 'yard' : 'yards'}`, '$' + fmt(s.cash), s.stars ? `${s.stars} legacy ${s.stars === 1 ? 'star' : 'stars'}` : ''].filter(Boolean).join(', ');
-  return `This backup is whole${when ? ', made on ' + when : ''}: ${what}. Opening it replaces the game you are playing now.`;
-}
-
-/**
  * The terms of the pay for time away, as the lines of the welcome-back sheet.
  * @param {{ away: number, seconds: number, capped: boolean, share: number, afterCosts: boolean, left: number, allowance: number }} o
  *   away: seconds really gone; seconds: how many of them were paid; share: 0 to 1 of the workers' rate;
@@ -398,10 +389,11 @@ export function shortcutFor({ key, ctrlKey, metaKey, altKey }, typing = false) {
 /**
  * What to say about saving. `short` sits in the top bar, `long` in the settings.
  * @param {{ user: boolean, online: boolean, busy: boolean, stored: boolean }} o
- *   stored: this browser keeps what the game writes (a private window may not)
+ *   stored: this browser keeps what the game writes (a private window may not); guest: the server keeps this guest's game (js/guest.js)
  */
-export function saveStatus({ user, online, busy, stored }) {
+export function saveStatus({ user, online, busy, stored, guest = false }) {
   if (!stored) return { key: 'unsaved', icon: 'offline', short: 'Not saved', long: 'This browser is not keeping your progress. A private window can do that.' };
+  if (!user && guest && online) return { key: 'guest', icon: 'cloud', short: 'Saved', long: 'Your progress is saved on our server, and tied to this device. Create an account to have it on any device.' };
   if (!user) return { key: 'device', icon: 'check', short: 'Saved', long: 'Your progress is saved on this device.' };
   if (!online) return { key: 'offline', icon: 'offline', short: 'Offline', long: 'Offline. Your progress is kept on this device and goes to your account when you are back online.' };
   if (busy) return { key: 'saving', icon: 'cloud', short: 'Saving', long: 'Saving to your account.' };

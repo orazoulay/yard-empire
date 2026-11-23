@@ -97,7 +97,7 @@ export class YardUi {
     this.probeTimer -= LABEL_EVERY;
     if (this.probeTimer <= 0) { this.probeTimer = PROBE_EVERY; this.stored = this.probe(); }
     const acc = g.account;
-    this.hud.setSave(saveStatus({ user: !!acc.user, online: acc.online && navigator.onLine !== false, busy: this.savingFor > 0, stored: this.stored }));
+    this.hud.setSave(saveStatus({ user: !!acc.user, online: acc.online && navigator.onLine !== false, busy: this.savingFor > 0, stored: this.stored, guest: !!acc.guest?.kept }));
   }
   /** Does this browser keep what the game writes? A private window may refuse, and then "Saved" would be untrue. */
   probe() {

@@ -198,6 +198,12 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
    */
   const nameless = tokens => { unnamed = tokens; keep(null); return good({ choose: true }); };
 
+  /** One request about a game played without an account (supabase/functions/guest). */
+  const guestCall = async (as, body, opts) => {
+    const r = as === 'player' ? await asPlayer('POST', '/functions/v1/guest', body, opts) : await send('POST', '/functions/v1/guest', body, { as: 'visitor', ...opts });
+    return r.ok || r.status === 0 ? r : fail(r);
+  };
+
   const routes = {
     /** Who is playing. Tells account.js that accounts exist here, and whether the pass on this device is still good. */
     async 'GET me'(body, opts) {
@@ -381,6 +387,11 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
       if (r.status === 403 && r.data?.banned) return { status: 403, ok: false, data: { error: 'This account is suspended.', banned: true } };
       return r.ok || r.status === 409 || r.status === 0 ? r : fail(r);   // 409 carries the admin's version of the save
     },
+    // A game played without an account (js/guest.js): no pass goes with it, except where it moves into the signed-in player's account.
+    async 'POST guest/save'({ key, save }, opts) { return guestCall('visitor', { action: 'save', key, save }, opts); },
+    async 'POST guest/load'({ key }, opts) { return guestCall('visitor', { action: 'load', key }, opts); },
+    async 'POST guest/delete'({ key }, opts) { return guestCall('visitor', { action: 'delete', key }, opts); },
+    async 'POST guest/move'({ key, save }, opts) { return guestCall('player', { action: 'move', key, save }, opts); },
     /** @param proof  { password }, or { google: { token, nonce } }: a Google ID token made just now, for an account that has no password */
     async 'POST account/delete'({ password, google }) {
       const proof = google ? { google: { id_token: google.token, nonce: google.nonce } } : { password };
@@ -441,6 +452,7 @@ export function supabaseTransport(cfg, { fetch: fetch_ = (...a) => fetch(...a), 
     if (!route) return { status: 404, ok: false, data: { error: 'Something went wrong. Try again.' } };
     try { return await route(body || {}, opts); } catch { return { status: 0, ok: false, data: null }; }
   };
+  call.guests = true;       // a game played without an account is kept here too (js/guest.js)
   call.needsEmail = true;   // the forms ask for an email: Supabase signs people in by it
   call.google = String(cfg.google || '');   // Google's client ID of this game, or '' where Google is not offered (js/google.js)
   return call;

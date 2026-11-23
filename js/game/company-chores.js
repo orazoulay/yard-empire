@@ -1,5 +1,5 @@
 // What the company asks of the game: the once-a-second chores (goals, events, the site, the Factory Manager), the
-// trucks, the account offer after a purchase, the helpers bought with credits, selling the company, backups and travel.
+// trucks, the account offer after a purchase, the helpers bought with credits, selling the company and travel.
 import { MOMENTS } from '../ui-logic.js';
 import { fmt } from '../format.js';
 import { helperChores } from '../sim/helpers.js';
@@ -37,13 +37,6 @@ export class CompanyChoresMethods {
     this.calmRate = { rate: 0, rest: 0 };   // the meter of what the workers bring in belongs to the company that was sold: save() writes it (js/game/saving.js), and it would pay the new one for time away
     this.save(); this.noSave = true;
     try { sessionStorage.setItem(SOLD_KEY, String(offer.stars)); } catch { /* private mode */ }
-    location.reload();
-    return true;
-  }
-  /** More to do: replace the game with a backup that was read and checked (js/sim/backup.js). The world is rebuilt by a reload. */
-  restore(save) {
-    this.noSave = true;
-    try { localStorage.setItem(this.saveKey, JSON.stringify(save)); } catch { this.noSave = false; return false; }
     location.reload();
     return true;
   }

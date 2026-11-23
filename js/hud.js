@@ -3,8 +3,7 @@
 import { fmt } from './format.js';
 import { icon } from './icons.js';
 import { loading } from './loading.js';
-import { Journal, ago, rateText, cashFacts, awayFacts, SHORTCUTS, logTarget, backupLine } from './ui-logic.js';
-import { importSave } from './sim/backup.js';
+import { Journal, ago, rateText, cashFacts, awayFacts, SHORTCUTS, logTarget } from './ui-logic.js';
 import { GRAPHICS, GRAPHICS_LABEL } from './settings-logic.js';
 
 // The icon of a card, by the small heading above its title, when the card does not name one itself.
@@ -229,6 +228,12 @@ export class Hud {
     this.unlockQueue.push({ ...card, symbol });
     if (!this.unlockBusy) this.nextUnlock(); else this.showWaiting();
   }
+  /** Something worth finding in the log behind the bell, with no card over the yard. */
+  note(kicker, title, desc) {
+    this.journal.add({ kicker, title, desc, symbol: 'cloud' }, Date.now());
+    this.storeLog();
+    $('log-dot').hidden = false;
+  }
   nextUnlock() {
     clearTimeout(this.unlockTimer);
     const card = this.unlockQueue.shift(), box = $('unlock');
@@ -274,7 +279,7 @@ export class Hud {
   get sheetOpen() { return this.sheets.length > 0; }
 
   // --- settings -----------------------------------------------------------
-  bindSettings({ settings, onReset, onReplayTutorial, onRestore, onOpen, onClose, onToggle }) {
+  bindSettings({ settings, onReset, onReplayTutorial, onOpen, onClose, onToggle }) {
     const sheet = $('settings'), reset = $('btn-reset'), fs = $('btn-fullscreen');
     this.onSheets = open => (open ? onOpen?.() : onClose?.());
     const renders = [];
@@ -331,28 +336,7 @@ export class Hud {
     if (typeof matchMedia === 'function' && !matchMedia('(hover: hover) and (pointer: fine)').matches) $('btn-keys').hidden = true;
 
     const close = () => this.closeSheet(sheet);
-    // A backup file can be opened here too. The Headquarters, whose Records tab does the same, is there from two yards
-    // on, and the game that needs a backup most has one: after a reset, or on another device. The file is read and
-    // checked (js/sim/backup.js); nothing is replaced until the player has pressed again.
-    const backup = $('btn-backup'), backupNote = $('backup-note'), backupFile = $('backup-file');
-    let held = null;
-    const forget = () => { held = null; backup.classList.remove('danger', 'confirm'); backup.textContent = 'Open a backup file'; backupNote.hidden = true; backupNote.textContent = ''; };
-    backupFile.addEventListener('change', async () => {
-      const file = backupFile.files?.[0];
-      backupFile.value = '';   // so that choosing the same file again is noticed
-      if (!file) return;
-      let text = '';
-      try { text = file.size > 4000000 ? 'x'.repeat(2000001) : await file.text(); } catch { text = ''; }   // a file that large is refused by its size alone
-      const r = importSave(text, Date.now());
-      forget();
-      backupNote.hidden = false;
-      if (!r.ok) { backupNote.textContent = r.reason; return; }
-      held = r.save;
-      backupNote.textContent = backupLine(r.summary, r.summary.exported ? new Date(r.summary.exported).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '');
-      backup.classList.add('danger', 'confirm'); backup.textContent = 'Replace my game with this backup';
-    });
-    backup.addEventListener('click', () => { if (held) onRestore?.(held); else backupFile.click(); });
-    sheet.onclosed = () => { reset.classList.remove('confirm'); reset.textContent = 'Reset progress'; forget(); };
+    sheet.onclosed = () => { reset.classList.remove('confirm'); reset.textContent = 'Reset progress'; };
     $('settings-btn').addEventListener('click', () => this.openSheet(sheet, $('btn-close')));
     $('btn-close').addEventListener('click', close);
     sheet.addEventListener('click', e => { if (e.target === sheet) close(); });
