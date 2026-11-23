@@ -231,6 +231,7 @@ export class Company {
     // milestones it already meets without a celebration for each.
     if (!s) this.stats.income = econ.cash + Object.values(econ.paid).reduce((a, b) => a + num(b), 0);
     this.costTable = []; this.costPerSec = 0; this.salaryPerSec = 0;
+    this.owed = 0; this.owedFor = 0;   // wages and upkeep that wait for a sale (settle)
     // A refit that has all its parts already (a hand-made save, or a refit whose parts were lowered since) finishes now,
     // through the code that finishes one when its last part arrives; and the fleet is made what the plots and refits
     // say before the achievements are counted, so that a ship a save has too many earns nothing.
@@ -492,6 +493,22 @@ export class Company {
     if (paid <= 0) return;
     this.econ.cash -= paid; this.stats.costs += paid; this.flow.costs.add(paid);
   }
+  /**
+   * Wages and upkeep are counted every moment but taken from the cash with the next sale, or in one sum after
+   * FINANCE.settleSeconds with none: a cash figure that drips down between sales read as a loss under "+$/min".
+   * What waits is never more than the cash, so a company with none is charged nothing for that time, as before.
+   */
+  owe(amount, dt) {
+    this.owed = Math.min(this.owed + amount, Math.max(0, this.econ.cash));
+    this.owedFor += dt;
+    if (this.owedFor >= FINANCE.settleSeconds - 1e-9) this.settle();
+  }
+  /** Take what waits now: after a sale, before money is paid out (Economy.payToward, spend), and every settleSeconds. */
+  settle() {
+    const o = this.owed;
+    this.owed = 0; this.owedFor = 0;
+    if (o > 0) this.charge(o);
+  }
 
   /** Start the income figure from what the workers were bringing in when the game was saved. */
   seedIncome(rate) { if (rate > 0) this.flow.income.rate = rate; }
@@ -506,7 +523,7 @@ export class Company {
       if (this.minute.sum > this.records.peakMinute) this.records.peakMinute = this.minute.sum;
       this.minute.t -= 60; this.minute.sum = 0;
     }
-    if (this.founded && this.costPerSec > 0) this.charge(this.costPerSec * dt);
+    if (this.founded && this.costPerSec > 0) this.owe(this.costPerSec * dt, dt);
     if (this.market.open && this.marketOpen()) this.market.tick(dt);   // the market's clock is play time: it stands still while the player is away
     if (this.port.open) this.shipsHome(this.port.tick(dt));   // a voyage is play time, like the market's clock
     if (this.motivationOn) this.wearBy(dt);                    // dt is seconds of work: the loop hands a hidden page 5% of its time
@@ -732,14 +749,14 @@ export class Company {
   //     Finance, the Overview, the company's value). Sales (income) and goods that go aboard (aboard) feed it.
   //   - minute.sum, "earned in one minute" (records.peakMinute): sales only (income).
   /** Something was sold: a good at a shop, goods from the warehouse, a contract. All three meters; the piggy bank of the credits store gets its share on top (js/sim/store.js, bankAdd). */
-  income(amount) { this.econ.addCash(amount); this.stats.income += amount; this.flow.income.add(amount); this.priceMeter.add(amount / (timedFactor(this.mods) * this.paceNow)); this.minute.sum += amount; bankAdd(this, amount); }
+  income(amount) { this.econ.addCash(amount); this.stats.income += amount; this.flow.income.add(amount); this.priceMeter.add(amount / (timedFactor(this.mods) * this.paceNow)); this.minute.sum += amount; bankAdd(this, amount); this.settle(); }
   /**
    * Cash that is not a sale of this moment: pay for time away, a goal's reward, a finished build, a ship home, a hold
    * unloaded. It is earned (stats.income) and moves neither the shown income nor "earned in one minute", and puts
    * nothing in the piggy bank. A ship's goods were in the shown income as they went aboard (aboard); its premium shows
    * where the ship's sum does (the Port tab, the ship's card), not as a lump in a one-minute meter.
    */
-  earn(amount) { this.econ.addCash(amount); this.stats.income += amount; }
+  earn(amount) { this.econ.addCash(amount); this.stats.income += amount; this.settle(); }
   /**
    * A good went aboard a ship: it counts in the shown income at its normal price now (`amount`: econ.keptPrice, the price without a timed boost of the credits store, as the ship's sum has it; never the
    * market's, never a premium), as a worker's good counts in the pay for time away, sold or loaded

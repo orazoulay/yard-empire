@@ -31,10 +31,10 @@
       <div class="top-row">
         <div class="logo-room"><div id="logo"><span class="top">YARD</span><span class="bottom">EMPIRE</span></div></div>
         <div class="top-main">
-          <div id="cash" class="pill">
+          <button id="cash" class="pill" type="button" aria-haspopup="dialog" aria-label="Your money: what comes in and what goes out">
             <svg class="bill" viewBox="0 0 32 20" aria-hidden="true"><rect x="1" y="1" width="30" height="18" rx="3" fill="#3ec25e" stroke="#1f8c3a" stroke-width="2"/><circle cx="16" cy="10" r="4.5" fill="none" stroke="#1f8c3a" stroke-width="2"/></svg>
             <span class="cash-col"><span id="cash-value">0</span><span id="cash-rate" hidden></span></span>
-          </div>
+          </button>
           <button id="credits-pill" class="pill credits" aria-label="Credits store" hidden>
             <svg class="gem" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.5l7.5 5.2-2.9 10.3H5.4L2.5 6.7z" fill="#8f6bff" stroke="#c9b8ff" stroke-width="1.5" stroke-linejoin="round"/><path d="M2.5 6.7h15M10 1.5L7 6.7l3 10.3 3-10.3z" fill="none" stroke="#c9b8ff" stroke-width="1.1" stroke-linejoin="round"/></svg>
             <span id="credits-value"></span>
@@ -338,6 +338,19 @@
       <div class="sheet-title">What happened</div>
       <div id="log-list" class="sheet-scroll rows"></div>
       <button id="log-close" class="sheet-btn primary">Back to the yard</button>
+    </div>
+  </div>
+
+  <!-- A tap on the cash: income, costs and profit a minute at a time, and why the cash goes up in steps (js/hud.js, showCash). -->
+  <div id="money" class="sheet-backdrop" hidden>
+    <div class="sheet card" role="dialog" aria-modal="true" aria-labelledby="money-title">
+      <div id="money-title" class="sheet-title">Your money</div>
+      <dl id="money-rows" class="money-rows"></dl>
+      <h3 id="money-costs-title" class="group-title">Where the costs go</h3>
+      <dl id="money-costs" class="money-rows small"></dl>
+      <div id="money-note" class="sheet-note small"></div>
+      <button id="money-finance" class="sheet-btn" hidden>Open Finance</button>
+      <button id="money-close" class="sheet-btn primary">Back to the yard</button>
     </div>
   </div>
 

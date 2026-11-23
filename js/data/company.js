@@ -10,6 +10,7 @@ export const FINANCE = {
   growth: 2.2,             // total worker income multiplies by this with each completed yard
   wageShare: 0.04,         // one worker costs this share of the yard's reference income
   upkeepShare: 0.02,       // one machine costs this share of the yard's reference income
+  settleSeconds: 10,       // wages and upkeep wait for the next sale, or come off in one sum after this many seconds with none
   transportShare: 0.02,    // a truck charges this share of an item's price for moving it
   valuationSeconds: 600,   // the valuation counts this many seconds of current profit
   rateMemory: 60,          // per-minute figures are smoothed over about this many seconds

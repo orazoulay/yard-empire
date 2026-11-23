@@ -3,7 +3,7 @@
 import { fmt } from './format.js';
 import { icon } from './icons.js';
 import { loading } from './loading.js';
-import { Journal, ago, rateText, awayFacts, SHORTCUTS, logTarget, backupLine } from './ui-logic.js';
+import { Journal, ago, rateText, cashFacts, awayFacts, SHORTCUTS, logTarget, backupLine } from './ui-logic.js';
 import { importSave } from './sim/backup.js';
 import { GRAPHICS, GRAPHICS_LABEL } from './settings-logic.js';
 
@@ -50,7 +50,11 @@ export class Hud {
     $('obj-show').addEventListener('click', () => this.onShowWay?.());
     $('area-chip').addEventListener('click', () => this.onYardChip?.());
     $('log-btn').addEventListener('click', () => this.showLog());
-    for (const id of ['yards', 'log', 'keys', 'store']) {
+    this.onCash = null;   // () => { summary, finance }: what the company makes, and whether its Finance tab is open to the player
+    this.onFinance = null;
+    this.cashEl.addEventListener('click', () => this.showCash());
+    $('money-finance').addEventListener('click', () => { this.closeSheet($('money')); this.onFinance?.(); });
+    for (const id of ['yards', 'log', 'keys', 'store', 'money']) {
       const sheet = $(id);
       $(id + '-close').addEventListener('click', () => this.closeSheet(sheet));
       sheet.addEventListener('click', e => { if (e.target === sheet) this.closeSheet(sheet); });
@@ -453,6 +457,20 @@ export class Hud {
     this.journal.seen();
     $('log-dot').hidden = true;
     this.openSheet(sheet);
+  }
+
+  // --- the money sheet ---------------------------------------------------------
+  /** A tap on the cash: what comes in and what goes out, a minute at a time. Opened again, it shows the figures of that moment. */
+  showCash() {
+    const got = this.onCash?.() || {}, f = cashFacts(got.summary || null);
+    const row = r => { const d = el('div', 'm-row'), v = el('dd', r.tone || '', r.text); d.append(el('dt', '', r.name), v); return d; };
+    $('money-rows').replaceChildren(...f.rows.map(row));
+    $('money-rows').hidden = !f.rows.length;
+    $('money-costs').replaceChildren(...f.costs.map(row));
+    $('money-costs').hidden = $('money-costs-title').hidden = !f.costs.length;
+    $('money-note').textContent = f.note;
+    $('money-finance').hidden = !got.finance;
+    this.openSheet($('money'));
   }
 
   // --- keyboard shortcuts ------------------------------------------------------

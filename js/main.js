@@ -196,6 +196,9 @@ class Game {
     this.hud.onSkipTutorial = () => this.tutorial.finish(true);
     this.hud.onLogPick = tab => { if (this.company.founded) this.hq.open(tab); };   // a line of the log about the company opens its tab
     this.hud.onMotivation = () => this.openPark();   // the Motivation chip opens the Workers' Park card
+    // A tap on the cash: what the company makes and spends; its Finance tab once the player may open it
+    this.hud.onCash = () => (this.company.founded ? { summary: this.company.summary(), finance: !this.company.tabLock('finance') } : {});
+    this.hud.onFinance = () => { if (this.company.founded && !this.company.tabLock('finance')) this.hq.open('finance'); };
     // and so does a tap on the park in the world: where the tap's ray from the camera meets the ground (js/game/site.js, tapPark)
     const ray = new THREE.Vector3();
     this.input.onTap = (x, y) => {

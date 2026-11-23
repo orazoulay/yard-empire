@@ -2,6 +2,7 @@
 // up into one number, how a password is judged, what the save status reads. Tested in tests/yard-interface.test.mjs.
 import { fmt, money } from './format.js';
 import { shareText } from './sim/offline.js';
+import { FINANCE } from './data/company.js';
 
 export const cap = text => (text ? text[0].toUpperCase() + text.slice(1) : '');
 
@@ -90,6 +91,23 @@ export function awayFacts({ away, seconds, capped, share, afterCosts, left, allo
 export function rateText(perSecond) {
   const m = Math.round((Number(perSecond) || 0) * 60);
   return { text: money(m, { plus: true }) + '/min', tone: m > 0 ? 'up' : m < 0 ? 'down' : '' };
+}
+
+/**
+ * What a tap on the cash shows (js/hud.js, showCash): income, costs and profit a minute at a time, and each cost that
+ * is not nothing. The cash goes up in steps because wages and upkeep come out of each sale (Company.settle): the note says so.
+ * @param sum  Company.summary(), dollars a second; null before the company is founded, when nothing is charged
+ */
+export function cashFacts(sum) {
+  if (!sum) return { rows: [], costs: [], note: `Nothing is paid out yet. Wages and upkeep start when the company is founded, with your ${FINANCE.foundingYards === 2 ? 'second' : FINANCE.foundingYards + 'th'} yard.` };
+  const perMin = n => money(Math.round((Number(n) || 0) * 60)) + '/min';
+  const costs = [["Workers' wages", sum.wages], ["Managers' salaries", sum.salaries], ['Machine upkeep', sum.upkeep], ['Trucks', sum.transport]]
+    .filter(([, v]) => Math.round((Number(v) || 0) * 60) > 0).map(([name, v]) => ({ name, text: perMin(v) }));
+  return {
+    rows: [{ name: 'Income', text: perMin(sum.income), tone: '' }, { name: 'Costs', text: perMin(sum.costs), tone: '' }, { name: 'Profit', ...rateText(sum.profit) }],
+    costs,
+    note: `Wages and upkeep are paid out of each sale, so your cash goes up in steps. With no sale for ${FINANCE.settleSeconds} seconds, they are paid in one sum.`,
+  };
 }
 
 // --- labels in the yard ------------------------------------------------------------------------------

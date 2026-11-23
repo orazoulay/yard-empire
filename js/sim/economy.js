@@ -46,7 +46,7 @@ export class Economy {
 
   toJSON() {
     return {
-      v: SAVE_VERSION, cash: Math.floor(this.cash), unlocked: this.unlocked, paid: this.paid, areas: this.areas,
+      v: SAVE_VERSION, cash: Math.floor(Math.max(0, this.cash - (this.company?.owed || 0))), unlocked: this.unlocked, paid: this.paid, areas: this.areas,
       tutorialDone: this.tutorialDone, workerRate: Math.round(this.workerRate * 100) / 100, lastSeen: this.lastSeen,
       ...(this.company ? { company: this.company.toJSON() } : {}),
     };
@@ -95,7 +95,7 @@ export class Economy {
 
   addCash(n) { this.cash += n; }
   /** Pay `n` in one go. @returns false, and takes nothing, when there is not enough cash */
-  spend(n) { if (!(n >= 0) || this.cash < n) return false; this.cash -= n; return true; }
+  spend(n) { this.company?.settle?.(); if (!(n >= 0) || this.cash < n) return false; this.cash -= n; return true; }
 
   /** Next purchasable thing in an area (upgrades in order, then the gate), or null. */
   nextUpgrade(areaId) {
@@ -121,6 +121,7 @@ export class Economy {
   /** Move up to `amount` cash into an upgrade. Returns { paid, completed }. */
   payToward(id, amount) {
     if (this.lockOf(id)) return { paid: 0, completed: false };
+    this.company?.settle?.();   // wages that wait for a sale are not money to spend (Company.settle)
     const rem = this.remaining(id);
     if (rem <= 0) return { paid: 0, completed: false };
     const paid = Math.min(amount, rem, this.cash);
